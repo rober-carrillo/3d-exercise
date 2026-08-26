@@ -33,8 +33,8 @@ const TEMPLATE = `
 </div>
 
 <div class="rv-panel rv-ctrl">
-  <div class="rv-row"><span class="rv-lab">Vertical scale</span><span class="rv-val rv-vex-v">1.8×</span></div>
-  <input type="range" class="rv-vex" min="1" max="5" step="0.1" value="1.8">
+  <div class="rv-row"><span class="rv-lab">Vertical scale</span><span class="rv-val rv-vex-v">1.0×</span></div>
+  <input type="range" class="rv-vex" min="1" max="5" step="0.1" value="1">
   <div class="rv-row rv-mt"><span class="rv-lab">Satellite imagery</span><div class="rv-sw on" data-key="texture"></div></div>
   <div class="rv-row"><span class="rv-lab">Elevation curtain</span><div class="rv-sw on" data-key="curtain"></div></div>
   <div class="rv-row"><span class="rv-lab">Chase camera</span><div class="rv-sw" data-key="chase"></div></div>
@@ -67,7 +67,7 @@ const TEMPLATE = `
   <div class="rv-msg">reading track…</div>
 </div>`;
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 
 export class RouteViewer {
   constructor(opts) {
@@ -76,7 +76,7 @@ export class RouteViewer {
       flyDuration: 45,        // seconds for the full route at 1×
       satMaxTiles: 8,
       demMaxTiles: 4,
-      vex: 1.8,
+      vex: 1,
     }, opts);
     this.mount = opts.mount;
     this.mount.classList.add('rv-root');
@@ -122,6 +122,8 @@ export class RouteViewer {
     this.buildProfile();
 
     const renderer = this.renderer = new Renderer(this.$('gl'));
+    renderer.onChaseRelease = () =>
+      this.mount.querySelector('.rv-sw[data-key="chase"]').classList.remove('on');
     renderer.state.vex = o.vex;
 
     const frame = sceneFrame(track);
@@ -184,7 +186,7 @@ export class RouteViewer {
         sw.classList.toggle('on', r.state[key]);
         if (key === 'chase' && !r.state.chase) r.resetView();
         if (key === 'chase' && r.state.chase) this.$('hint').classList.remove('gone'),
-          this.$('hint').textContent = 'chase camera · drag to look around the runner · scroll to change follow distance',
+          this.$('hint').textContent = 'chase camera · drag while paused to orbit her freely · Fly route re-centres',
           setTimeout(() => this.$('hint').classList.add('gone'), 6000);
       });
     });
@@ -277,13 +279,22 @@ export class RouteViewer {
     const d = f * p.total;
     let lo = 0, hi = t.dist.length - 1;
     while (lo < hi) { const m = (lo + hi) >> 1; if (t.dist[m] < d) lo = m + 1; else hi = m; }
+    // fractional index: how far *between* two samples we are, so the walker and
+    // the profile cursor move continuously instead of hopping sample to sample
     const i = lo;
-    this.renderer.setCursor(i);
-    const x = t.dist[i] / p.total * p.W;
-    const y = p.H - p.pad - ((t.ele[i] - p.eMin) / p.eSpan) * (p.H - p.pad * 2 - 8);
+    let idx = i, ele = t.ele[i];
+    if (i > 0) {
+      const d0 = t.dist[i - 1], d1 = t.dist[i];
+      const u = d1 > d0 ? (d - d0) / (d1 - d0) : 0;
+      idx = i - 1 + u;
+      ele = t.ele[i - 1] + (t.ele[i] - t.ele[i - 1]) * u;
+    }
+    this.renderer.setCursor(idx);
+    const x = d / p.total * p.W;
+    const y = p.H - p.pad - ((ele - p.eMin) / p.eSpan) * (p.H - p.pad * 2 - 8);
     this._cursorLine.setAttribute('x1', x); this._cursorLine.setAttribute('x2', x);
     this._cursorDot.setAttribute('cx', x); this._cursorDot.setAttribute('cy', y);
     this.$('readout').innerHTML =
-      `<b>${(t.dist[i] / 1000).toFixed(2)}</b> km &nbsp;·&nbsp; <b>${fmt(t.ele[i])}</b> m`;
+      `<b>${(d / 1000).toFixed(2)}</b> km &nbsp;·&nbsp; <b>${fmt(ele)}</b> m`;
   }
 }

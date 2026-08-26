@@ -113,6 +113,7 @@ than at some arbitrary angle. (On a loop, where start and finish coincide, it
 aims at the farthest point on the track instead.)
 
 - **drag** orbit · **scroll** zoom · **shift-drag** or right-drag pan
+- **Vertical scale** starts at 1× (true proportions); raise it to exaggerate relief
 - **Fly route** replays the track and drops you straight into the chase view,
   directly behind the marker and aimed down the route — the way ahead runs away
   up the screen. The speed button cycles 0.5×–4×.
@@ -120,13 +121,22 @@ aims at the farthest point on the track instead.)
   bearing taken from a look-ahead point a few hundred metres up the track, so
   the camera follows where the route is *going* instead of yawing through every
   switchback.
-- The moving point is a **low-poly walking figure** — the restroom-sign woman,
-  about 70 triangles — facing along `head[]`, the local bearing. Her legs and
-  arms swing only while the route is replaying and freeze mid-stride when you
-  pause. She is rebuilt on the CPU each frame, which is free at that triangle
-  count and keeps the walk cycle, the terrain snapping and the
-  vertical-exaggeration compensation in one place (the ground is stretched by
-  the vertical scale; she is not).
+- The moving point is a **low-poly walking figure** — a purple restroom-sign
+  woman with a faceted spherical head, about 160 triangles. Her legs and arms
+  swing only while the route is replaying and freeze mid-stride when you pause.
+  She is rebuilt on the CPU each frame, which is free at that triangle count and
+  keeps the walk cycle, the terrain snapping and the vertical-exaggeration
+  compensation in one place (the ground is stretched by the vertical scale;
+  she is not).
+- Her motion is smoothed in three places, because the raw trace is ~10 m between
+  samples and at playback speed that is ~30 samples a second — stepping between
+  them looks like trembling. She travels a binomial-smoothed copy of the path
+  (`sx/sy/sz`), the cursor is a *fractional* index so she glides between
+  samples, and her facing eases towards the local bearing instead of snapping to
+  it.
+- **Dragging while paused releases the camera** from chase: it stays exactly
+  where it is and you orbit freely around her. Pressing Fly route puts it back
+  behind her. Dragging while she is moving still just looks around.
 - While chasing, dragging looks around the runner and scrolling changes follow
   distance; both reset the next time you press Fly route.
 - Hovering the elevation profile scrubs to any point on the route.

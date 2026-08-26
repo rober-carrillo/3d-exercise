@@ -245,6 +245,21 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     bearing = Math.atan2(ty[far] - ty[0], tx[far] - tx[0]);
   }
 
+  // A lightly smoothed copy of the track for the walking figure to travel along.
+  // The raw trace is ~10 m between samples, so at playback speed the figure would
+  // step from point to point about 30 times a second and pick up every GPS
+  // wobble — it reads as trembling. A binomial 5-tap (roughly a 40 m window)
+  // removes that without moving the line the ribbon is drawn from.
+  const sx = new Float32Array(M), sy = new Float32Array(M), sz = new Float32Array(M);
+  for (let i = 0; i < M; i++) {
+    let wx = 0, wy = 0, wz = 0, ws = 0;
+    for (let k = -2; k <= 2; k++) {
+      const j = clamp(i + k, 0, M - 1), w = [1, 4, 6, 4, 1][k + 2];
+      wx += tx[j] * w; wy += ty[j] * w; wz += tz[j] * w; ws += w;
+    }
+    sx[i] = wx / ws; sy[i] = wy / ws; sz[i] = wz / ws;
+  }
+
   const eMin = track.stats.ele_min, eSpan = Math.max(1, track.stats.ele_max - eMin);
   const w = Math.max(16, ext * 0.0042), wo = w * 2.1;
   const rp = new Float32Array(M * 6), rc = new Float32Array(M * 8);
@@ -281,6 +296,6 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     terrain: { pos, slope, uv, idx },
     skirt: { pos: new Float32Array(sp), col: new Float32Array(sc) },
     ribbon: { pos: rp, col: rc }, outline: { pos: op, col: oc }, curtain: { pos: wp, col: wc },
-    track: { tx, ty, tz, head, course, bearing, n: M, width: w },
+    track: { tx, ty, tz, sx, sy, sz, head, course, bearing, n: M, width: w },
   };
 }

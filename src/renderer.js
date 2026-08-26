@@ -11,13 +11,14 @@
 
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
 const SKY = [0.043, 0.063, 0.086];
 /** shortest signed angular difference, so the camera never spins the long way */
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** frame-rate independent easing */
 const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
 
-const FIG_MAX = 300;            // vertices in the walking figure (~70 triangles)
+const FIG_MAX = 900;            // vertices in the walking figure (~160 triangles)
 const mat4 = () => new Float32Array(16);
 function perspective(o, fovy, asp, n, f) {
   const t = 1 / Math.tan(fovy / 2);
@@ -63,16 +64,19 @@ export class Renderer {
     const gl2 = !!(window.WebGL2RenderingContext && gl instanceof WebGL2RenderingContext);
     this.caps = { gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint') };
 
-    this.state = { vex: 1.8, texture: true, curtain: true, chase: false };
+    this.state = { vex: 1, texture: true, curtain: true, chase: false };
     this.cam = { az: -2.24, pol: 0.97, dist: 1, tx: 0, ty: 0, tz: 0 };
     this.home = { az: -2.24, pol: 0.97, distScale: 1.45, bearing: 0, lift: 0.09 };
     this.chase = { dist: 0, pol: 1.10, azOffset: 0, height: 0 };
-    this.cursor = 0;
+    this.cursor = 0;               // nearest sample index (array lookups)
+    this.cursorF = 0;              // continuous position along the track
+    this.faceAz = null;            // eased facing, so the figure never snaps
     this.hasTexture = false;
     this.walking = false;          // true while the route is replaying
     this.walkPhase = 0;
     this.walkRate = 1;             // follows the playback speed multiplier
     this.onFrame = null;
+    this.onChaseRelease = null;    // fired when a drag frees the camera from chase
     this._P = mat4(); this._V = mat4(); this._MVP = mat4();
     this._buffers = {};
     this._buildPrograms();
@@ -187,24 +191,49 @@ void main(){vec4 c=vCol;
     this.hasTexture = true;
   }
 
-  /** Move the "you are here" point; drives both the markers and the chase cam. */
-  setCursor(i) {
+  /**
+   * Move the "you are here" position. Takes a *fractional* index: the track is
+   * sampled about every 10 m, and at playback speed that is ~30 samples a
+   * second, so stepping index by index makes the figure stutter. Everything
+   * downstream interpolates between samples instead.
+   */
+  setCursor(f) {
     if (!this.g) return;
+    const n = this.g.track.n;
+    this.cursorF = clamp(+f || 0, 0, n - 1);
+    this.cursor = clamp(Math.round(this.cursorF), 0, n - 1);
+  }
+
+  /** Interpolated position on the smoothed path. */
+  _pos() {
+    const t = this.g.track, f = this.cursorF;
+    const i = Math.floor(f), j = Math.min(t.n - 1, i + 1), u = f - i;
+    return [lerp(t.sx[i], t.sx[j], u), lerp(t.sy[i], t.sy[j], u), lerp(t.sz[i], t.sz[j], u)];
+  }
+
+  /** Facing the figure should turn towards, interpolated the short way round. */
+  _facing() {
+    const t = this.g.track, f = this.cursorF;
+    const i = Math.floor(f), j = Math.min(t.n - 1, i + 1), u = f - i;
+    return t.head[i] + wrap(t.head[j] - t.head[i]) * u;
+  }
+
+  figureSize() { return this.g ? Math.max(this.g.track.width * 2.1, this.g.ext * 0.008) : 1; }
+
+  _updateMarkers() {
     const gl = this.gl, t = this.g.track, B = this._buffers;
-    this.cursor = i = clamp(i | 0, 0, t.n - 1);
     const lift = Math.max(10, this.g.hSpan * 0.02);
-    // the cursor dot rides just above the walker's head, so it still reads as a
-    // marker when the figure itself is only a few pixels tall
+    // the cursor dot rides just above the walker's head, so the position still
+    // reads when the figure itself is only a few pixels tall
     const overhead = this.figureSize() * 1.35 / Math.max(0.001, this.state.vex);
+    const p = this._pos();
     gl.bindBuffer(gl.ARRAY_BUFFER, B.mk.pos);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
       t.tx[0], t.ty[0], t.tz[0] + lift,
       t.tx[t.n - 1], t.ty[t.n - 1], t.tz[t.n - 1] + lift,
-      t.tx[i], t.ty[i], t.tz[i] + overhead,
+      p[0], p[1], p[2] + overhead,
     ]), gl.DYNAMIC_DRAW);
   }
-
-  figureSize() { return this.g ? Math.max(this.g.track.width * 1.05, this.g.ext * 0.004) : 1; }
 
   /**
    * Rebuild the little walking figure — a low-poly take on the restroom-sign
@@ -217,13 +246,13 @@ void main(){vec4 c=vCol;
    * z by it — the ground gets stretched, the walker should not.
    */
   _buildFigure() {
-    const t = this.g.track, i = this.cursor;
     const S = this.figureSize(), vex = Math.max(0.001, this.state.vex);
-    const h = t.head[i], ch = Math.cos(h), sh = Math.sin(h);
+    const h = this.faceAz === null ? this._facing() : this.faceAz;
+    const ch = Math.cos(h), sh = Math.sin(h);
     const ph = this.walkPhase;
     const legA = Math.sin(ph) * 0.55, armA = Math.sin(ph + Math.PI) * 0.42;
     const bob = (Math.abs(Math.sin(ph)) - 0.5) * 0.025 * S;
-    const ox = t.tx[i], oy = t.ty[i], oz = t.tz[i];
+    const p = this._pos(), ox = p[0], oy = p[1], oz = p[2];
 
     const P = this._figPos, C = this._figCol;
     let n = 0;
@@ -242,9 +271,12 @@ void main(){vec4 c=vCol;
       C[n * 4] = col[0] * k; C[n * 4 + 1] = col[1] * k; C[n * 4 + 2] = col[2] * k; C[n * 4 + 3] = 1;
       n++;
     };
-    const quad = (a, b, c, d, col) => {
-      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-      let nx = u[1] * v[2] - u[2] * v[1], ny = u[2] * v[0] - u[0] * v[2], nz = u[0] * v[1] - u[1] * v[0];
+    const quad = (a, b, c, d, col, nrm) => {
+      let nx, ny, nz;
+      if (nrm) { [nx, ny, nz] = nrm; } else {
+        const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        nx = u[1] * v[2] - u[2] * v[1]; ny = u[2] * v[0] - u[0] * v[2]; nz = u[0] * v[1] - u[1] * v[0];
+      }
       const len = Math.hypot(nx, ny, nz) || 1; nx /= len; ny /= len; nz /= len;
       const wx = nx * ch - ny * sh, wy = nx * sh + ny * ch;   // normal into world yaw
       const lam = Math.max(0, wx * L[0] + wy * L[1] + nz * L[2]);
@@ -277,27 +309,37 @@ void main(){vec4 c=vCol;
       [-xt, -yt, z1], [xt, -yt, z1], [xt, yt, z1], [-xt, yt, z1],
     ], col, 0, 0);
 
-    const body = [0.96, 0.97, 1.0], skin = [1.0, 1.0, 1.0];
+    const body = [0.58, 0.34, 0.94], skin = [0.66, 0.44, 0.98];   // purple, head a shade lighter
 
     // legs, swinging from the hip
-    const legW = 0.048 * S, hip = 0.36 * S;
+    const legW = 0.032 * S, hip = 0.36 * S;
     for (const side of [-1, 1]) {
-      const y = side * 0.072 * S;
+      const y = side * 0.052 * S;
       block(-legW, legW, y - legW, y + legW, 0, hip, body, side > 0 ? legA : -legA, hip);
     }
     // arms, swinging opposite the legs and splayed outward the way the sign
     // figure holds them, so they stay clear of the dress
-    const armW = 0.036 * S, shoulderZ = 0.68 * S;
+    const armW = 0.025 * S, shoulderZ = 0.68 * S;
     for (const side of [-1, 1]) {
-      limb(armW, side * 0.235 * S, side * 0.155 * S, armW, 0.33 * S, shoulderZ, body,
+      limb(armW, side * 0.166 * S, side * 0.108 * S, armW, 0.33 * S, shoulderZ, body,
         side > 0 ? armA : -armA, shoulderZ);
     }
     // the dress: the wide hem tapering to the shoulders is what makes the
     // pictogram read as the restroom-sign woman rather than a stick figure
-    frustum(0.28 * S, 0.085 * S, 0.30 * S, 0.135 * S, 0.065 * S, 0.72 * S, body);
-    // head, with a sliver of neck below it
-    const hr = 0.098 * S;
-    frustum(hr, hr * 0.94, 0.77 * S, hr * 0.97, hr * 0.91, 0.77 * S + hr * 1.95, skin);
+    frustum(0.196 * S, 0.055 * S, 0.30 * S, 0.094 * S, 0.043 * S, 0.72 * S, body);
+    // head: a low-poly sphere, normals taken from the face centre so the
+    // faceting shades as a ball rather than as a bag of flat plates
+    const hr = 0.088 * S, hz = 0.775 * S + hr, LON = 8, LAT = 6;
+    const sp = (j, k) => {
+      const phi = Math.PI * j / LAT, th = 2 * Math.PI * k / LON;
+      return [hr * Math.sin(phi) * Math.cos(th), hr * Math.sin(phi) * Math.sin(th), hz + hr * Math.cos(phi)];
+    };
+    for (let j = 0; j < LAT; j++) for (let k = 0; k < LON; k++) {
+      const a = sp(j, k), b = sp(j, k + 1), c = sp(j + 1, k + 1), d = sp(j + 1, k);
+      const n = [(a[0] + b[0] + c[0] + d[0]) / 4, (a[1] + b[1] + c[1] + d[1]) / 4,
+                 (a[2] + b[2] + c[2] + d[2]) / 4 - hz];
+      quad(a, b, c, d, skin, n);
+    }
 
     const gl = this.gl, B = this._buffers;
     B.fig.n = n;
@@ -353,7 +395,16 @@ void main(){vec4 c=vCol;
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       drag.x = e.clientX; drag.y = e.clientY;
-      if (this.state.chase) {                       // look around the runner
+      // Dragging while the replay is paused releases the camera: chase stops
+      // driving it and you orbit freely around wherever the figure is standing.
+      // Because chase has been steering the same cam values all along, dropping
+      // out of it leaves the camera exactly where it is — no jump. Fly route
+      // puts it back behind her.
+      if (this.state.chase && !this.walking) {
+        this.state.chase = false;
+        this.onChaseRelease && this.onChaseRelease();
+      }
+      if (this.state.chase) {                       // moving: look around the runner
         this.chase.azOffset = wrap(this.chase.azOffset - dx * 0.005);
         this.chase.pol = clamp(this.chase.pol - dy * 0.005, 0.25, 1.48);
       } else if (drag.pan) {
@@ -400,15 +451,15 @@ void main(){vec4 c=vCol;
 
   /** Ride behind the cursor point, facing the way it is travelling. */
   _updateChase(dt) {
-    const t = this.g.track, i = this.cursor;
+    const t = this.g.track, i = this.cursor, p = this._pos();
     const wantAz = wrap(t.course[i] + Math.PI + this.chase.azOffset);
     this.cam.az += wrap(wantAz - this.cam.az) * ease(2.6, dt);
     this.cam.pol += (this.chase.pol - this.cam.pol) * ease(2.2, dt);
     this.cam.dist += (this.chase.dist - this.cam.dist) * ease(2.2, dt);
     const k = ease(4.5, dt);
-    this.cam.tx += (t.tx[i] - this.cam.tx) * k;
-    this.cam.ty += (t.ty[i] - this.cam.ty) * k;
-    this.cam.tz += (t.tz[i] + this.chase.height - this.cam.tz) * k;
+    this.cam.tx += (p[0] - this.cam.tx) * k;
+    this.cam.ty += (p[1] - this.cam.ty) * k;
+    this.cam.tz += (p[2] + this.chase.height - this.cam.tz) * k;
   }
 
   start() {
@@ -420,6 +471,13 @@ void main(){vec4 c=vCol;
       if (this.onFrame) this.onFrame(dt);
       // the walk cycle only turns while the route is actually replaying
       if (this.walking) this.walkPhase += dt * 5.0 * this.walkRate;
+      if (this.g) {
+        // ease the facing rather than reading it raw: consecutive GPS bearings
+        // disagree by a few degrees and snapping between them looks like a shiver
+        const want = this._facing();
+        this.faceAz = this.faceAz === null ? want : this.faceAz + wrap(want - this.faceAz) * ease(6, dt);
+        this._updateMarkers();
+      }
       if (this.state.chase && this.g) this._updateChase(dt);
       this._resize();
       const W = this.canvas.width, H = this.canvas.height;
