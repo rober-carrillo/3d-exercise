@@ -1,0 +1,13 @@
+{
+  "name": "route3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GPX tracks rendered as interactive 3D terrain in the browser",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && npx --yes serve dist -l 5173",
+    "serve": "npx --yes serve dist -l 5173"
+  },
+  "engines": { "node": ">=18" }
+}

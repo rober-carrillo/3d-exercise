@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>3D route</title>
+<link rel="stylesheet" href="./src/ui.css">
+<style>html,body{height:100%;overflow:hidden}</style>
+</head>
+<body>
+<script type="module">
+import { RouteViewer } from './src/viewer.js';
+
+const slug = new URLSearchParams(location.search).get('route');
+const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
+const entry = manifest.routes.find(r => r.slug === slug) || manifest.routes[0];
+
+if (!entry) {
+  document.body.innerHTML =
+    '<p style="font:14px/1.6 system-ui;color:#9fb0c4;padding:40px">No routes found. Drop a .gpx file into <code>routes/</code> and rebuild.</p>';
+} else {
+  document.title = entry.name + ' · 3D route';
+  new RouteViewer({
+    mount: document.body,
+    gpxUrl: './routes/' + entry.file,
+    name: entry.name,
+    backHref: './',
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route Library</title>
+<meta name="description" content="GPX tracks rendered as interactive 3D terrain flyovers.">
+<link rel="stylesheet" href="./src/ui.css">
+<style>
+  body{min-height:100%;background:
+    radial-gradient(120% 80% at 50% -10%,#101c29 0%,#070b10 60%) fixed}
+  .wrap{max-width:1080px;margin:0 auto;padding:72px 24px 96px}
+  header h1{margin:0;font-size:30px;font-weight:660;letter-spacing:-.025em}
+  header p{margin:10px 0 0;font-size:14px;line-height:1.6;color:var(--ink-2);max-width:56ch}
+  .count{margin:34px 0 14px;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  a.card{display:block;padding:18px 18px 14px;text-decoration:none;color:inherit;transition:transform .18s,border-color .18s,box-shadow .18s}
+  a.card:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.45);box-shadow:0 18px 44px rgba(0,0,0,.55)}
+  .card h2{margin:0;font-size:16px;font-weight:620;letter-spacing:-.01em}
+  .card .meta{margin-top:3px;font-size:11px;color:var(--ink-3);letter-spacing:.05em;text-transform:uppercase}
+  .spark{margin:14px 0 12px;width:100%;height:56px;display:block;overflow:visible}
+  .figs{display:flex;gap:18px;border-top:1px solid rgba(255,255,255,.08);padding-top:11px}
+  .figs div{display:flex;flex-direction:column}
+  .figs .k{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .figs .v{font-size:14px;font-weight:620;font-variant-numeric:tabular-nums;margin-top:2px}
+  .figs .v small{font-size:9.5px;font-weight:500;color:var(--ink-2);margin-left:2px}
+  .empty{padding:26px;font-size:13.5px;color:var(--ink-2);line-height:1.7}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--accent)}
+  footer{margin-top:44px;font-size:11px;color:var(--ink-3);line-height:1.8}
+  footer a{color:var(--ink-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Route Library</h1>
+    <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the runner in chase view.</p>
+  </header>
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+  <footer>
+    Imagery © Esri and its contributors · Elevation from
+    <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) ·
+    Map fallback © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
+  </footer>
+</div>
+
+<script type="module">
+import { rampCss } from './src/terrain.js';
+
+const grid = document.getElementById('grid');
+const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
+const routes = manifest.routes || [];
+
+document.getElementById('count').textContent =
+  routes.length ? `${routes.length} route${routes.length > 1 ? 's' : ''}` : '';
+
+if (!routes.length) {
+  grid.innerHTML = `<div class="rv-panel empty">No routes yet. Drop a <code>.gpx</code> file into
+    <code>routes/</code>, commit, and push — the build picks it up automatically.</div>`;
+}
+
+const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+for (const r of routes) {
+  const lo = Math.min(...r.profile), hi = Math.max(...r.profile), span = Math.max(1, hi - lo);
+  const W = 300, H = 56;
+  const d = r.profile.map((e, i) =>
+    (i ? 'L' : 'M') + (i / (r.profile.length - 1) * W).toFixed(1) + ' ' + (H - 3 - (e - lo) / span * (H - 10)).toFixed(1)
+  ).join('');
+  let stops = '';
+  for (let s = 0; s <= 10; s++) {
+    const e = r.profile[Math.round(s / 10 * (r.profile.length - 1))];
+    stops += `<stop offset="${s * 10}%" stop-color="${rampCss((e - r.stats.ele_min) / Math.max(1, r.stats.ele_max - r.stats.ele_min))}"/>`;
+  }
+  const id = 'g' + r.slug.replace(/[^a-z0-9]/gi, '');
+  grid.insertAdjacentHTML('beforeend', `
+    <a class="card rv-panel" href="./view.html?route=${encodeURIComponent(r.slug)}">
+      <h2>${r.name}</h2>
+      <div class="meta">${r.stats.points.toLocaleString()} points · ${r.center[0].toFixed(2)}°, ${r.center[1].toFixed(2)}°</div>
+      <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <defs><linearGradient id="${id}" x1="0" x2="1">${stops}</linearGradient></defs>
+        <path d="${d}L${W} ${H}L0 ${H}Z" fill="rgba(34,211,238,.10)"/>
+        <path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2"/>
+      </svg>
+      <div class="figs">
+        <div><span class="k">Distance</span><span class="v">${(r.stats.distance_m / 1000).toFixed(2)}<small>km</small></span></div>
+        <div><span class="k">Ascent</span><span class="v">${fmt(r.stats.gain_m)}<small>m</small></span></div>
+        <div><span class="k">High</span><span class="v">${fmt(r.stats.ele_max)}<small>m</small></span></div>
+      </div>
+    </a>`);
+}
+</script>
+</body>
+</html>
