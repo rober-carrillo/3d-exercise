@@ -20,15 +20,19 @@ const fmt = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, 
 const TEMPLATE = `
 <canvas class="rv-gl"></canvas>
 
-<div class="rv-panel rv-title">
+<div class="rv-panel rv-title" data-open="1">
   <a class="rv-back" hidden>← All routes</a>
-  <h1 class="rv-name">—</h1>
+  <button class="rv-titlebtn" aria-expanded="true">
+    <h1 class="rv-name">—</h1><span class="rv-caret">▾</span>
+  </button>
+  <div class="rv-fold">
   <div class="rv-sub">3D route</div>
   <div class="rv-stats">
     <div><span class="rv-k">Distance</span><span class="rv-v rv-s-dist">—</span></div>
     <div><span class="rv-k">Ascent</span><span class="rv-v rv-s-gain">—</span></div>
     <div><span class="rv-k">Descent</span><span class="rv-v rv-s-loss">—</span></div>
     <div><span class="rv-k">High point</span><span class="rv-v rv-s-max">—</span></div>
+  </div>
   </div>
 </div>
 
@@ -43,6 +47,11 @@ const TEMPLATE = `
     <button class="rv-speed" title="Playback speed">1×</button>
     <button class="rv-reset">Reset</button>
   </div>
+</div>
+
+<div class="rv-fabs">
+  <button class="rv-fab rv-fab-play" title="Fly route" aria-label="Fly route">▶</button>
+  <button class="rv-fab rv-fab-set" title="Settings" aria-label="Settings" aria-expanded="false">☰</button>
 </div>
 
 <div class="rv-panel rv-legend">
@@ -67,7 +76,7 @@ const TEMPLATE = `
   <div class="rv-msg">reading track…</div>
 </div>`;
 
-export const VERSION = '1.4.0';
+export const VERSION = '1.5.0';
 
 export class RouteViewer {
   constructor(opts) {
@@ -211,6 +220,29 @@ export class RouteViewer {
       r.walkRate = this.speed;
     });
     this.$('reset').addEventListener('click', () => r.resetView());
+
+    // The stats fold away behind the route name, and on a phone the whole
+    // control panel folds behind two buttons — a 6" screen has no room for
+    // three permanent panels plus the thing they are describing.
+    const title = this.mount.querySelector('.rv-title');
+    const titleBtn = this.$('titlebtn');
+    const setTitle = open => {
+      title.dataset.open = open ? '1' : '0';
+      titleBtn.setAttribute('aria-expanded', String(open));
+    };
+    titleBtn.addEventListener('click', () => setTitle(title.dataset.open !== '1'));
+    setTitle(!this.narrow());
+
+    const panel = this.mount.querySelector('.rv-ctrl');
+    const setBtn = this.$('fab-set');
+    const setPanel = open => {
+      panel.classList.toggle('rv-open', open);
+      setBtn.setAttribute('aria-expanded', String(open));
+    };
+    setBtn.addEventListener('click', () => setPanel(!panel.classList.contains('rv-open')));
+    this.$('fab-play').addEventListener('click', () => this.$('play').click());
+    // touching the scene puts the settings away again
+    this.$('gl').addEventListener('pointerdown', () => { if (this.narrow()) setPanel(false); });
     window.addEventListener('keydown', e => {
       if (e.code === 'Space') { e.preventDefault(); this.$('play').click(); }
       if (e.key === 'r' || e.key === 'R') this.$('reset').click();
@@ -218,8 +250,12 @@ export class RouteViewer {
     });
   }
 
+  narrow() { return window.matchMedia('(max-width: 820px)').matches; }
+
   setPlay(on) {
     this.play = on;
+    this.$('fab-play').textContent = on ? '❚❚' : '▶';
+    this.$('fab-play').title = on ? 'Pause' : 'Fly route';
     this.renderer.walking = on;            // the figure walks only while replaying
     this.renderer.walkRate = this.speed;
     const b = this.$('play');

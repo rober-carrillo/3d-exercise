@@ -19,7 +19,12 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-title{position:fixed;top:16px;left:16px;padding:14px 18px 13px;max-width:min(46vw,420px);z-index:5}
 .rv-back{display:inline-block;margin-bottom:8px;font-size:11px;color:var(--ink-3);text-decoration:none;letter-spacing:.03em}
 .rv-back:hover{color:var(--accent)}
-.rv-title h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em;line-height:1.25}
+.rv-titlebtn{display:flex;align-items:center;gap:10px;width:100%;padding:0;border:0;background:none;
+  color:inherit;font:inherit;text-align:left;cursor:pointer}
+.rv-title h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em;line-height:1.25;flex:1}
+.rv-caret{flex:0 0 auto;font-size:11px;color:var(--ink-3);transition:transform .2s}
+.rv-title[data-open="0"] .rv-fold{display:none}
+.rv-title[data-open="0"] .rv-caret{transform:rotate(-90deg)}
 .rv-sub{margin-top:4px;font-size:11.5px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
 .rv-stats{display:grid;grid-template-columns:repeat(4,auto);gap:16px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
 .rv-stats span{display:block}
@@ -65,6 +70,16 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-dot.ok{background:#34d399}
 .rv-dot.warn{background:var(--warm)}
 
+/* two floating controls, phones only: play/pause, and everything else */
+.rv-fabs{position:fixed;left:16px;bottom:130px;z-index:7;display:none;gap:10px}
+.rv-fab{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  font-size:17px;line-height:1;color:var(--ink);cursor:pointer;
+  background:var(--panel);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+  border:1px solid var(--panel-brd);box-shadow:0 12px 40px rgba(0,0,0,.45);transition:background .15s,border-color .15s}
+.rv-fab:active{background:rgba(34,211,238,.22)}
+.rv-fab-play{color:#c7f6ff;background:rgba(34,211,238,.18);border-color:rgba(34,211,238,.45)}
+.rv-fab-set[aria-expanded="true"]{border-color:rgba(34,211,238,.5);color:#c7f6ff}
+
 .rv-load{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(120% 90% at 50% 30%,#0d1622,#05080c 70%);transition:opacity .6s;gap:14px}
 .rv-load.gone{opacity:0;pointer-events:none}
@@ -78,9 +93,20 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-hint.gone{opacity:0}
 
 @media (max-width:820px){
-  .rv-title{max-width:calc(100vw - 32px)}
-  .rv-ctrl{top:auto;bottom:158px;right:16px;width:200px}
-  .rv-stats{grid-template-columns:repeat(2,1fr);gap:10px}
+  .rv-title{max-width:calc(100vw - 32px);padding:12px 15px}
+  .rv-stats{grid-template-columns:repeat(2,1fr);gap:10px 18px}
   .rv-legend,.rv-status{display:none}
   .rv-profile{height:102px;padding-top:28px}
+  .rv-fabs{display:flex}
+  /* the panel becomes a sheet above the buttons, and Fly route lives in the FAB */
+  .rv-ctrl{display:none;top:auto;bottom:196px;left:16px;right:auto;width:min(288px,calc(100vw - 32px))}
+  .rv-ctrl.rv-open{display:block}
+  .rv-play{display:none}
+  .rv-hint{bottom:196px}
+}
+@media (max-width:820px) and (max-height:560px){
+  /* landscape phone: no room for the profile, so drop the panels closer in */
+  .rv-fabs{bottom:16px}
+  .rv-ctrl{bottom:82px}
+  .rv-profile{display:none}
 }

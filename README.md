@@ -154,6 +154,19 @@ aims at the farthest point on the track instead.)
 - Hovering the elevation profile scrubs to any point on the route.
 - Keyboard: `space` play/pause · `c` chase camera · `r` reset view.
 
+## On a phone
+
+A 6" screen can't carry three permanent panels plus the thing they describe, so
+the chrome folds:
+
+- the title panel shows only the route name; tap it to reveal distance, ascent,
+  descent and high point (expanded by default on a desktop, where there's room);
+- the control panel collapses into two buttons at the bottom left — play/pause,
+  and everything else as a sheet above them. Touching the scene puts the sheet
+  away;
+- in landscape, where there's no vertical room at all, the elevation profile
+  hides and the buttons drop to the bottom edge.
+
 ## Attribution
 
 Imagery © Esri and its contributors. Elevation from
