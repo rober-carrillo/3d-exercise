@@ -80,11 +80,21 @@ loaded.
 
 ## Camera
 
+The default view is oriented to the route itself: the camera sits on the start
+side looking down the track, so the route reads start-near → finish-far rather
+than at some arbitrary angle. (On a loop, where start and finish coincide, it
+aims at the farthest point on the track instead.)
+
 - **drag** orbit · **scroll** zoom · **shift-drag** or right-drag pan
-- **Chase camera** rides behind the moving point and swings to face the
-  direction of travel — third-person follow view. While chasing, dragging looks
-  around the runner and scrolling changes follow distance.
-- **Fly route** replays the track; the speed button cycles 0.5×–4×.
+- **Fly route** replays the track and drops you straight into the chase view,
+  directly behind the marker and aimed down the route — the way ahead runs away
+  up the screen. The speed button cycles 0.5×–4×.
+- **Chase camera** can also be toggled on its own. It aims down `course[]`, a
+  bearing taken from a look-ahead point a few hundred metres up the track, so
+  the camera follows where the route is *going* instead of yawing through every
+  switchback. The chevron on the surface shows instantaneous facing.
+- While chasing, dragging looks around the runner and scrolling changes follow
+  distance; both reset the next time you press Fly route.
 - Hovering the elevation profile scrubs to any point on the route.
 - Keyboard: `space` play/pause · `c` chase camera · `r` reset view.
 

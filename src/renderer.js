@@ -64,8 +64,8 @@ export class Renderer {
 
     this.state = { vex: 1.8, texture: true, curtain: true, chase: false };
     this.cam = { az: -2.24, pol: 0.97, dist: 1, tx: 0, ty: 0, tz: 0 };
-    this.home = { az: -2.24, pol: 0.97, distScale: 1.34 };
-    this.chase = { dist: 0, pol: 1.22, azOffset: 0, height: 0 };
+    this.home = { az: -2.24, pol: 0.97, distScale: 1.45, bearing: 0, lift: 0.09 };
+    this.chase = { dist: 0, pol: 1.10, azOffset: 0, height: 0 };
     this.cursor = 0;
     this.hasTexture = false;
     this.onFrame = null;
@@ -160,8 +160,11 @@ void main(){vec4 c=vCol;
       pos: gl.createBuffer(),
       col: this._buf(new Float32Array([1, 1, 1, 1, 0.55, 0.93, 1, 1, 0.55, 0.93, 1, 1])),
     };
+    // face the route the way it runs: start near the camera, finish away from it
+    this.home.bearing = g.track.bearing;
+    this.home.az = g.track.bearing + Math.PI;
     this.cam.dist = g.ext * this.home.distScale;
-    this.chase.dist = g.ext * 0.075;
+    this.chase.dist = g.ext * 0.13;
     this.chase.height = g.hSpan * 0.02;
     this.cam.tz = (this.g.track.tz[0] || 0);
     this.resetView();
@@ -196,7 +199,7 @@ void main(){vec4 c=vCol;
 
     // a flat chevron on the surface showing which way the runner is facing
     const h = t.head[i], f = [Math.cos(h), Math.sin(h)], r = [Math.sin(h), -Math.cos(h)];
-    const L = t.width * 4.2, Wd = t.width * 1.7, z = t.tz[i] + lift * 0.35;
+    const L = t.width * 3.4, Wd = t.width * 1.5, z = t.tz[i] + lift * 0.35;
     gl.bindBuffer(gl.ARRAY_BUFFER, B.arrow.pos);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
       t.tx[i] + f[0] * L, t.ty[i] + f[1] * L, z,
@@ -205,13 +208,28 @@ void main(){vec4 c=vCol;
     ]), gl.DYNAMIC_DRAW);
   }
 
+  /**
+   * Swing in directly behind the cursor point, aimed down the route: the point
+   * sits just in front of you and the track ahead recedes up the screen.
+   */
+  beginChase() {
+    this.state.chase = true;
+    this.chase.azOffset = 0;
+    this.chase.pol = 1.10;
+    if (this.g) this.chase.dist = this.g.ext * 0.13;
+  }
+
   resetView() {
     this.cam.az = this.home.az; this.cam.pol = this.home.pol;
-    this.cam.tx = 0; this.cam.ty = 0;
-    this.chase.azOffset = 0; this.chase.pol = 1.22;
+    // pull the look-at point back along the route so the whole track lifts clear
+    // of the elevation-profile panel instead of running off the bottom edge
+    const off = this.g ? this.g.ext * this.home.lift : 0;
+    this.cam.tx = -Math.cos(this.home.bearing) * off;
+    this.cam.ty = -Math.sin(this.home.bearing) * off;
+    this.chase.azOffset = 0; this.chase.pol = 1.10;
     if (this.g) {
       this.cam.dist = this.g.ext * this.home.distScale;
-      this.chase.dist = this.g.ext * 0.075;
+      this.chase.dist = this.g.ext * 0.13;
       this.cam.tz = this.g.hSpan * 0.5;
     }
   }
@@ -284,7 +302,7 @@ void main(){vec4 c=vCol;
   /** Ride behind the cursor point, facing the way it is travelling. */
   _updateChase(dt) {
     const t = this.g.track, i = this.cursor;
-    const wantAz = wrap(t.head[i] + Math.PI + this.chase.azOffset);
+    const wantAz = wrap(t.course[i] + Math.PI + this.chase.azOffset);
     this.cam.az += wrap(wantAz - this.cam.az) * ease(2.6, dt);
     this.cam.pol += (this.chase.pol - this.cam.pol) * ease(2.2, dt);
     this.cam.dist += (this.chase.dist - this.cam.dist) * ease(2.2, dt);

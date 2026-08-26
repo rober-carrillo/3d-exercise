@@ -185,8 +185,14 @@ export class RouteViewer {
       this.$('vex-v').textContent = r.state.vex.toFixed(1) + '×';
     });
     this.$('play').addEventListener('click', () => {
-      if (!this.play && this.playT >= 1) this.playT = 0;
-      this.setPlay(!this.play);
+      const starting = !this.play;
+      if (starting && this.playT >= 1) this.playT = 0;
+      if (starting) {
+        // flying the route always begins from directly behind the marker
+        r.beginChase();
+        this.mount.querySelector('.rv-sw[data-key="chase"]').classList.add('on');
+      }
+      this.setPlay(starting);
     });
     this.$('speed').addEventListener('click', () => {
       const steps = [0.5, 1, 2, 4];

@@ -20,7 +20,8 @@ if (!entry) {
     '<p style="font:14px/1.6 system-ui;color:#9fb0c4;padding:40px">No routes found. Drop a .gpx file into <code>routes/</code> and rebuild.</p>';
 } else {
   document.title = entry.name + ' · 3D route';
-  new RouteViewer({
+  // exposed for console tinkering: window.viewer.renderer.cam, .state, …
+  window.viewer = new RouteViewer({
     mount: document.body,
     gpxUrl: './routes/' + entry.file,
     name: entry.name,

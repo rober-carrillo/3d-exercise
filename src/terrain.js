@@ -200,21 +200,53 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   };
 
   const M = track.lat.length;
-  const tx = new Float32Array(M), ty = new Float32Array(M), tz = new Float32Array(M), head = new Float32Array(M);
+  const tx = new Float32Array(M), ty = new Float32Array(M), tz = new Float32Array(M);
+  const head = new Float32Array(M), course = new Float32Array(M);
   const lift = Math.max(9, hSpan * 0.02);
   for (let i = 0; i < M; i++) {
     tx[i] = (mercX(track.lon[i]) - cx) * K;
     ty[i] = (mercY(track.lat[i]) - cy) * K;
     tz[i] = meshH(tx[i], ty[i]) - zRef + lift;
   }
-  // heading, averaged over ~±10 samples so GPS jitter can't spin a chase camera
+  // Two bearings per point:
+  //   head[]   — local facing, averaged over ~±10 samples so GPS jitter cannot
+  //              make the direction marker twitch
+  //   course[] — where the route is *going*, taken from a look-ahead point a few
+  //              hundred metres up the track. This is what the chase camera aims
+  //              down, so the road ahead runs away up the screen instead of
+  //              swinging through every switchback.
+  const totalD = track.dist[M - 1] || 1;
+  const AHEAD = clamp(totalD * 0.04, 120, 500), BEHIND = 40;
   for (let i = 0; i < M; i++) {
     const a = Math.max(0, i - 10), b = Math.min(M - 1, i + 10);
     head[i] = Math.atan2(ty[b] - ty[a], tx[b] - tx[a]);
+
+    let j = i; while (j < M - 1 && track.dist[j] - track.dist[i] < AHEAD) j++;
+    let k = i; while (k > 0 && track.dist[i] - track.dist[k] < BEHIND) k--;
+    if (j === k) { course[i] = head[i]; continue; }
+    const fx = tx[j] - tx[k], fy = ty[j] - ty[k], fl = Math.hypot(fx, fy) || 1;
+    // blend the long look-ahead with the local tangent so tight bends still register
+    course[i] = Math.atan2(fy / fl + Math.sin(head[i]) * 0.3, fx / fl + Math.cos(head[i]) * 0.3);
+  }
+  // near the finish there is nothing ahead to aim at — hold the last real bearing
+  for (let i = M - 1; i > 0; i--) if (totalD - track.dist[i] < AHEAD * 0.5) course[i] = course[i - 1];
+
+  // Overall orientation of the route, used as the default/reset camera bearing so
+  // the track reads start-near → end-far. On a loop (start and finish close
+  // together) that bearing is meaningless, so aim at the farthest point instead.
+  let bearing = Math.atan2(ty[M - 1] - ty[0], tx[M - 1] - tx[0]);
+  const gap = Math.hypot(tx[M - 1] - tx[0], ty[M - 1] - ty[0]);
+  if (gap < totalD * 0.15) {
+    let far = 0, fd = -1;
+    for (let i = 0; i < M; i++) {
+      const d = (tx[i] - tx[0]) ** 2 + (ty[i] - ty[0]) ** 2;
+      if (d > fd) { fd = d; far = i; }
+    }
+    bearing = Math.atan2(ty[far] - ty[0], tx[far] - tx[0]);
   }
 
   const eMin = track.stats.ele_min, eSpan = Math.max(1, track.stats.ele_max - eMin);
-  const w = Math.max(20, ext * 0.0055), wo = w * 2.1;
+  const w = Math.max(16, ext * 0.0042), wo = w * 2.1;
   const rp = new Float32Array(M * 6), rc = new Float32Array(M * 8);
   const op = new Float32Array(M * 6), oc = new Float32Array(M * 8);
   const wp = new Float32Array(M * 6), wc = new Float32Array(M * 8);
@@ -249,6 +281,6 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     terrain: { pos, slope, uv, idx },
     skirt: { pos: new Float32Array(sp), col: new Float32Array(sc) },
     ribbon: { pos: rp, col: rc }, outline: { pos: op, col: oc }, curtain: { pos: wp, col: wc },
-    track: { tx, ty, tz, head, n: M, width: w },
+    track: { tx, ty, tz, head, course, bearing, n: M, width: w },
   };
 }
