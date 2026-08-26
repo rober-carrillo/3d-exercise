@@ -17,6 +17,7 @@ const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** frame-rate independent easing */
 const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
 
+const FIG_MAX = 300;            // vertices in the walking figure (~70 triangles)
 const mat4 = () => new Float32Array(16);
 function perspective(o, fovy, asp, n, f) {
   const t = 1 / Math.tan(fovy / 2);
@@ -68,6 +69,9 @@ export class Renderer {
     this.chase = { dist: 0, pol: 1.10, azOffset: 0, height: 0 };
     this.cursor = 0;
     this.hasTexture = false;
+    this.walking = false;          // true while the route is replaying
+    this.walkPhase = 0;
+    this.walkRate = 1;             // follows the playback speed multiplier
     this.onFrame = null;
     this._P = mat4(); this._V = mat4(); this._MVP = mat4();
     this._buffers = {};
@@ -156,10 +160,9 @@ void main(){vec4 c=vCol;
       pos: gl.createBuffer(),
       col: this._buf(new Float32Array([0.62, 0.90, 0.20, 1, 0.96, 0.25, 0.37, 1, 1, 1, 1, 1])),
     };
-    B.arrow = {
-      pos: gl.createBuffer(),
-      col: this._buf(new Float32Array([1, 1, 1, 1, 0.55, 0.93, 1, 1, 0.55, 0.93, 1, 1])),
-    };
+    B.fig = { pos: gl.createBuffer(), col: gl.createBuffer(), n: 0 };
+    this._figPos = new Float32Array(FIG_MAX * 3);
+    this._figCol = new Float32Array(FIG_MAX * 4);
     // face the route the way it runs: start near the camera, finish away from it
     this.home.bearing = g.track.bearing;
     this.home.az = g.track.bearing + Math.PI;
@@ -190,22 +193,118 @@ void main(){vec4 c=vCol;
     const gl = this.gl, t = this.g.track, B = this._buffers;
     this.cursor = i = clamp(i | 0, 0, t.n - 1);
     const lift = Math.max(10, this.g.hSpan * 0.02);
+    // the cursor dot rides just above the walker's head, so it still reads as a
+    // marker when the figure itself is only a few pixels tall
+    const overhead = this.figureSize() * 1.35 / Math.max(0.001, this.state.vex);
     gl.bindBuffer(gl.ARRAY_BUFFER, B.mk.pos);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
       t.tx[0], t.ty[0], t.tz[0] + lift,
       t.tx[t.n - 1], t.ty[t.n - 1], t.tz[t.n - 1] + lift,
-      t.tx[i], t.ty[i], t.tz[i] + lift,
+      t.tx[i], t.ty[i], t.tz[i] + overhead,
     ]), gl.DYNAMIC_DRAW);
+  }
 
-    // a flat chevron on the surface showing which way the runner is facing
-    const h = t.head[i], f = [Math.cos(h), Math.sin(h)], r = [Math.sin(h), -Math.cos(h)];
-    const L = t.width * 3.4, Wd = t.width * 1.5, z = t.tz[i] + lift * 0.35;
-    gl.bindBuffer(gl.ARRAY_BUFFER, B.arrow.pos);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      t.tx[i] + f[0] * L, t.ty[i] + f[1] * L, z,
-      t.tx[i] - f[0] * L * 0.5 + r[0] * Wd, t.ty[i] - f[1] * L * 0.5 + r[1] * Wd, z,
-      t.tx[i] - f[0] * L * 0.5 - r[0] * Wd, t.ty[i] - f[1] * L * 0.5 - r[1] * Wd, z,
-    ]), gl.DYNAMIC_DRAW);
+  figureSize() { return this.g ? Math.max(this.g.track.width * 1.05, this.g.ext * 0.004) : 1; }
+
+  /**
+   * Rebuild the little walking figure — a low-poly take on the restroom-sign
+   * woman — at the cursor point, facing along the track.
+   *
+   * It is rebuilt every frame rather than transformed on the GPU: it is ~70
+   * triangles, which costs nothing, and it keeps the walk cycle, the terrain
+   * snapping and the vertical-exaggeration compensation in one place. Heights
+   * are divided by the exaggeration factor because the shader multiplies every
+   * z by it — the ground gets stretched, the walker should not.
+   */
+  _buildFigure() {
+    const t = this.g.track, i = this.cursor;
+    const S = this.figureSize(), vex = Math.max(0.001, this.state.vex);
+    const h = t.head[i], ch = Math.cos(h), sh = Math.sin(h);
+    const ph = this.walkPhase;
+    const legA = Math.sin(ph) * 0.55, armA = Math.sin(ph + Math.PI) * 0.42;
+    const bob = (Math.abs(Math.sin(ph)) - 0.5) * 0.025 * S;
+    const ox = t.tx[i], oy = t.ty[i], oz = t.tz[i];
+
+    const P = this._figPos, C = this._figCol;
+    let n = 0;
+    const L = [Math.cos(0.86) * Math.cos(0.62), Math.sin(0.86) * Math.cos(0.62), Math.sin(0.62)];
+
+    // local frame: x forward, y left, z up (metres)
+    const rotXZ = (p, pz0, a) => {
+      const dx = p[0], dz = p[2] - pz0, c = Math.cos(a), s = Math.sin(a);
+      return [dx * c + dz * s, p[1], pz0 - dx * s + dz * c];
+    };
+    const push = (p, col, lam) => {
+      P[n * 3] = ox + p[0] * ch - p[1] * sh;
+      P[n * 3 + 1] = oy + p[0] * sh + p[1] * ch;
+      P[n * 3 + 2] = oz + (p[2] + bob) / vex;
+      const k = 0.56 + 0.58 * lam;
+      C[n * 4] = col[0] * k; C[n * 4 + 1] = col[1] * k; C[n * 4 + 2] = col[2] * k; C[n * 4 + 3] = 1;
+      n++;
+    };
+    const quad = (a, b, c, d, col) => {
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+      let nx = u[1] * v[2] - u[2] * v[1], ny = u[2] * v[0] - u[0] * v[2], nz = u[0] * v[1] - u[1] * v[0];
+      const len = Math.hypot(nx, ny, nz) || 1; nx /= len; ny /= len; nz /= len;
+      const wx = nx * ch - ny * sh, wy = nx * sh + ny * ch;   // normal into world yaw
+      const lam = Math.max(0, wx * L[0] + wy * L[1] + nz * L[2]);
+      for (const p of [a, b, c, a, c, d]) push(p, col, lam);
+    };
+    // every part is an eight-corner solid; these two helpers just supply corners
+    const poly8 = (cs, col, swing, pivot) => {
+      const c = swing ? cs.map(p => rotXZ(p, pivot, swing)) : cs;
+      quad(c[4], c[5], c[6], c[7], col);   // top
+      quad(c[3], c[2], c[1], c[0], col);   // bottom
+      quad(c[0], c[1], c[5], c[4], col);   // -y side
+      quad(c[2], c[3], c[7], c[6], col);   // +y side
+      quad(c[1], c[2], c[6], c[5], col);   // +x front
+      quad(c[3], c[0], c[4], c[7], col);   // -x back
+    };
+    const block = (x0, x1, y0, y1, z0, z1, col, swing, pivot) => poly8([
+      [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+      [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
+    ], col, swing, pivot);
+    /** a limb that leans sideways: y offset differs bottom (yb) to top (yt) */
+    const limb = (x, yb, yt, w, z0, z1, col, swing, pivot) => poly8([
+      [-x, yb - w, z0], [x, yb - w, z0], [x, yb + w, z0], [-x, yb + w, z0],
+      [-x, yt - w, z1], [x, yt - w, z1], [x, yt + w, z1], [-x, yt + w, z1],
+    ], col, swing, pivot);
+
+    // an eight-corner tapered box — the dress needs a wide hem and narrow
+    // shoulders, which a plain block cannot do
+    const frustum = (yb, xb, z0, yt, xt, z1, col) => poly8([
+      [-xb, -yb, z0], [xb, -yb, z0], [xb, yb, z0], [-xb, yb, z0],
+      [-xt, -yt, z1], [xt, -yt, z1], [xt, yt, z1], [-xt, yt, z1],
+    ], col, 0, 0);
+
+    const body = [0.96, 0.97, 1.0], skin = [1.0, 1.0, 1.0];
+
+    // legs, swinging from the hip
+    const legW = 0.048 * S, hip = 0.36 * S;
+    for (const side of [-1, 1]) {
+      const y = side * 0.072 * S;
+      block(-legW, legW, y - legW, y + legW, 0, hip, body, side > 0 ? legA : -legA, hip);
+    }
+    // arms, swinging opposite the legs and splayed outward the way the sign
+    // figure holds them, so they stay clear of the dress
+    const armW = 0.036 * S, shoulderZ = 0.68 * S;
+    for (const side of [-1, 1]) {
+      limb(armW, side * 0.235 * S, side * 0.155 * S, armW, 0.33 * S, shoulderZ, body,
+        side > 0 ? armA : -armA, shoulderZ);
+    }
+    // the dress: the wide hem tapering to the shoulders is what makes the
+    // pictogram read as the restroom-sign woman rather than a stick figure
+    frustum(0.28 * S, 0.085 * S, 0.30 * S, 0.135 * S, 0.065 * S, 0.72 * S, body);
+    // head, with a sliver of neck below it
+    const hr = 0.098 * S;
+    frustum(hr, hr * 0.94, 0.77 * S, hr * 0.97, hr * 0.91, 0.77 * S + hr * 1.95, skin);
+
+    const gl = this.gl, B = this._buffers;
+    B.fig.n = n;
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.fig.pos);
+    gl.bufferData(gl.ARRAY_BUFFER, P.subarray(0, n * 3), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.fig.col);
+    gl.bufferData(gl.ARRAY_BUFFER, C.subarray(0, n * 4), gl.DYNAMIC_DRAW);
   }
 
   /**
@@ -319,6 +418,8 @@ void main(){vec4 c=vCol;
       requestAnimationFrame(frame);
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (this.onFrame) this.onFrame(dt);
+      // the walk cycle only turns while the route is actually replaying
+      if (this.walking) this.walkPhase += dt * 5.0 * this.walkRate;
       if (this.state.chase && this.g) this._updateChase(dt);
       this._resize();
       const W = this.canvas.width, H = this.canvas.height;
@@ -369,10 +470,11 @@ void main(){vec4 c=vCol;
       gl.polygonOffset(-4.0, -8);
       this._attr(pC, 'aPos', B.rib.pos, 3); this._attr(pC, 'aCol', B.rib.col, 4);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, B.rib.n);
-      gl.polygonOffset(-6.0, -12);
-      this._attr(pC, 'aPos', B.arrow.pos, 3); this._attr(pC, 'aCol', B.arrow.col, 4);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.disable(gl.POLYGON_OFFSET_FILL);
+
+      this._buildFigure();
+      this._attr(pC, 'aPos', B.fig.pos, 3); this._attr(pC, 'aCol', B.fig.col, 4);
+      gl.drawArrays(gl.TRIANGLES, 0, B.fig.n);
 
       if (this.state.curtain) {
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);

@@ -67,7 +67,7 @@ const TEMPLATE = `
   <div class="rv-msg">reading track…</div>
 </div>`;
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 
 export class RouteViewer {
   constructor(opts) {
@@ -206,6 +206,7 @@ export class RouteViewer {
       const steps = [0.5, 1, 2, 4];
       this.speed = steps[(steps.indexOf(this.speed) + 1) % steps.length];
       this.$('speed').textContent = this.speed + '×';
+      r.walkRate = this.speed;
     });
     this.$('reset').addEventListener('click', () => r.resetView());
     window.addEventListener('keydown', e => {
@@ -217,6 +218,8 @@ export class RouteViewer {
 
   setPlay(on) {
     this.play = on;
+    this.renderer.walking = on;            // the figure walks only while replaying
+    this.renderer.walkRate = this.speed;
     const b = this.$('play');
     b.textContent = on ? '❚❚ Pause' : '▶ Fly route';
     b.classList.toggle('rv-pri', !on);

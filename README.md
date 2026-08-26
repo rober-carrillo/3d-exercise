@@ -31,11 +31,27 @@ cp ~/Downloads/my-hike.gpx routes/
 git add routes/my-hike.gpx && git commit -m "add my-hike" && git push
 ```
 
+## Viewing it
+
+**The hosted site is the product** — `index.html` + `view.html` served from
+`dist/`. Three ways to look at it, in order of how close they are to production:
+
+| | how | needs |
+|---|---|---|
+| Local dev | `npm run dev` → http://localhost:5173 | Node, nothing else |
+| Production | push to GitHub, import in Vercel | GitHub + Vercel account |
+| Single file | open `dist/standalone/<slug>.html` | just a browser |
+
+You do **not** need GitHub or Vercel to work locally — `npm run dev` builds and
+serves the real site on your machine, and that is exactly what Vercel serves. A
+plain `open index.html` will *not* work: the viewer is ES modules, which browsers
+refuse over `file://`. That is the only reason the standalone build exists.
+
 ## Standalone files
 
-`npm run build` also writes `dist/standalone/<slug>.html` for every route: one
-self-contained file, no server and no modules, that you can double-click or mail
-to someone. It still fetches imagery and elevation at view time (and degrades the
+A convenience artifact, not the main deliverable. `npm run build` also writes
+`dist/standalone/<slug>.html` for every route: one self-contained file, no server
+and no modules, that you can double-click or mail to someone. It still fetches imagery and elevation at view time (and degrades the
 same way when offline), but the code, styles and track data are all inlined.
 Every card on the index page links to its own.
 
@@ -103,7 +119,14 @@ aims at the farthest point on the track instead.)
 - **Chase camera** can also be toggled on its own. It aims down `course[]`, a
   bearing taken from a look-ahead point a few hundred metres up the track, so
   the camera follows where the route is *going* instead of yawing through every
-  switchback. The chevron on the surface shows instantaneous facing.
+  switchback.
+- The moving point is a **low-poly walking figure** — the restroom-sign woman,
+  about 70 triangles — facing along `head[]`, the local bearing. Her legs and
+  arms swing only while the route is replaying and freeze mid-stride when you
+  pause. She is rebuilt on the CPU each frame, which is free at that triangle
+  count and keeps the walk cycle, the terrain snapping and the
+  vertical-exaggeration compensation in one place (the ground is stretched by
+  the vertical scale; she is not).
 - While chasing, dragging looks around the runner and scrolling changes follow
   distance; both reset the next time you press Fly route.
 - Hovering the elevation profile scrubs to any point on the route.
