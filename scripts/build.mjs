@@ -85,7 +85,7 @@ async function bundleModules(names) {
 const esc = s => JSON.stringify(s).replace(/</g, '\\u003c');
 
 async function writeStandalone(route, track) {
-  const bundle = await bundleModules(['gpx', 'terrain', 'renderer', 'viewer']);
+  const bundle = await bundleModules(['gpx', 'terrain', 'renderer', 'viewer']);   // library.js is browser-storage only
   const css = await readFile(join(root, 'src', 'ui.css'), 'utf8');
   const data = {
     name: track.name, stats: track.stats, bbox: track.bbox,

@@ -7,20 +7,20 @@
 <meta name="description" content="GPX tracks rendered as interactive 3D terrain flyovers.">
 <link rel="stylesheet" href="./src/ui.css">
 <style>
-  body{min-height:100%;background:
-    radial-gradient(120% 80% at 50% -10%,#101c29 0%,#070b10 60%) fixed}
+  body{min-height:100%;background:radial-gradient(120% 80% at 50% -10%,#101c29 0%,#070b10 60%) fixed}
   .wrap{max-width:1080px;margin:0 auto;padding:72px 24px 96px}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap}
   header h1{margin:0;font-size:30px;font-weight:660;letter-spacing:-.025em}
   header p{margin:10px 0 0;font-size:14px;line-height:1.6;color:var(--ink-2);max-width:56ch}
+  .add{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:#c7f6ff;background:rgba(34,211,238,.16);
+    border:1px solid rgba(34,211,238,.45);border-radius:10px;padding:9px 15px;cursor:pointer;transition:background .15s}
+  .add:hover{background:rgba(34,211,238,.28)}
   .count{margin:34px 0 14px;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
   .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
   .cardwrap{position:relative}
   a.card{display:block;padding:18px 18px 14px;text-decoration:none;color:inherit;transition:transform .18s,border-color .18s,box-shadow .18s}
   a.card:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.45);box-shadow:0 18px 44px rgba(0,0,0,.55)}
-  a.dl{position:absolute;right:16px;bottom:12px;font-size:10px;letter-spacing:.04em;color:var(--ink-3);
-    text-decoration:none;padding:3px 7px;border-radius:6px;border:1px solid transparent;transition:color .15s,border-color .15s}
-  a.dl:hover{color:var(--accent);border-color:rgba(34,211,238,.35)}
-  .card h2{margin:0;font-size:16px;font-weight:620;letter-spacing:-.01em}
+  .card h2{margin:0;font-size:16px;font-weight:620;letter-spacing:-.01em;padding-right:30px}
   .card .meta{margin-top:3px;font-size:11px;color:var(--ink-3);letter-spacing:.05em;text-transform:uppercase}
   .spark{margin:14px 0 12px;width:100%;height:56px;display:block;overflow:visible}
   .figs{display:flex;gap:18px;border-top:1px solid rgba(255,255,255,.08);padding-top:11px}
@@ -28,17 +28,35 @@
   .figs .k{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
   .figs .v{font-size:14px;font-weight:620;font-variant-numeric:tabular-nums;margin-top:2px}
   .figs .v small{font-size:9.5px;font-weight:500;color:var(--ink-2);margin-left:2px}
+  a.dl{position:absolute;right:16px;bottom:12px;font-size:10px;letter-spacing:.04em;color:var(--ink-3);
+    text-decoration:none;padding:3px 7px;border-radius:6px;border:1px solid transparent;transition:color .15s,border-color .15s}
+  a.dl:hover{color:var(--accent);border-color:rgba(34,211,238,.35)}
+  .tag{display:inline-block;margin-left:8px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+    color:#b6a6ff;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.4);border-radius:5px;padding:1px 6px}
+  .rm{position:absolute;top:14px;right:14px;width:22px;height:22px;border-radius:6px;border:1px solid transparent;
+    background:none;color:var(--ink-3);font-size:14px;line-height:1;cursor:pointer;transition:color .15s,border-color .15s}
+  .rm:hover{color:var(--hot);border-color:rgba(244,63,94,.4)}
   .empty{padding:26px;font-size:13.5px;color:var(--ink-2);line-height:1.7}
   code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--accent)}
   footer{margin-top:44px;font-size:11px;color:var(--ink-3);line-height:1.8}
   footer a{color:var(--ink-2)}
+  #drop{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
+    background:rgba(7,11,16,.86);backdrop-filter:blur(6px)}
+  #drop.on{display:flex}
+  #drop div{border:2px dashed rgba(34,211,238,.55);border-radius:18px;padding:44px 64px;font-size:15px;color:var(--ink)}
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);z-index:40;
+    padding:11px 18px;font-size:12.5px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:80vw}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Route Library</h1>
-    <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the runner in chase view. Each route also builds to a single file you can download and open offline.</p>
+    <div>
+      <h1>Route Library</h1>
+      <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the walker in chase view.</p>
+    </div>
+    <button class="add" id="add">＋ Add a GPX</button>
   </header>
   <div class="count" id="count"></div>
   <div class="grid" id="grid"></div>
@@ -49,24 +67,40 @@
   </footer>
 </div>
 
+<input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
+<div id="drop"><div>Drop GPX files to build them</div></div>
+<div id="toast" class="rv-panel"></div>
+
 <script type="module">
 import { rampCss } from './src/terrain.js';
+import { parseGPX, analyze, profileSamples } from './src/gpx.js';
+import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 
 const grid = document.getElementById('grid');
-const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
-const routes = manifest.routes || [];
-
-document.getElementById('count').textContent =
-  routes.length ? `${routes.length} route${routes.length > 1 ? 's' : ''}` : '';
-
-if (!routes.length) {
-  grid.innerHTML = `<div class="rv-panel empty">No routes yet. Drop a <code>.gpx</code> file into
-    <code>routes/</code>, commit, and push — the build picks it up automatically.</div>`;
-}
-
 const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
-for (const r of routes) {
+const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
+const built = (manifest.routes || []).map(r => ({ ...r, local: false }));
+
+function render() {
+  const routes = [...built, ...listLocalRoutes()];
+  grid.innerHTML = '';
+  document.getElementById('count').textContent =
+    routes.length ? `${routes.length} route${routes.length > 1 ? 's' : ''}` : '';
+  if (!routes.length) {
+    grid.innerHTML = `<div class="rv-panel empty">No routes yet. Drop a <code>.gpx</code> file anywhere on this
+      page to build one right now, or commit it to <code>routes/</code> to publish it for everyone.</div>`;
+    return;
+  }
+  for (const r of routes) grid.insertAdjacentHTML('beforeend', card(r));
+  grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault();
+    removeLocalRoute(b.dataset.slug);
+    render();
+  }));
+}
+
+function card(r) {
   const lo = Math.min(...r.profile), hi = Math.max(...r.profile), span = Math.max(1, hi - lo);
   const W = 300, H = 56;
   const d = r.profile.map((e, i) =>
@@ -78,25 +112,80 @@ for (const r of routes) {
     stops += `<stop offset="${s * 10}%" stop-color="${rampCss((e - r.stats.ele_min) / Math.max(1, r.stats.ele_max - r.stats.ele_min))}"/>`;
   }
   const id = 'g' + r.slug.replace(/[^a-z0-9]/gi, '');
-  grid.insertAdjacentHTML('beforeend', `
+  const href = r.local
+    ? `./view.html?local=${encodeURIComponent(r.slug)}`
+    : `./view.html?route=${encodeURIComponent(r.slug)}`;
+  return `
     <div class="cardwrap">
-    <a class="card rv-panel" href="./view.html?route=${encodeURIComponent(r.slug)}">
-      <h2>${r.name}</h2>
-      <div class="meta">${r.stats.points.toLocaleString()} points · ${r.center[0].toFixed(2)}°, ${r.center[1].toFixed(2)}°</div>
-      <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <defs><linearGradient id="${id}" x1="0" x2="1">${stops}</linearGradient></defs>
-        <path d="${d}L${W} ${H}L0 ${H}Z" fill="rgba(34,211,238,.10)"/>
-        <path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2"/>
-      </svg>
-      <div class="figs">
-        <div><span class="k">Distance</span><span class="v">${(r.stats.distance_m / 1000).toFixed(2)}<small>km</small></span></div>
-        <div><span class="k">Ascent</span><span class="v">${fmt(r.stats.gain_m)}<small>m</small></span></div>
-        <div><span class="k">High</span><span class="v">${fmt(r.stats.ele_max)}<small>m</small></span></div>
-      </div>
-    </a>
-    <a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓ single file</a>
-    </div>`);
+      <a class="card rv-panel" href="${href}">
+        <h2>${escapeHtml(r.name)}</h2>
+        <div class="meta">${r.stats.points.toLocaleString()} points · ${r.center[0].toFixed(2)}°, ${r.center[1].toFixed(2)}°${
+          r.local ? '<span class="tag">this browser</span>' : ''}</div>
+        <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <defs><linearGradient id="${id}" x1="0" x2="1">${stops}</linearGradient></defs>
+          <path d="${d}L${W} ${H}L0 ${H}Z" fill="rgba(34,211,238,.10)"/>
+          <path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2"/>
+        </svg>
+        <div class="figs">
+          <div><span class="k">Distance</span><span class="v">${(r.stats.distance_m / 1000).toFixed(2)}<small>km</small></span></div>
+          <div><span class="k">Ascent</span><span class="v">${fmt(r.stats.gain_m)}<small>m</small></span></div>
+          <div><span class="k">High</span><span class="v">${fmt(r.stats.ele_max)}<small>m</small></span></div>
+        </div>
+      </a>
+      ${r.local
+        ? `<button class="rm" data-slug="${r.slug}" title="Remove from this browser">✕</button>`
+        : `<a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓ single file</a>`}
+    </div>`;
 }
+
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- upload ---------- */
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3600);
+}
+
+async function ingest(files) {
+  const gpx = [...files].filter(f => /\.gpx$/i.test(f.name));
+  if (!gpx.length) return toast('That is not a .gpx file.');
+  let last = null, added = 0;
+  for (const file of gpx) {
+    try {
+      const track = analyze(parseGPX(await file.text()));
+      last = addLocalRoute(file.name, track, profileSamples(track, 96));
+      added++;
+    } catch (err) {
+      toast(`${file.name}: ${err.message}`);
+    }
+  }
+  if (!added) return;
+  render();
+  toast(added === 1
+    ? `Added ${last.name} — opening it…`
+    : `Added ${added} routes to this browser.`);
+  if (added === 1) setTimeout(() => { location.href = `./view.html?local=${encodeURIComponent(last.slug)}`; }, 700);
+}
+
+document.getElementById('add').addEventListener('click', () => document.getElementById('file').click());
+document.getElementById('file').addEventListener('change', e => { ingest(e.target.files); e.target.value = ''; });
+
+const dropEl = document.getElementById('drop');
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); if (++dragDepth === 1) dropEl.classList.add('on'); });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropEl.classList.remove('on'); } });
+addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; dropEl.classList.remove('on');
+  ingest(e.dataTransfer.files);
+});
+
+render();
 </script>
 </body>
 </html>

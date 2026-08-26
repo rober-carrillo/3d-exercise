@@ -67,7 +67,7 @@ const TEMPLATE = `
   <div class="rv-msg">reading track…</div>
 </div>`;
 
-export const VERSION = '1.3.1';
+export const VERSION = '1.4.0';
 
 export class RouteViewer {
   constructor(opts) {

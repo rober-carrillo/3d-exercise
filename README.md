@@ -13,6 +13,7 @@ src/gpx.js        ← parsing + track analysis (runs in the browser and in Node)
 src/terrain.js    ← mercator maths, tile loading, mesh + ribbon geometry
 src/renderer.js   ← WebGL programs, orbit camera, chase camera
 src/viewer.js     ← RouteViewer: the mountable component
+src/library.js    ← routes added in the browser (localStorage)
 src/ui.css        ← design tokens + viewer chrome
 index.html        ← the route library
 view.html         ← single-route viewer (?route=<slug>)
@@ -21,10 +22,21 @@ scripts/build.mjs ← scans routes/, writes dist/ + routes.json
 
 ## Adding a route
 
-Drop a `.gpx` file into `routes/`, commit, push. That's the whole workflow —
-the build scans the folder, derives name, distance, ascent, bounding box and a
-profile for each track, and writes `routes.json` next to the copied site. A new
-card appears on the index page and the viewer picks it up by slug.
+**In the browser, for yourself.** Hit *＋ Add a GPX* on the library page, or drop
+files anywhere on it. The track is parsed in the browser, added to the library
+and opened straight away — same pipeline as any other route: tiles for its
+bounding box, terrain mesh, ribbon, walker.
+
+Those routes live in `localStorage`, private to that browser, and are labelled
+*this browser* with an ✕ to remove them. They can't be anything else: Vercel
+serves this site from a read-only filesystem, so an upload has nowhere on the
+server to go — and the repository should stay the source of truth for what
+everyone sees. There is no upload endpoint and no database.
+
+**In the repo, for everyone.** Drop the `.gpx` into `routes/`, commit, push. The
+build scans the folder, derives name, distance, ascent, bounding box and a
+profile for each track, and writes `routes.json` beside the copied site. A card
+appears for it, and it gets a standalone file of its own.
 
 ```bash
 cp ~/Downloads/my-hike.gpx routes/

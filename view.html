@@ -5,28 +5,43 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>3D route</title>
 <link rel="stylesheet" href="./src/ui.css">
-<style>html,body{height:100%;overflow:hidden}</style>
+<style>html,body{height:100%;overflow:hidden}
+.msg{font:14px/1.6 system-ui;color:#9fb0c4;padding:40px;max-width:60ch}
+.msg a{color:#22d3ee}</style>
 </head>
 <body>
 <script type="module">
 import { RouteViewer } from './src/viewer.js';
+import { getLocalRoute } from './src/library.js';
 
-const slug = new URLSearchParams(location.search).get('route');
-const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
-const entry = manifest.routes.find(r => r.slug === slug) || manifest.routes[0];
+const params = new URLSearchParams(location.search);
+const localSlug = params.get('local');
+const fail = html => { document.body.innerHTML = `<p class="msg">${html}</p>`; };
 
-if (!entry) {
-  document.body.innerHTML =
-    '<p style="font:14px/1.6 system-ui;color:#9fb0c4;padding:40px">No routes found. Drop a .gpx file into <code>routes/</code> and rebuild.</p>';
+if (localSlug) {
+  // a route this browser added — its data lives in localStorage, not the build
+  const entry = getLocalRoute(localSlug);
+  if (!entry) {
+    fail(`That route isn’t in this browser any more. Routes you add are stored locally,
+      so they don’t travel between browsers or devices. <a href="./">Back to the library</a>.`);
+  } else {
+    document.title = entry.name + ' · 3D route';
+    window.viewer = new RouteViewer({
+      mount: document.body, track: entry.track, name: entry.name, backHref: './',
+    });
+  }
 } else {
-  document.title = entry.name + ' · 3D route';
-  // exposed for console tinkering: window.viewer.renderer.cam, .state, …
-  window.viewer = new RouteViewer({
-    mount: document.body,
-    gpxUrl: './routes/' + entry.file,
-    name: entry.name,
-    backHref: './',
-  });
+  const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
+  const entry = manifest.routes.find(r => r.slug === params.get('route')) || manifest.routes[0];
+  if (!entry) {
+    fail(`No routes found. Drop a .gpx file on the <a href="./">library page</a>, or commit one
+      to <code>routes/</code> and rebuild.`);
+  } else {
+    document.title = entry.name + ' · 3D route';
+    window.viewer = new RouteViewer({
+      mount: document.body, gpxUrl: './routes/' + entry.file, name: entry.name, backHref: './',
+    });
+  }
 }
 </script>
 </body>
