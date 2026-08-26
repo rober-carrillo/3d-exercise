@@ -6,12 +6,13 @@
   "cleanUrls": true,
   "headers": [
     {
-      "source": "/routes/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }]
+      "//": "Revalidate every time. These filenames are stable across deploys, so any positive max-age lets a browser keep running the previous deploy's code after the HTML has already updated. 304s are cheap; stale JavaScript is not.",
+      "source": "/(src|routes|standalone)/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
     {
-      "source": "/src/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }]
+      "source": "/routes.json",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     }
   ]
 }
