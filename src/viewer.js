@@ -8,7 +8,7 @@
  * into the build, so adding a track means adding a .gpx file and nothing else.
  */
 
-import { loadTrack } from './gpx.js';
+import { loadTrack, parseGPX, analyze } from './gpx.js';
 import { Renderer } from './renderer.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp,
@@ -67,6 +67,8 @@ const TEMPLATE = `
   <div class="rv-msg">reading track…</div>
 </div>`;
 
+export const VERSION = '1.1.0';
+
 export class RouteViewer {
   constructor(opts) {
     this.opts = Object.assign({
@@ -79,6 +81,8 @@ export class RouteViewer {
     this.mount = opts.mount;
     this.mount.classList.add('rv-root');
     this.mount.innerHTML = TEMPLATE;
+    this.mount.querySelector('.rv-ttl').textContent = `Building 3D terrain · v${VERSION}`;
+    console.info(`route3d v${VERSION}`);
     this.$ = sel => this.mount.querySelector('.rv-' + sel);
     this.play = false;
     this.playT = 0;
@@ -101,7 +105,9 @@ export class RouteViewer {
 
   async boot() {
     const o = this.opts;
-    const track = this.track = await loadTrack(o.gpxUrl);
+    const track = this.track = o.track ? o.track
+      : o.gpxText ? analyze(parseGPX(o.gpxText))
+      : await loadTrack(o.gpxUrl);
     const s = track.stats;
     this.$('name').textContent = o.name || track.name;
     this.$('sub').textContent =
@@ -151,6 +157,7 @@ export class RouteViewer {
     renderer.cam.tz = (s.ele_min + s.ele_max) / 2 - g.zRef;
     renderer.onFrame = dt => this.frame(dt);
 
+    this.$('status').title = `route3d v${VERSION}`;
     const okTex = renderer.hasTexture;
     this.$('dot').className = 'rv-dot ' + (okTex && demReal ? 'ok' : 'warn');
     this.$('st-txt').textContent = okTex && demReal
@@ -158,6 +165,7 @@ export class RouteViewer {
       : !okTex && !demReal ? 'Offline — terrain modelled from the GPX track itself'
       : !okTex ? 'Imagery unavailable — shaded relief from real elevation data'
       : `${imageryLabel} · terrain modelled from the GPX track`;
+    this.$('st-txt').insertAdjacentHTML('afterend', `<span class="rv-ver">v${VERSION}</span>`);
 
     this.wire();
     this.scrub(0);

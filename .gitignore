@@ -4,3 +4,4 @@ dist/
 .DS_Store
 *.log
 _archive/
+*.standalone.html

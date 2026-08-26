@@ -31,6 +31,17 @@ cp ~/Downloads/my-hike.gpx routes/
 git add routes/my-hike.gpx && git commit -m "add my-hike" && git push
 ```
 
+## Standalone files
+
+`npm run build` also writes `dist/standalone/<slug>.html` for every route: one
+self-contained file, no server and no modules, that you can double-click or mail
+to someone. It still fetches imagery and elevation at view time (and degrades the
+same way when offline), but the code, styles and track data are all inlined.
+Every card on the index page links to its own.
+
+That build is what `scripts/build.mjs` bundles by hand — each module wrapped in an
+IIFE returning its exports, since browsers refuse ES modules over `file://`.
+
 ## Local development
 
 ```bash
