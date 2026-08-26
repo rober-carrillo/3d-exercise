@@ -93,6 +93,13 @@ load over `file://`.
 `.github/workflows/build.yml` runs the same build on push and PR, so a malformed
 GPX fails the check before it reaches production.
 
+`vercel.json` serves `/src`, `/routes`, `/standalone` and `routes.json` with
+`max-age=0, must-revalidate`. Those filenames are stable across deploys, so any
+positive max-age lets a browser fetch the new HTML and keep running the previous
+deploy's JavaScript until the cache expires — the site looks like it did not
+update. Conditional requests are cheap; stale code is not. (And note the file is
+strict JSON: Vercel's schema rejects unknown keys, so no `"//"` comments.)
+
 ## How it renders
 
 At view time the browser fetches two tile sets covering the route's bounding box:
