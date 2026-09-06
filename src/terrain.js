@@ -141,6 +141,17 @@ export const rampCss = t => `rgb(${ramp(t).map(v => Math.round(v * 255)).join(',
  */
 export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   const { cx, cy, half, K, ext } = frame;
+  /**
+   * Cap an absolute size at a fraction of the scene.
+   *
+   * The ribbon width, its clearance above the ground and the depth of the
+   * terrain block all carry a floor in metres so that a long route still reads
+   * on screen. On a scene a hundred metres across — a lap of a soccer field —
+   * those floors are the scene: a 16 m ribbon buries the pitch it is drawn on.
+   * Capping each one proportionally leaves anything bigger than about two
+   * kilometres exactly as it was and shrinks the rest to match the ground.
+   */
+  const fit = (v, frac) => Math.min(v, ext * frac);
   const H = new Float32Array(N * N), pos = new Float32Array(N * N * 3);
   const slope = new Float32Array(N * N * 2), uv = new Float32Array(N * N * 2);
   const s = sat && sat.ok ? sat.spec : null;
@@ -173,7 +184,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   }
 
   // side walls, so the terrain reads as a solid block rather than paper
-  const sp = [], sc = [], base = -Math.max(120, hSpan * 0.35);
+  const sp = [], sc = [], base = -fit(Math.max(120, hSpan * 0.35), 0.06);
   const top = [0.055, 0.075, 0.10], bot = [0.016, 0.024, 0.035];
   const put = (x, y, z, c) => { sp.push(x, y, z); sc.push(c[0], c[1], c[2], 1); };
   const edge = (k1, k2) => {
@@ -202,7 +213,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   const M = track.lat.length;
   const tx = new Float32Array(M), ty = new Float32Array(M), tz = new Float32Array(M);
   const head = new Float32Array(M), course = new Float32Array(M);
-  const lift = Math.max(9, hSpan * 0.02);
+  const lift = fit(Math.max(9, hSpan * 0.02), 0.005);
   for (let i = 0; i < M; i++) {
     tx[i] = (mercX(track.lon[i]) - cx) * K;
     ty[i] = (mercY(track.lat[i]) - cy) * K;
@@ -216,7 +227,9 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   //              down, so the road ahead runs away up the screen instead of
   //              swinging through every switchback.
   const totalD = track.dist[M - 1] || 1;
-  const AHEAD = clamp(totalD * 0.04, 120, 500), BEHIND = 40;
+  // …and on a small pitch the look-ahead has to shrink too, or the chase
+  // camera aims at a point on the far side of the field the whole time.
+  const AHEAD = fit(clamp(totalD * 0.04, 120, 500), 0.12), BEHIND = fit(40, 0.04);
   for (let i = 0; i < M; i++) {
     const a = Math.max(0, i - 10), b = Math.min(M - 1, i + 10);
     head[i] = Math.atan2(ty[b] - ty[a], tx[b] - tx[a]);
@@ -261,7 +274,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   }
 
   const eMin = track.stats.ele_min, eSpan = Math.max(1, track.stats.ele_max - eMin);
-  const w = Math.max(16, ext * 0.0042), wo = w * 2.1;
+  const w = fit(Math.max(16, ext * 0.0042), 0.008), wo = w * 2.1;
   const rp = new Float32Array(M * 6), rc = new Float32Array(M * 8);
   const op = new Float32Array(M * 6), oc = new Float32Array(M * 8);
   const wp = new Float32Array(M * 6), wc = new Float32Array(M * 8);
@@ -296,6 +309,6 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     terrain: { pos, slope, uv, idx },
     skirt: { pos: new Float32Array(sp), col: new Float32Array(sc) },
     ribbon: { pos: rp, col: rc }, outline: { pos: op, col: oc }, curtain: { pos: wp, col: wc },
-    track: { tx, ty, tz, sx, sy, sz, head, course, bearing, n: M, width: w },
+    track: { tx, ty, tz, sx, sy, sz, head, course, bearing, n: M, width: w, lift },
   };
 }

@@ -218,11 +218,21 @@ void main(){vec4 c=vCol;
     return t.head[i] + wrap(t.head[j] - t.head[i]) * u;
   }
 
-  figureSize() { return this.g ? Math.max(this.g.track.width * 2.1, this.g.ext * 0.008) : 1; }
+  /**
+   * How tall the walking figure stands, in metres.
+   *
+   * Two scene-relative terms keep her readable on a long route, and the 1.7 m
+   * floor is there for the other end: on a soccer pitch every relative term
+   * collapses, and a person is the one thing in the scene whose real size we
+   * actually know.
+   */
+  figureSize() {
+    return this.g ? Math.max(this.g.track.width * 1.5, this.g.ext * 0.006, 1.7) : 1;
+  }
 
   _updateMarkers() {
     const gl = this.gl, t = this.g.track, B = this._buffers;
-    const lift = Math.max(10, this.g.hSpan * 0.02);
+    const lift = t.lift;              // the same clearance the ribbon is drawn at
     // the cursor dot rides just above the walker's head, so the position still
     // reads when the figure itself is only a few pixels tall
     const overhead = this.figureSize() * 1.35 / Math.max(0.001, this.state.vex);

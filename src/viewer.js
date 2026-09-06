@@ -76,7 +76,7 @@ const TEMPLATE = `
   <div class="rv-msg">reading track…</div>
 </div>`;
 
-export const VERSION = '1.5.0';
+export const VERSION = '1.5.1';
 
 export class RouteViewer {
   constructor(opts) {
@@ -136,7 +136,10 @@ export class RouteViewer {
     renderer.state.vex = o.vex;
 
     const frame = sceneFrame(track);
-    const satSpec = o.imagery ? pickZoom(frame, 16, 11, o.satMaxTiles) : null;
+    // The imagery ceiling was 16 — about 2 m a pixel, so a soccer pitch drew
+    // as a green smudge roughly 30 px across. Nothing changes for a route
+    // that already fills the tile budget at a lower zoom.
+    const satSpec = o.imagery ? pickZoom(frame, 19, 11, o.satMaxTiles) : null;
     const demSpec = pickZoom(frame, 14, 10, o.demMaxTiles);
     this.progress.total = (satSpec ? satSpec.nx * satSpec.ny : 0) + (demSpec ? demSpec.nx * demSpec.ny : 0) || 1;
     this.msg('fetching satellite imagery and elevation data…');
