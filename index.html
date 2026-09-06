@@ -15,6 +15,20 @@
   .add{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:#c7f6ff;background:rgba(34,211,238,.16);
     border:1px solid rgba(34,211,238,.45);border-radius:10px;padding:9px 15px;cursor:pointer;transition:background .15s}
   .add:hover{background:rgba(34,211,238,.28)}
+  .qr{display:flex;align-items:center;gap:28px;margin-top:34px;padding:24px 28px;max-width:680px}
+  /* the code carries barely a module of quiet zone of its own, and scanners
+     want four — the white padding here is that margin, not decoration */
+  .qrimg{flex:0 0 auto;width:206px;height:206px;padding:13px;background:#fff;border-radius:14px;
+    display:block;object-fit:contain}
+  .qrsay h2{margin:0;font-size:16px;font-weight:620;letter-spacing:-.015em}
+  .qrsay p{margin:9px 0 0;font-size:13.5px;line-height:1.65;color:var(--ink-2);max-width:46ch}
+  .qrlink{display:inline-block;margin-top:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12.5px;color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(34,211,238,.35);padding-bottom:2px}
+  .qrlink:hover{border-bottom-color:var(--accent)}
+  @media (max-width:640px){
+    .qr{flex-direction:column;align-items:flex-start;gap:20px;padding:20px}
+    .qrimg{width:168px;height:168px}
+  }
   .count{margin:34px 0 14px;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
   .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
   .cardwrap{position:relative}
@@ -58,6 +72,16 @@
     </div>
     <button class="add" id="add">＋ Add a GPX</button>
   </header>
+  <section class="qr rv-panel">
+    <img class="qrimg" src="./exercise-QR-code.png" width="514" height="510" loading="lazy"
+         alt="QR code that opens https://3d-exercise.vercel.app">
+    <div class="qrsay">
+      <h2>Open it on your phone</h2>
+      <p>Scan the code to carry the library across to a phone. The routes render in the mobile
+        browser exactly as they do here — satellite terrain, chase camera and all.</p>
+      <a class="qrlink" href="https://3d-exercise.vercel.app">3d-exercise.vercel.app</a>
+    </div>
+  </section>
   <div class="count" id="count"></div>
   <div class="grid" id="grid"></div>
   <footer>

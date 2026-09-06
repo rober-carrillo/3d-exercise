@@ -15,7 +15,7 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
-const STATIC = ['index.html', 'view.html', 'src', 'routes'];
+const STATIC = ['index.html', 'view.html', 'src', 'routes', 'exercise-QR-code.png'];
 
 const slugify = s => basename(s, extname(s)).toLowerCase()
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
