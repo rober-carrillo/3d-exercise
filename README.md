@@ -34,9 +34,14 @@ server to go — and the repository should stay the source of truth for what
 everyone sees. There is no upload endpoint and no database.
 
 **In the repo, for everyone.** Drop the `.gpx` into `routes/`, commit, push. The
-build scans the folder, derives name, distance, ascent, bounding box and a
+build scans the folder, derives name, date, distance, ascent, bounding box and a
 profile for each track, and writes `routes.json` beside the copied site. A card
 appears for it, and it gets a standalone file of its own.
+
+The date is the one the recorder wrote into the file. Plenty of GPX files carry
+no time at all — anything drawn by hand, or exported with the timestamps
+stripped — and those show the day the route joined the library instead, marked
+*added*, taken from the commit that introduced the file.
 
 ```bash
 cp ~/Downloads/my-hike.gpx routes/

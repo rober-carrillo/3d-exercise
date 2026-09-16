@@ -8,7 +8,7 @@
  * into the build, so adding a track means adding a .gpx file and nothing else.
  */
 
-import { loadTrack, parseGPX, analyze } from './gpx.js';
+import { loadTrack, parseGPX, analyze, formatDate } from './gpx.js';
 import { Renderer } from './renderer.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp,
@@ -86,6 +86,7 @@ export class RouteViewer {
       satMaxTiles: 8,
       demMaxTiles: 4,
       vex: 1,
+      date: null,             // fallback date for a track with no time of its own
     }, opts);
     this.mount = opts.mount;
     this.mount.classList.add('rv-root');
@@ -119,8 +120,12 @@ export class RouteViewer {
       : await loadTrack(o.gpxUrl);
     const s = track.stats;
     this.$('name').textContent = o.name || track.name;
+    // the track's own timestamp if it has one, otherwise whatever date the
+    // caller knows the route by (the manifest carries the day it was added)
+    const stamp = track.time ? formatDate(track.time)
+      : o.date ? `added ${formatDate(o.date)}` : '';
     this.$('sub').textContent =
-      `${s.points.toLocaleString()} GPS points · ${((track.bbox.minLat + track.bbox.maxLat) / 2).toFixed(3)}°, ${((track.bbox.minLon + track.bbox.maxLon) / 2).toFixed(3)}°`;
+      `${stamp ? stamp + ' · ' : ''}${s.points.toLocaleString()} GPS points · ${((track.bbox.minLat + track.bbox.maxLat) / 2).toFixed(3)}°, ${((track.bbox.minLon + track.bbox.maxLon) / 2).toFixed(3)}°`;
     this.$('s-dist').innerHTML = (s.distance_m / 1000).toFixed(2) + '<small>km</small>';
     this.$('s-gain').innerHTML = fmt(s.gain_m) + '<small>m</small>';
     this.$('s-loss').innerHTML = fmt(s.loss_m) + '<small>m</small>';

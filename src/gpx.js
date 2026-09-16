@@ -12,10 +12,43 @@ const attr = (tag, name) => {
   return m ? parseFloat(m[1]) : NaN;
 };
 
-/** Parse a GPX document into { name, points: [[lat, lon, ele], …] }. */
+/**
+ * When the activity happened, as an ISO string, or null.
+ *
+ * Recorders differ: some write a <time> in <metadata>, some only stamp each
+ * <trkpt>, and plenty of files — anything drawn by hand on a map, or exported
+ * with privacy settings on — carry no time at all. Prefer the metadata stamp,
+ * fall back to the first trackpoint, and let the caller decide what to show
+ * when there is nothing.
+ */
+function parseTime(text) {
+  const m = text.match(/<metadata>[\s\S]*?<time>\s*([^<\s]+)\s*<\/time>/)
+        || text.match(/<trkpt[\s\S]*?<time>\s*([^<\s]+)\s*<\/time>/);
+  if (!m) return null;
+  const d = new Date(m[1]);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Month names, so a date reads the same for every visitor. */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * An ISO timestamp as `30 Aug 2026`, in UTC.
+ *
+ * UTC rather than the reader's zone: the same route should not appear to have
+ * happened on different days depending on who opens the page.
+ */
+export function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** Parse a GPX document into { name, time, points: [[lat, lon, ele], …] }. */
 export function parseGPX(text) {
   const nameMatch = text.match(/<trk>[\s\S]*?<name>([\s\S]*?)<\/name>/) || text.match(/<name>([\s\S]*?)<\/name>/);
   const name = nameMatch ? nameMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/\s+/g, ' ').trim() : 'Untitled route';
+  const time = parseTime(text);
   const points = [];
   const re = /<trkpt\b([^>]*?)(\/>|>([\s\S]*?)<\/trkpt>)/g;
   let m;
@@ -26,7 +59,7 @@ export function parseGPX(text) {
     const e = body.match(/<ele>([^<]*)<\/ele>/);
     points.push([lat, lon, e ? parseFloat(e[1]) : 0]);
   }
-  return { name, points };
+  return { name, time, points };
 }
 
 const haversine = (a, b) => {
@@ -41,7 +74,7 @@ const haversine = (a, b) => {
  * cumulative distance, ascent/descent, bounding box, and a distance-decimated
  * copy of the track (full-resolution GPS traces are far denser than any screen).
  */
-export function analyze({ name, points }, { targetPoints = 1400, smoothWindow = 9, gainThreshold = 1 } = {}) {
+export function analyze({ name, time = null, points }, { targetPoints = 1400, smoothWindow = 9, gainThreshold = 1 } = {}) {
   if (points.length < 2) throw new Error('track has fewer than two points');
 
   const cum = [0];
@@ -75,6 +108,7 @@ export function analyze({ name, points }, { targetPoints = 1400, smoothWindow = 
 
   return {
     name,
+    time,
     stats: {
       points: points.length,
       distance_m: total,

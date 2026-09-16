@@ -28,6 +28,7 @@ if (localSlug) {
     document.title = entry.name + ' · 3D route';
     window.viewer = new RouteViewer({
       mount: document.body, track: entry.track, name: entry.name, backHref: './',
+      date: entry.date || entry.added,
     });
   }
 } else {
@@ -40,6 +41,7 @@ if (localSlug) {
     document.title = entry.name + ' · 3D route';
     window.viewer = new RouteViewer({
       mount: document.body, gpxUrl: './routes/' + entry.file, name: entry.name, backHref: './',
+      date: entry.date,
     });
   }
 }

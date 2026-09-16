@@ -7,8 +7,10 @@
  * surface is derived, here or in the browser. Adding a route means adding a
  * file; this script is what makes it show up.
  */
-import { readdir, readFile, writeFile, rm, mkdir, cp } from 'node:fs/promises';
+import { readdir, readFile, writeFile, rm, mkdir, cp, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename, extname } from 'node:path';
 import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
@@ -16,6 +18,26 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
 const STATIC = ['index.html', 'view.html', 'src', 'routes', 'exercise-QR-code.png'];
+
+const run = promisify(execFile);
+
+/**
+ * When a route without its own timestamp joined the library.
+ *
+ * The commit that added the file is the honest answer, so ask git first. A
+ * file that is not committed yet — one just dropped into routes/ — has no
+ * commit to point at, and a checkout on a build machine rewrites every
+ * mtime, so the filesystem date is only a fallback, never the first choice.
+ */
+async function addedDate(file) {
+  const path = join(root, 'routes', file);
+  try {
+    const { stdout } = await run('git', ['log', '--diff-filter=A', '--format=%aI', '-1', '--', path], { cwd: root });
+    const iso = stdout.trim().split('\n')[0];
+    if (iso) return new Date(iso).toISOString();
+  } catch {}                                   // no git, no history, not a repo
+  try { return (await stat(path)).mtime.toISOString(); } catch { return null; }
+}
 
 const slugify = s => basename(s, extname(s)).toLowerCase()
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -32,10 +54,14 @@ for (const file of files) {
   try {
     const track = analyze(parseGPX(text));
     const b = track.bbox;
+    // the day it was done if the recorder wrote one down, else the day it landed here
+    const date = track.time || await addedDate(file);
     routes.push({
       slug: slugify(file),
       file,
       name: track.name,
+      date,
+      dateSource: track.time ? 'recorded' : 'added',
       stats: {
         points: track.stats.points,
         distance_m: +track.stats.distance_m.toFixed(1),
@@ -88,7 +114,7 @@ async function writeStandalone(route, track) {
   const bundle = await bundleModules(['gpx', 'terrain', 'renderer', 'viewer']);   // library.js is browser-storage only
   const css = await readFile(join(root, 'src', 'ui.css'), 'utf8');
   const data = {
-    name: track.name, stats: track.stats, bbox: track.bbox,
+    name: track.name, time: track.time, stats: track.stats, bbox: track.bbox,
     lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist,
   };
   return `<!DOCTYPE html>
@@ -109,6 +135,7 @@ window.viewer = new __m_viewer.RouteViewer({
   mount: document.body,
   track: JSON.parse(${esc(JSON.stringify(data))}),
   name: ${esc(route.name)},
+  date: ${route.date ? esc(route.date) : 'null'},
 });
 <\/script>
 </body>

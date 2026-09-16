@@ -34,11 +34,15 @@ export function addLocalRoute(fileName, track, profile) {
     local: true,
     name: track.name && track.name !== 'Untitled route' ? track.name : fileName.replace(/\.gpx$/i, ''),
     added: new Date().toISOString(),
+    // the day it was recorded, or — for a file that never carried a time —
+    // the day it was dropped in here
+    date: track.time || new Date().toISOString(),
+    dateSource: track.time ? 'recorded' : 'added',
     stats: track.stats,
     bbox: b,
     center: [(b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2],
     profile,
-    track: { name: track.name, stats: track.stats, bbox: b, lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist },
+    track: { name: track.name, time: track.time, stats: track.stats, bbox: b, lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist },
   };
   all[slug] = entry;
   if (!writeAll(all)) {
