@@ -48,6 +48,7 @@
   a.dl:hover{color:var(--accent);border-color:rgba(34,211,238,.35)}
   .tag{display:inline-block;margin-left:8px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
     color:#b6a6ff;background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.4);border-radius:5px;padding:1px 6px}
+  .tag.pace{color:#9ff3ff;background:rgba(34,211,238,.15);border-color:rgba(34,211,238,.42)}
   .rm{position:absolute;top:14px;right:14px;width:22px;height:22px;border-radius:6px;border:1px solid transparent;
     background:none;color:var(--ink-3);font-size:14px;line-height:1;cursor:pointer;transition:color .15s,border-color .15s}
   .rm:hover{color:var(--hot);border-color:rgba(244,63,94,.4)}
@@ -107,8 +108,12 @@ const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
 const built = (manifest.routes || []).map(r => ({ ...r, local: false }));
 
+/** Newest first, by when the activity happened — or when it was added, for the
+ *  files that never carried a time. ISO strings sort chronologically as text. */
+const byDate = (a, b) => String(b.date || b.added || '').localeCompare(String(a.date || a.added || ''));
+
 function render() {
-  const routes = [...built, ...listLocalRoutes()];
+  const routes = [...built, ...listLocalRoutes()].sort(byDate);
   grid.innerHTML = '';
   document.getElementById('count').textContent =
     routes.length ? `${routes.length} route${routes.length > 1 ? 's' : ''}` : '';
@@ -157,6 +162,7 @@ function card(r) {
       <a class="card rv-panel" href="${href}">
         <h2>${escapeHtml(r.name)}</h2>
         <div class="meta">${when(r)}${r.stats.points.toLocaleString()} points · ${r.center[0].toFixed(2)}°, ${r.center[1].toFixed(2)}°${
+          r.pace ? '<span class="tag pace" title="This track is timed, so the replay can follow the speed it was actually done at">recorded pace</span>' : ''}${
           r.local ? '<span class="tag">this browser</span>' : ''}</div>
         <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
           <defs><linearGradient id="${id}" x1="0" x2="1">${stops}</linearGradient></defs>

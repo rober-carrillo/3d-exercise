@@ -38,6 +38,7 @@ export function addLocalRoute(fileName, track, profile) {
     // the day it was dropped in here
     date: track.time || new Date().toISOString(),
     dateSource: track.time ? 'recorded' : 'added',
+    pace: !!track.secs,
     stats: track.stats,
     bbox: b,
     center: [(b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2],

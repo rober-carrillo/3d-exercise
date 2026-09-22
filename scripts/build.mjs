@@ -62,6 +62,7 @@ for (const file of files) {
       name: track.name,
       date,
       dateSource: track.time ? 'recorded' : 'added',
+      pace: !!track.secs,               // per-point times → the replay can follow them
       stats: {
         points: track.stats.points,
         distance_m: +track.stats.distance_m.toFixed(1),
@@ -148,6 +149,9 @@ await mkdir(OUT, { recursive: true });
 for (const item of STATIC) {
   if (existsSync(join(root, item))) await cp(join(root, item), join(OUT, item), { recursive: true });
 }
+// newest first, by the day it happened — the same order the library shows
+routes.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
 await writeFile(join(OUT, 'routes.json'),
   JSON.stringify({ generated: new Date().toISOString(), routes }, null, 2));
 
