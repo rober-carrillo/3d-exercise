@@ -115,7 +115,7 @@ async function writeStandalone(route, track) {
   const css = await readFile(join(root, 'src', 'ui.css'), 'utf8');
   const data = {
     name: track.name, time: track.time, stats: track.stats, bbox: track.bbox,
-    lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist,
+    lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist, secs: track.secs,
   };
   return `<!DOCTYPE html>
 <html lang="en">

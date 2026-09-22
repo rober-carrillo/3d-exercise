@@ -47,6 +47,7 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .18s}
 .rv-sw.on{background:var(--accent)}
 .rv-sw.on::after{transform:translateX(15px)}
+.rv-sw.rv-dis{opacity:.3;cursor:not-allowed}
 .rv-btns{display:flex;gap:8px;margin-top:13px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08)}
 .rv-btns button{flex:1;font:inherit;font-size:11px;white-space:nowrap;font-weight:550;color:var(--ink);background:rgba(255,255,255,.07);
   border:1px solid rgba(255,255,255,.10);border-radius:9px;padding:7px 4px;cursor:pointer;transition:background .15s,border-color .15s}

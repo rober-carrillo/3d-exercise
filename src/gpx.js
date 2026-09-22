@@ -44,7 +44,7 @@ export function formatDate(iso) {
   return isNaN(d.getTime()) ? '' : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-/** Parse a GPX document into { name, time, points: [[lat, lon, ele], …] }. */
+/** Parse a GPX document into { name, time, points: [[lat, lon, ele, epoch_ms], …] }. */
 export function parseGPX(text) {
   const nameMatch = text.match(/<trk>[\s\S]*?<name>([\s\S]*?)<\/name>/) || text.match(/<name>([\s\S]*?)<\/name>/);
   const name = nameMatch ? nameMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/\s+/g, ' ').trim() : 'Untitled route';
@@ -57,7 +57,8 @@ export function parseGPX(text) {
     if (!isFinite(lat) || !isFinite(lon)) continue;
     const body = m[3] || '';
     const e = body.match(/<ele>([^<]*)<\/ele>/);
-    points.push([lat, lon, e ? parseFloat(e[1]) : 0]);
+    const tm = body.match(/<time>([^<]*)<\/time>/);
+    points.push([lat, lon, e ? parseFloat(e[1]) : 0, tm ? Date.parse(tm[1]) : NaN]);
   }
   return { name, time, points };
 }
@@ -95,13 +96,28 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
     if (Math.abs(d) >= gainThreshold) { d > 0 ? gain += d : loss -= d; ref = v; }
   }
 
+  // Seconds from the start, kept alongside every sample we keep, when the
+  // recorder stamped each point. This is the whole basis for replaying a route
+  // at the pace it was actually done: distance tells you where, and this tells
+  // you when you were there. Files without per-point times get null, and the
+  // viewer falls back to an even crawl.
+  const t0 = points[0][3], tEnd = points[points.length - 1][3];
+  const timed = isFinite(t0) && isFinite(tEnd) && tEnd > t0;
+
   const step = total / targetPoints;
-  const lat = [], lon = [], ele = [], dist = [];
-  let next = 0;
+  const lat = [], lon = [], ele = [], dist = [], secs = [];
+  let next = 0, lastSec = 0;
   for (let i = 0; i < points.length; i++) {
     if (i === 0 || i === points.length - 1 || cum[i] >= next) {
       lat.push(+points[i][0].toFixed(6)); lon.push(+points[i][1].toFixed(6));
       ele.push(+sm[i].toFixed(1)); dist.push(+cum[i].toFixed(1));
+      if (timed) {
+        // clamp backwards: a GPS clock that hiccups must not make the replay
+        // run backwards, and the two maps built on this rely on it rising
+        const sec = (points[i][3] - t0) / 1000;
+        lastSec = isFinite(sec) ? Math.max(lastSec, sec) : lastSec;
+        secs.push(+lastSec.toFixed(1));
+      }
       next = cum[i] + step;
     }
   }
@@ -118,12 +134,14 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
       ele_max: Math.max(...raw),
       start: [points[0][0], points[0][1]],
       end: [points[points.length - 1][0], points[points.length - 1][1]],
+      duration_s: timed ? (tEnd - t0) / 1000 : null,
     },
     bbox: {
       minLat: Math.min(...lat), maxLat: Math.max(...lat),
       minLon: Math.min(...lon), maxLon: Math.max(...lon),
     },
     lat, lon, ele, dist,
+    secs: timed ? secs : null,
   };
 }
 

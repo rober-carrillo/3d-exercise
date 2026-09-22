@@ -164,7 +164,13 @@ aims at the farthest point on the track instead.)
 - While chasing, dragging looks around the runner and scrolling changes follow
   distance; both reset the next time you press Fly route.
 - Hovering the elevation profile scrubs to any point on the route.
-- Keyboard: `space` play/pause · `c` chase camera · `r` reset view.
+- **Recorded pace** replays the route at the speed it was actually done. The
+  flight still lasts the same 45 seconds; what changes is where those seconds
+  are spent — long over the hill you walked up, brief over the stretch you ran
+  — and her legs turn at the speed under her feet. Off, she covers the route at
+  an even crawl. The switch is inert for a GPX with no timestamps on its points,
+  which is most files that weren't recorded by a watch or a phone.
+- Keyboard: `space` play/pause · `c` chase camera · `p` recorded pace · `r` reset view.
 
 ## On a phone
 

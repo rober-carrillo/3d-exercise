@@ -16,6 +16,12 @@ import {
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const fmt = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+/** first index whose value reaches `v`, in a non-decreasing array */
+const bisect = (arr, v) => {
+  let lo = 0, hi = arr.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] < v) lo = m + 1; else hi = m; }
+  return lo;
+};
 
 const TEMPLATE = `
 <canvas class="rv-gl"></canvas>
@@ -42,6 +48,7 @@ const TEMPLATE = `
   <div class="rv-row rv-mt"><span class="rv-lab">Satellite imagery</span><div class="rv-sw on" data-key="texture"></div></div>
   <div class="rv-row"><span class="rv-lab">Elevation curtain</span><div class="rv-sw on" data-key="curtain"></div></div>
   <div class="rv-row"><span class="rv-lab">Chase camera</span><div class="rv-sw" data-key="chase"></div></div>
+  <div class="rv-row"><span class="rv-lab">Recorded pace</span><div class="rv-sw" data-key="pace"></div></div>
   <div class="rv-btns">
     <button class="rv-play rv-pri">▶ Fly route</button>
     <button class="rv-speed" title="Playback speed">1×</button>
@@ -134,6 +141,7 @@ export class RouteViewer {
     this.$('lg-hi').textContent = fmt(s.ele_max) + ' m';
     if (o.backHref) { const b = this.$('back'); b.href = o.backHref; b.hidden = false; }
     this.buildProfile();
+    this.buildPace();
 
     const renderer = this.renderer = new Renderer(this.$('gl'));
     renderer.onChaseRelease = () =>
@@ -196,11 +204,26 @@ export class RouteViewer {
 
   wire() {
     const r = this.renderer;
+    // A file with no per-point times has no pace to follow: show the switch
+    // off and inert rather than letting it promise something it cannot do.
+    const paceSw = this.mount.querySelector('.rv-sw[data-key="pace"]');
+    r.state.pace = !!this._pace;
+    paceSw.classList.toggle('on', !!this._pace);
+    if (!this._pace) {
+      paceSw.classList.add('rv-dis');
+      paceSw.closest('.rv-row').title =
+        'This GPX has no timestamps on its points, so there is no pace to replay';
+    }
     this.mount.querySelectorAll('.rv-sw').forEach(sw => {
       sw.addEventListener('click', () => {
         const key = sw.dataset.key;
+        if (sw.classList.contains('rv-dis')) return;     // nothing to switch to
+        // Flipping the clock must not teleport her: note where she is on the
+        // route, then wind the new clock to that same place.
+        const held = key === 'pace' ? this.distFrac(this.playT) : 0;
         r.state[key] = !r.state[key];
         sw.classList.toggle('on', r.state[key]);
+        if (key === 'pace') { this.playT = this.playFrac(held); this.cadence(); }
         if (key === 'chase' && !r.state.chase) r.resetView();
         if (key === 'chase' && r.state.chase) this.$('hint').classList.remove('gone'),
           this.$('hint').textContent = 'chase camera · drag while paused to orbit her freely · Fly route re-centres',
@@ -255,6 +278,7 @@ export class RouteViewer {
       if (e.code === 'Space') { e.preventDefault(); this.$('play').click(); }
       if (e.key === 'r' || e.key === 'R') this.$('reset').click();
       if (e.key === 'c' || e.key === 'C') this.mount.querySelector('.rv-sw[data-key="chase"]').click();
+      if (e.key === 'p' || e.key === 'P') this.mount.querySelector('.rv-sw[data-key="pace"]').click();
     });
   }
 
@@ -273,9 +297,96 @@ export class RouteViewer {
 
   frame(dt) {
     if (!this.play) return;
+    // the clock always runs evenly — the flight lasts flyDuration whichever
+    // pace is on; what changes is where along the route that clock points
     this.playT += dt * this.speed / this.opts.flyDuration;
     if (this.playT >= 1) { this.playT = 1; this.setPlay(false); }
-    this.scrub(this.playT);
+    this.scrub(this.distFrac(this.playT), true);
+    this.cadence();
+  }
+
+  /**
+   * The clock the replay runs on when "Recorded pace" is on.
+   *
+   * Played back evenly, a route is only a shape. But the GPS also recorded
+   * where you pushed and where you laboured, and that is half of what the
+   * outing was. So build a second clock in which every stretch takes as long
+   * as it really took, normalised to the same total: the flight still lasts
+   * `flyDuration` either way, but the seconds inside it get spent where they
+   * were actually spent — long over the climb you walked, brief over the
+   * stretch you ran.
+   *
+   * Idling is the one thing that cannot be taken literally. A third to two
+   * thirds of a recorded session is spent standing still — lights, halftime,
+   * catching breath — and replayed faithfully that is most of the flight
+   * spent watching a motionless figure. So anything slower than a stroll is
+   * charged at that stroll, which costs almost nothing because standing still
+   * covers no ground: stops read as a beat of a second or two and the rest of
+   * the flight is spent moving. Every speed above the floor keeps its real
+   * duration exactly, which is the part that matters.
+   */
+  buildPace() {
+    const t = this.track;
+    this._pace = null;
+    const n = t.secs ? t.secs.length : 0;
+    if (n < 2 || n !== t.dist.length) return;            // no per-point times in the file
+    const T = t.secs[n - 1], total = t.stats.distance_m;
+    if (!(T > 0) || !(total > 0)) return;
+
+    const STILL = Math.max(0.5, total / T * 0.12);       // m/s, well under walking
+    const clock = new Float64Array(n);
+    for (let i = 1; i < n; i++) {
+      const ds = t.dist[i] - t.dist[i - 1], dt = t.secs[i] - t.secs[i - 1];
+      const v = dt > 0 ? ds / dt : 0;
+      clock[i] = clock[i - 1] + ds / Math.max(v, STILL);
+    }
+    const span = clock[n - 1];                           // ≈ time spent actually moving
+    if (!(span > 0)) return;
+    for (let i = 0; i < n; i++) clock[i] /= span;
+
+    // Speed per sample, for the walk cycle. Smoothed over ~7 samples because a
+    // single bad fix reads as 130 km/h on foot, and her legs would blur.
+    const vel = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(0, i - 3), b = Math.min(n - 1, i + 3);
+      const dt = t.secs[b] - t.secs[a];
+      vel[i] = dt > 0 ? (t.dist[b] - t.dist[a]) / dt : 0;
+    }
+    this._pace = { clock, vel, total, ref: total / span };
+  }
+
+  /** Playback fraction → how far along the route she has got, 0…1. */
+  distFrac(p) {
+    const pc = this._pace;
+    if (!pc || !this.renderer.state.pace) return clamp(p, 0, 1);
+    const t = this.track, c = clamp(p, 0, 1), i = bisect(pc.clock, c);
+    if (i === 0) return 0;
+    const a = pc.clock[i - 1], b = pc.clock[i];
+    const u = b > a ? (c - a) / (b - a) : 0;
+    return (t.dist[i - 1] + (t.dist[i] - t.dist[i - 1]) * u) / pc.total;
+  }
+
+  /** The inverse: dropping her at a point on the route also sets the clock. */
+  playFrac(d) {
+    const pc = this._pace;
+    if (!pc || !this.renderer.state.pace) return clamp(d, 0, 1);
+    const t = this.track, m = clamp(d, 0, 1) * pc.total, i = bisect(t.dist, m);
+    if (i === 0) return 0;
+    const a = t.dist[i - 1], b = t.dist[i];
+    const u = b > a ? (m - a) / (b - a) : 0;
+    return pc.clock[i - 1] + (pc.clock[i] - pc.clock[i - 1]) * u;
+  }
+
+  /**
+   * How fast her legs turn. On recorded pace they follow the speed under her
+   * feet — still when she is standing, quick when she is running — and the
+   * ratio is capped so a GPS spike cannot spin them.
+   */
+  cadence() {
+    const r = this.renderer, pc = this._pace;
+    if (!pc || !r.state.pace) { r.walkRate = this.speed; return; }
+    const v = pc.vel[clamp(Math.round(this._idx || 0), 0, pc.vel.length - 1)];
+    r.walkRate = this.speed * clamp(v / pc.ref, 0, 3);
   }
 
   buildProfile() {
@@ -316,16 +427,21 @@ export class RouteViewer {
     });
   }
 
-  /** Move to a fraction of the route; drives markers, chase camera and readout. */
-  scrub(f) {
+  /**
+   * Move to a fraction of the *route*; drives markers, chase camera and readout.
+   *
+   * Playback has already advanced its own clock and passes `fromPlayback`, so
+   * it is not thrown back by a round trip through the map. Anything else —
+   * dragging the elevation profile — is setting the position directly, and the
+   * playback clock has to be wound to wherever that lands.
+   */
+  scrub(f, fromPlayback = false) {
     const t = this.track, p = this._prof;
-    this.playT = f;
+    if (!fromPlayback) this.playT = this.playFrac(f);
     const d = f * p.total;
-    let lo = 0, hi = t.dist.length - 1;
-    while (lo < hi) { const m = (lo + hi) >> 1; if (t.dist[m] < d) lo = m + 1; else hi = m; }
     // fractional index: how far *between* two samples we are, so the walker and
     // the profile cursor move continuously instead of hopping sample to sample
-    const i = lo;
+    const i = bisect(t.dist, d);
     let idx = i, ele = t.ele[i];
     if (i > 0) {
       const d0 = t.dist[i - 1], d1 = t.dist[i];
@@ -334,6 +450,7 @@ export class RouteViewer {
       ele = t.ele[i - 1] + (t.ele[i] - t.ele[i - 1]) * u;
     }
     this.renderer.setCursor(idx);
+    this._idx = idx;                       // the cadence reads the speed here
     const x = d / p.total * p.W;
     const y = p.H - p.pad - ((ele - p.eMin) / p.eSpan) * (p.H - p.pad * 2 - 8);
     this._cursorLine.setAttribute('x1', x); this._cursorLine.setAttribute('x2', x);

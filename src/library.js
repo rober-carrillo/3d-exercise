@@ -42,7 +42,7 @@ export function addLocalRoute(fileName, track, profile) {
     bbox: b,
     center: [(b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2],
     profile,
-    track: { name: track.name, time: track.time, stats: track.stats, bbox: b, lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist },
+    track: { name: track.name, time: track.time, stats: track.stats, bbox: b, lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist, secs: track.secs },
   };
   all[slug] = entry;
   if (!writeAll(all)) {
