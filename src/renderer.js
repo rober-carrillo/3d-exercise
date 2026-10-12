@@ -18,7 +18,7 @@ const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** frame-rate independent easing */
 const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
 
-const FIG_MAX = 900;            // vertices in the walking figure (~160 triangles)
+const FIG_MAX = 1500;           // vertices in the figure; the cyclist is the bigger of the two
 const mat4 = () => new Float32Array(16);
 function perspective(o, fovy, asp, n, f) {
   const t = 1 / Math.tan(fovy / 2);
@@ -64,7 +64,7 @@ export class Renderer {
     const gl2 = !!(window.WebGL2RenderingContext && gl instanceof WebGL2RenderingContext);
     this.caps = { gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint') };
 
-    this.state = { vex: 1, texture: true, curtain: true, chase: false };
+    this.state = { vex: 1, texture: true, curtain: true, chase: false, bike: false };
     this.cam = { az: -2.24, pol: 0.97, dist: 1, tx: 0, ty: 0, tz: 0 };
     this.home = { az: -2.24, pol: 0.97, distScale: 1.45, bearing: 0, lift: 0.09 };
     this.chase = { dist: 0, pol: 1.10, azOffset: 0, height: 0 };
@@ -246,6 +246,139 @@ void main(){vec4 c=vCol;
   }
 
   /**
+   * The walker: a low-poly take on the restroom-sign woman, legs and arms
+   * swinging from hip and shoulder.
+   */
+  poseWalker({ S, ph, quad, block, limb, frustum }) {
+    const legA = Math.sin(ph) * 0.55, armA = Math.sin(ph + Math.PI) * 0.42;
+    const body = [0.58, 0.34, 0.94], skin = [0.66, 0.44, 0.98];   // purple, head a shade lighter
+
+    // legs, swinging from the hip
+    const legW = 0.032 * S, hip = 0.36 * S;
+    for (const side of [-1, 1]) {
+      const y = side * 0.052 * S;
+      block(-legW, legW, y - legW, y + legW, 0, hip, body, side > 0 ? legA : -legA, hip);
+    }
+    // arms, swinging opposite the legs and splayed outward the way the sign
+    // figure holds them, so they stay clear of the dress
+    const armW = 0.025 * S, shoulderZ = 0.68 * S;
+    for (const side of [-1, 1]) {
+      limb(armW, side * 0.166 * S, side * 0.108 * S, armW, 0.33 * S, shoulderZ, body,
+        side > 0 ? armA : -armA, shoulderZ);
+    }
+    // the dress: the wide hem tapering to the shoulders is what makes the
+    // pictogram read as the restroom-sign woman rather than a stick figure
+    frustum(0.196 * S, 0.055 * S, 0.30 * S, 0.094 * S, 0.043 * S, 0.72 * S, body);
+    // head: a low-poly sphere, normals taken from the face centre so the
+    // faceting shades as a ball rather than as a bag of flat plates
+    const hr = 0.088 * S, hz = 0.775 * S + hr, LON = 8, LAT = 6;
+    const sp = (j, k) => {
+      const phi = Math.PI * j / LAT, th = 2 * Math.PI * k / LON;
+      return [hr * Math.sin(phi) * Math.cos(th), hr * Math.sin(phi) * Math.sin(th), hz + hr * Math.cos(phi)];
+    };
+    for (let j = 0; j < LAT; j++) for (let k = 0; k < LON; k++) {
+      const a = sp(j, k), b = sp(j, k + 1), c = sp(j + 1, k + 1), d = sp(j + 1, k);
+      const nrm = [(a[0] + b[0] + c[0] + d[0]) / 4, (a[1] + b[1] + c[1] + d[1]) / 4,
+                   (a[2] + b[2] + c[2] + d[2]) / 4 - hz];
+      quad(a, b, c, d, skin, nrm);
+    }
+  }
+
+  /**
+   * The cyclist: same rider, folded onto a bike.
+   *
+   * Built to the same `S` as the walker so swapping does not change how big
+   * she reads on the terrain — a bike plus a crouched rider is taller than a
+   * standing person, so the whole thing is drawn at 0.82 of the figure size
+   * and comes out the same height on screen.
+   *
+   * The wheels are flat rings rather than solids. Nothing here is lit from
+   * inside and WebGL draws both faces by default, so a ring costs twenty
+   * triangles instead of the hundreds a tyre-shaped tube would.
+   */
+  poseCyclist({ S, ph, quad, poly8, block }) {
+    const B = S * 0.82;
+    const body = [0.58, 0.34, 0.94], skin = [0.66, 0.44, 0.98];
+    const frame = [0.13, 0.80, 0.92], rubber = [0.21, 0.24, 0.29];   // tyres light enough to read on dark ground
+
+    /** a box between two points in the x–z plane, `w` thick each way */
+    const strut = (ax, az, bx, bz, y, w, col) => {
+      const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz) || 1;
+      const px = -dz / len * w, pz = dx / len * w;              // across the bar
+      const c = (x, z, sy, sp) => [x + px * sp, y + sy * w, z + pz * sp];
+      poly8([c(ax, az, -1, -1), c(bx, bz, -1, -1), c(bx, bz, 1, -1), c(ax, az, 1, -1),
+             c(ax, az, -1, 1), c(bx, bz, -1, 1), c(bx, bz, 1, 1), c(ax, az, 1, 1)], col, 0, 0);
+    };
+    /** a wheel: a flat ring standing in the x–z plane */
+    const wheel = (cx, cz, r, y) => {
+      const SEG = 11, inner = r * 0.70;
+      for (let k = 0; k < SEG; k++) {
+        const a = 2 * Math.PI * k / SEG, b = 2 * Math.PI * (k + 1) / SEG;
+        quad([cx + r * Math.cos(a), y, cz + r * Math.sin(a)],
+             [cx + r * Math.cos(b), y, cz + r * Math.sin(b)],
+             [cx + inner * Math.cos(b), y, cz + inner * Math.sin(b)],
+             [cx + inner * Math.cos(a), y, cz + inner * Math.sin(a)], rubber, [0, 1, 0.35]);
+      }
+    };
+
+    const R = 0.33 * B, hubZ = R;                      // wheels
+    const rearX = -0.60 * B, frontX = 0.62 * B;
+    wheel(rearX, hubZ, R, 0); wheel(frontX, hubZ, R, 0);
+
+    const bbX = 0.02 * B, bbZ = 0.25 * B;              // bottom bracket (the cranks)
+    const seatX = -0.30 * B, seatZ = 0.70 * B;         // saddle
+    const barX = 0.44 * B, barZ = 0.66 * B;            // handlebar
+    const t = 0.021 * B;
+    strut(rearX, hubZ, bbX, bbZ, 0, t, frame);         // chain stay
+    strut(bbX, bbZ, seatX, seatZ, 0, t, frame);        // seat tube
+    strut(rearX, hubZ, seatX, seatZ, 0, t, frame);     // seat stay
+    strut(bbX, bbZ, barX, barZ, 0, t, frame);          // down tube
+    strut(seatX, seatZ, barX, barZ, 0, t, frame);      // top tube
+    strut(frontX, hubZ, barX, barZ, 0, t, frame);      // fork
+    block(barX - t, barX + t, -0.15 * B, 0.15 * B, barZ - t, barZ + t, frame);        // handlebar
+    block(seatX - 0.07 * B, seatX + 0.05 * B, -0.04 * B, 0.04 * B, seatZ, seatZ + 1.4 * t, frame);  // saddle
+
+    // rider: hips on the saddle, shoulders forward over the bars
+    const hipX = seatX + 0.05 * B, hipZ = seatZ + 0.05 * B;
+    const shX = 0.10 * B, shZ = 1.00 * B;
+    strut(hipX, hipZ, shX, shZ, 0, 0.062 * B, body);                  // torso, leaning in
+    for (const side of [-1, 1]) strut(shX, shZ, barX, barZ + t, side * 0.075 * B, 0.023 * B, body);
+
+    // legs: feet ride the cranks, half a turn apart, and the knee is placed by
+    // two-bone inverse kinematics so the bend reads as pedalling
+    // bones long enough to reach the pedal at the bottom of the stroke, or the
+    // shin stretches like rubber when the crank swings away from the hip
+    const crank = 0.115 * B, thigh = 0.355 * B;
+    for (const side of [-1, 1]) {
+      const a = ph + (side > 0 ? 0 : Math.PI);
+      const fx = bbX + crank * Math.cos(a), fz = bbZ + crank * Math.sin(a);
+      const dx = fx - hipX, dz = fz - hipZ, d = Math.max(0.05 * B, Math.hypot(dx, dz));
+      const reach = Math.min(d, thigh * 1.98) / 2;
+      const bulge = Math.sqrt(Math.max(0, thigh * thigh - reach * reach));
+      const ux = dx / d, uz = dz / d;
+      // the knee bends forward, over the bars — the other perpendicular puts it
+      // behind the rider and she pedals like a bird
+      const kx = hipX + ux * reach - uz * bulge, kz = hipZ + uz * reach + ux * bulge;
+      const y = side * 0.07 * B;
+      strut(hipX, hipZ, kx, kz, y, 0.040 * B, body);                  // thigh
+      strut(kx, kz, fx, fz, y, 0.031 * B, body);                      // shin
+    }
+
+    // head, tipped forward over the bars
+    const hr = 0.082 * B, hx = shX + 0.075 * B, hz = shZ + hr * 0.75, LON = 7, LAT = 5;
+    const sp = (j, k) => {
+      const phi = Math.PI * j / LAT, th = 2 * Math.PI * k / LON;
+      return [hx + hr * Math.sin(phi) * Math.cos(th), hr * Math.sin(phi) * Math.sin(th), hz + hr * Math.cos(phi)];
+    };
+    for (let j = 0; j < LAT; j++) for (let k = 0; k < LON; k++) {
+      const a = sp(j, k), b = sp(j, k + 1), c = sp(j + 1, k + 1), d = sp(j + 1, k);
+      const nrm = [(a[0] + b[0] + c[0] + d[0]) / 4 - hx, (a[1] + b[1] + c[1] + d[1]) / 4,
+                   (a[2] + b[2] + c[2] + d[2]) / 4 - hz];
+      quad(a, b, c, d, skin, nrm);
+    }
+  }
+
+  /**
    * Rebuild the little walking figure — a low-poly take on the restroom-sign
    * woman — at the cursor point, facing along the track.
    *
@@ -260,8 +393,8 @@ void main(){vec4 c=vCol;
     const h = this.faceAz === null ? this._facing() : this.faceAz;
     const ch = Math.cos(h), sh = Math.sin(h);
     const ph = this.walkPhase;
-    const legA = Math.sin(ph) * 0.55, armA = Math.sin(ph + Math.PI) * 0.42;
-    const bob = (Math.abs(Math.sin(ph)) - 0.5) * 0.025 * S;
+    // the walker bobs on each step; a rider's saddle does not
+    const bob = this.state.bike ? 0 : (Math.abs(Math.sin(ph)) - 0.5) * 0.025 * S;
     const p = this._pos(), ox = p[0], oy = p[1], oz = p[2];
 
     const P = this._figPos, C = this._figCol;
@@ -319,37 +452,10 @@ void main(){vec4 c=vCol;
       [-xt, -yt, z1], [xt, -yt, z1], [xt, yt, z1], [-xt, yt, z1],
     ], col, 0, 0);
 
-    const body = [0.58, 0.34, 0.94], skin = [0.66, 0.44, 0.98];   // purple, head a shade lighter
-
-    // legs, swinging from the hip
-    const legW = 0.032 * S, hip = 0.36 * S;
-    for (const side of [-1, 1]) {
-      const y = side * 0.052 * S;
-      block(-legW, legW, y - legW, y + legW, 0, hip, body, side > 0 ? legA : -legA, hip);
-    }
-    // arms, swinging opposite the legs and splayed outward the way the sign
-    // figure holds them, so they stay clear of the dress
-    const armW = 0.025 * S, shoulderZ = 0.68 * S;
-    for (const side of [-1, 1]) {
-      limb(armW, side * 0.166 * S, side * 0.108 * S, armW, 0.33 * S, shoulderZ, body,
-        side > 0 ? armA : -armA, shoulderZ);
-    }
-    // the dress: the wide hem tapering to the shoulders is what makes the
-    // pictogram read as the restroom-sign woman rather than a stick figure
-    frustum(0.196 * S, 0.055 * S, 0.30 * S, 0.094 * S, 0.043 * S, 0.72 * S, body);
-    // head: a low-poly sphere, normals taken from the face centre so the
-    // faceting shades as a ball rather than as a bag of flat plates
-    const hr = 0.088 * S, hz = 0.775 * S + hr, LON = 8, LAT = 6;
-    const sp = (j, k) => {
-      const phi = Math.PI * j / LAT, th = 2 * Math.PI * k / LON;
-      return [hr * Math.sin(phi) * Math.cos(th), hr * Math.sin(phi) * Math.sin(th), hz + hr * Math.cos(phi)];
-    };
-    for (let j = 0; j < LAT; j++) for (let k = 0; k < LON; k++) {
-      const a = sp(j, k), b = sp(j, k + 1), c = sp(j + 1, k + 1), d = sp(j + 1, k);
-      const n = [(a[0] + b[0] + c[0] + d[0]) / 4, (a[1] + b[1] + c[1] + d[1]) / 4,
-                 (a[2] + b[2] + c[2] + d[2]) / 4 - hz];
-      quad(a, b, c, d, skin, n);
-    }
+    // Everything above builds solids out of eight corners; which solids get
+    // built is the only thing that separates the two figures.
+    const kit = { S, ph, quad, poly8, block, limb, frustum };
+    if (this.state.bike) this.poseCyclist(kit); else this.poseWalker(kit);
 
     const gl = this.gl, B = this._buffers;
     B.fig.n = n;

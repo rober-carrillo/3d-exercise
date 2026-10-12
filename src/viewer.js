@@ -49,6 +49,12 @@ const TEMPLATE = `
   <div class="rv-row"><span class="rv-lab">Elevation curtain</span><div class="rv-sw on" data-key="curtain"></div></div>
   <div class="rv-row"><span class="rv-lab">Chase camera</span><div class="rv-sw" data-key="chase"></div></div>
   <div class="rv-row"><span class="rv-lab">Recorded pace</span><div class="rv-sw" data-key="pace"></div></div>
+  <div class="rv-row"><span class="rv-lab">Figure</span>
+    <div class="rv-seg">
+      <button type="button" data-mode="foot" class="on">On foot</button>
+      <button type="button" data-mode="bike">Bike</button>
+    </div>
+  </div>
   <div class="rv-btns">
     <button class="rv-play rv-pri">▶ Fly route</button>
     <button class="rv-speed" title="Playback speed">1×</button>
@@ -230,6 +236,14 @@ export class RouteViewer {
           setTimeout(() => this.$('hint').classList.add('gone'), 6000);
       });
     });
+    // the figure swap: she is the same rider either way, on her feet or on a bike
+    this.mount.querySelectorAll('.rv-seg button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        r.state.bike = btn.dataset.mode === 'bike';
+        this.mount.querySelectorAll('.rv-seg button')
+          .forEach(other => other.classList.toggle('on', other === btn));
+      });
+    });
     this.$('vex').addEventListener('input', e => {
       r.state.vex = parseFloat(e.target.value);
       this.$('vex-v').textContent = r.state.vex.toFixed(1) + '×';
@@ -279,6 +293,8 @@ export class RouteViewer {
       if (e.key === 'r' || e.key === 'R') this.$('reset').click();
       if (e.key === 'c' || e.key === 'C') this.mount.querySelector('.rv-sw[data-key="chase"]').click();
       if (e.key === 'p' || e.key === 'P') this.mount.querySelector('.rv-sw[data-key="pace"]').click();
+      if (e.key === 'b' || e.key === 'B')
+        this.mount.querySelector(`.rv-seg button[data-mode="${r.state.bike ? 'foot' : 'bike'}"]`).click();
     });
   }
 

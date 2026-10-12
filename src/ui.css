@@ -48,6 +48,11 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-sw.on{background:var(--accent)}
 .rv-sw.on::after{transform:translateX(15px)}
 .rv-sw.rv-dis{opacity:.3;cursor:not-allowed}
+.rv-seg{display:flex;gap:2px;padding:2px;border-radius:9px;background:rgba(255,255,255,.08);flex:0 0 auto}
+.rv-seg button{font:inherit;font-size:10.5px;font-weight:560;letter-spacing:.01em;color:var(--ink-3);
+  background:none;border:0;border-radius:7px;padding:3px 9px;cursor:pointer;transition:background .15s,color .15s}
+.rv-seg button:hover{color:var(--ink)}
+.rv-seg button.on{color:#06202a;background:var(--accent)}
 .rv-btns{display:flex;gap:8px;margin-top:13px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08)}
 .rv-btns button{flex:1;font:inherit;font-size:11px;white-space:nowrap;font-weight:550;color:var(--ink);background:rgba(255,255,255,.07);
   border:1px solid rgba(255,255,255,.10);border-radius:9px;padding:7px 4px;cursor:pointer;transition:background .15s,border-color .15s}
