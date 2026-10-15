@@ -37,7 +37,11 @@ public class RecordingService extends Service implements LocationListener {
     public static final String ACTION_RESUME = "app.route3d.RESUME";
     public static final String ACTION_FINISH = "app.route3d.FINISH";
 
-    private static final String CHANNEL = "route3d.recording";
+    // Version the channel id. A channel's importance belongs to the user the
+    // moment it is created: later changes to it are ignored, for ever, on every
+    // device that already has the old one. Correcting a channel therefore means
+    // making a new one.
+    private static final String CHANNEL = "route3d.recording.v2";
     private static final int NOTIFICATION_ID = 7301;
 
     private LocationManager locations;
@@ -54,12 +58,20 @@ public class RecordingService extends Service implements LocationListener {
         super.onCreate();
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null) {
-            // LOW keeps it silent and un-intrusive: this notification is a
-            // status line that lives in the shade for an hour, not an alert.
+            // DEFAULT rather than LOW, with the sound and vibration taken off
+            // the channel instead. LOW marks a notification *silent*, and a
+            // silent notification is hidden from the lock screen by default on
+            // most devices — which is precisely where someone recording a walk
+            // needs to see it. Muting the channel gets the quiet without the
+            // demotion: no sound, no vibration, no heads-up banner, but a
+            // notification the lock screen is willing to show.
             NotificationChannel channel = new NotificationChannel(
-                    CHANNEL, "Recording a route", NotificationManager.IMPORTANCE_LOW);
+                    CHANNEL, "Recording a route", NotificationManager.IMPORTANCE_DEFAULT);
             channel.setDescription("Shown while a route is being recorded");
             channel.setShowBadge(false);
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(channel);
         }
         locations = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
@@ -126,9 +138,16 @@ public class RecordingService extends Service implements LocationListener {
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | immutable))
                 .setOngoing(true)
-                .setSilent(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                // show the distance and the time on the lock screen itself,
+                // rather than "Route3D: contents hidden"
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setShowWhen(false)
+                // Android 12 and later hold a foreground service's notification
+                // back for ten seconds unless told otherwise, which reads as
+                // nothing having happened when you press Record
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                 // the numbers are the point, so make sure a long distance or a
                 // slow pace is not truncated on a narrow screen
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(line2));
