@@ -173,6 +173,17 @@ export function nativeGeo({ onFix, onError, title = 'Route3D', message = 'Record
     async start() {
       if (!plugin) { onError?.(new Error('Background recording needs the Android app')); return; }
       try {
+        // Android 13 and later hide every notification from an app that has
+        // not been granted POST_NOTIFICATIONS — including the one a foreground
+        // service is obliged to show. The service still runs and the recording
+        // is still made, but the user sees nothing at all, which looks exactly
+        // like the feature being broken. The background-geolocation plugin
+        // declares the permission and never asks for it, so ask here, before
+        // the service that depends on it starts.
+        const notifications = window.Capacitor?.Plugins?.LocalNotifications;
+        if (notifications?.requestPermissions) {
+          try { await notifications.requestPermissions(); } catch {}
+        }
         watcherId = await plugin.addWatcher(
           {
             backgroundTitle: title,

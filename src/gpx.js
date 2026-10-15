@@ -44,23 +44,47 @@ export function formatDate(iso) {
   return isNaN(d.getTime()) ? '' : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-/** Parse a GPX document into { name, time, points: [[lat, lon, ele, epoch_ms], …] }. */
+/**
+ * Parse a GPX document into { name, time, points: [[lat, lon, ele, epoch_ms], …], breaks }.
+ *
+ * `breaks` holds the indices where a new <trkseg> begins. A track segment is
+ * how GPX says "the recording stopped and started again": the pen came off the
+ * paper, and whatever happened in between is not part of the route. Paused
+ * recordings, and files stitched from several outings, both arrive this way.
+ * Ignoring segments is how a pause that covered a drive home turns into five
+ * kilometres of running.
+ */
 export function parseGPX(text) {
   const nameMatch = text.match(/<trk>[\s\S]*?<name>([\s\S]*?)<\/name>/) || text.match(/<name>([\s\S]*?)<\/name>/);
   const name = nameMatch ? nameMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/\s+/g, ' ').trim() : 'Untitled route';
   const time = parseTime(text);
-  const points = [];
+  const points = [], breaks = [];
   const re = /<trkpt\b([^>]*?)(\/>|>([\s\S]*?)<\/trkpt>)/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const lat = attr(m[1], 'lat'), lon = attr(m[1], 'lon');
-    if (!isFinite(lat) || !isFinite(lon)) continue;
-    const body = m[3] || '';
-    const e = body.match(/<ele>([^<]*)<\/ele>/);
-    const tm = body.match(/<time>([^<]*)<\/time>/);
-    points.push([lat, lon, e ? parseFloat(e[1]) : 0, tm ? Date.parse(tm[1]) : NaN]);
+  const readPoints = chunk => {
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(chunk))) {
+      const lat = attr(m[1], 'lat'), lon = attr(m[1], 'lon');
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      const body = m[3] || '';
+      const e = body.match(/<ele>([^<]*)<\/ele>/);
+      const tm = body.match(/<time>([^<]*)<\/time>/);
+      points.push([lat, lon, e ? parseFloat(e[1]) : 0, tm ? Date.parse(tm[1]) : NaN]);
+    }
+  };
+
+  const segs = text.match(/<trkseg\b[^>]*>[\s\S]*?<\/trkseg>/g);
+  if (segs) {
+    for (const seg of segs) {
+      const before = points.length;
+      readPoints(seg);
+      // a segment that added nothing is not a break in the route
+      if (before > 0 && points.length > before) breaks.push(before);
+    }
+  } else {
+    readPoints(text);                     // no segments declared: one continuous track
   }
-  return { name, time, points };
+  return { name, time, points, breaks };
 }
 
 const haversine = (a, b) => {
@@ -75,11 +99,18 @@ const haversine = (a, b) => {
  * cumulative distance, ascent/descent, bounding box, and a distance-decimated
  * copy of the track (full-resolution GPS traces are far denser than any screen).
  */
-export function analyze({ name, time = null, points }, { targetPoints = 1400, smoothWindow = 9, gainThreshold = 1 } = {}) {
+export function analyze({ name, time = null, points, breaks = [] }, { targetPoints = 1400, smoothWindow = 9, gainThreshold = 1 } = {}) {
   if (points.length < 2) throw new Error('track has fewer than two points');
 
+  // Nothing accumulates across a break. The gap between the last point before
+  // a pause and the first point after it is not distance travelled, not time
+  // spent exercising, and not a hill climbed — it is the part that was
+  // deliberately not recorded, and counting it is how a pause for a lift home
+  // adds five kilometres to a run.
+  const isBreak = new Set(breaks);
   const cum = [0];
-  for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + haversine(points[i - 1], points[i]));
+  for (let i = 1; i < points.length; i++)
+    cum.push(cum[i - 1] + (isBreak.has(i) ? 0 : haversine(points[i - 1], points[i])));
   const total = cum[cum.length - 1];
 
   // light moving average — raw barometric/GPS elevation is far too noisy to sum
@@ -91,9 +122,10 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
   });
 
   let gain = 0, loss = 0, ref = sm[0];
-  for (const v of sm) {
-    const d = v - ref;
-    if (Math.abs(d) >= gainThreshold) { d > 0 ? gain += d : loss -= d; ref = v; }
+  for (let i = 0; i < sm.length; i++) {
+    if (isBreak.has(i)) { ref = sm[i]; continue; }   // start afresh after a pause
+    const d = sm[i] - ref;
+    if (Math.abs(d) >= gainThreshold) { d > 0 ? gain += d : loss -= d; ref = sm[i]; }
   }
 
   // Seconds from the start, kept alongside every sample we keep, when the
@@ -105,10 +137,14 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
   const timed = isFinite(t0) && isFinite(tEnd) && tEnd > t0;
 
   const step = total / targetPoints;
-  const lat = [], lon = [], ele = [], dist = [], secs = [];
+  const lat = [], lon = [], ele = [], dist = [], secs = [], keptBreaks = [];
   let next = 0, lastSec = 0;
   for (let i = 0; i < points.length; i++) {
-    if (i === 0 || i === points.length - 1 || cum[i] >= next) {
+    // Both sides of a break are kept whatever the decimation thinks, or the
+    // gap slides to wherever the nearest surviving samples happen to be.
+    const edge = isBreak.has(i) || isBreak.has(i + 1);
+    if (i === 0 || i === points.length - 1 || cum[i] >= next || edge) {
+      if (isBreak.has(i) && lat.length) keptBreaks.push(lat.length);
       lat.push(+points[i][0].toFixed(6)); lon.push(+points[i][1].toFixed(6));
       ele.push(+sm[i].toFixed(1)); dist.push(+cum[i].toFixed(1));
       if (timed) {
@@ -135,6 +171,10 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
       start: [points[0][0], points[0][1]],
       end: [points[points.length - 1][0], points[points.length - 1][1]],
       duration_s: timed ? (tEnd - t0) / 1000 : null,
+      // wall-clock duration minus whatever the pauses swallowed: the time the
+      // activity actually took, which is the number a pace is worth dividing by
+      moving_s: timed ? (tEnd - t0) / 1000 - breaks.reduce((acc, b) =>
+        acc + Math.max(0, ((points[b][3] - points[b - 1][3]) || 0) / 1000), 0) : null,
     },
     bbox: {
       minLat: Math.min(...lat), maxLat: Math.max(...lat),
@@ -142,6 +182,7 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
     },
     lat, lon, ele, dist,
     secs: timed ? secs : null,
+    breaks: keptBreaks,
   };
 }
 
