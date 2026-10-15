@@ -69,7 +69,10 @@ export class TrackRecorder {
     this.minMove = minMove;
     this.windowMs = windowMs;
     this.stillFactor = stillFactor;
-    this.smooth = smooth;      // 1 = trust every fix exactly, lower = steadier and laggier
+    this.smooth = smooth;      // kept for callers that tune by hand
+    // the per-fix fraction the presets were tuned with, expressed as the time
+    // constant that reproduces it at the 1 Hz they were tuned at
+    this.tau = opts.tau ?? -1 / Math.log(1 - Math.min(0.999, smooth));
     this._pos = null;          // the smoothed position everything is measured from
     this.maxSpeed = LIMITS[activity] ?? LIMITS.run;
     this._win = [];            // recent raw fixes, for telling walking from wandering
@@ -126,6 +129,7 @@ export class TrackRecorder {
     const t = fix.t ?? Date.now();
     const acc = fix.accuracy ?? 0;
 
+    const prevFixT = this._lastFixT;          // captured before the clock moves on
     this._lastFixT = Math.max(this._lastFixT ?? 0, t);
     if (acc > this.maxAccuracy) { this.rejected.accuracy++; return 'accuracy'; }
 
@@ -145,9 +149,20 @@ export class TrackRecorder {
     // scatter on every single step: a 10 m walk sampled ten times with 5 m
     // noise measures nearer 70 m. Easing towards each new fix instead of
     // jumping to it costs a little lag and removes most of that.
+    //
+    // The easing is per second, not per fix. Fixes arrive about once a second
+    // in the foreground but far more slowly when Android is in a mood, and a
+    // fixed fraction per fix means the smoothed position falls further and
+    // further behind as the gaps grow — at half a minute between fixes it is
+    // lagging minutes, and the route shrinks to the chords of its own corners.
+    // Converting a time constant into a per-gap weight keeps the smoothing the
+    // same strength in seconds however often the fixes come, and a long gap
+    // ends up trusting its fix almost completely, which is the right answer.
+    const gapS = this._pos && prevFixT ? Math.max(0.05, (t - prevFixT) / 1000) : 0;
+    const a = this._pos ? 1 - Math.exp(-gapS / this.tau) : 1;
     const pos = this._pos
-      ? { lat: this._pos.lat + (fix.lat - this._pos.lat) * this.smooth,
-          lon: this._pos.lon + (fix.lon - this._pos.lon) * this.smooth }
+      ? { lat: this._pos.lat + (fix.lat - this._pos.lat) * a,
+          lon: this._pos.lon + (fix.lon - this._pos.lon) * a }
       : { lat: fix.lat, lon: fix.lon };
     this._pos = pos;
 
