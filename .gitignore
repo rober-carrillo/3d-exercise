@@ -7,3 +7,7 @@ _archive/
 *.standalone.html
 .env
 .env.*
+
+# signing keys never belong in a public repo
+*.jks
+*.keystore
