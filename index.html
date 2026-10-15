@@ -164,7 +164,7 @@ import { rampCss } from './src/terrain.js';
 import { parseGPX, analyze, profileSamples, formatDate } from './src/gpx.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
-import { browserGeo, replayGeo, geoAvailable, keepAwake } from './src/geo.js';
+import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake } from './src/geo.js';
 
 const grid = document.getElementById('grid');
 const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -329,6 +329,7 @@ function startRecording(replaySlug) {
   rec = new TrackRecorder({ activity });
   rec.start();
   const gps = document.getElementById('recgps');
+  const note = document.getElementById('recnote');
   const onFix = fix => {
     const why = rec.addFix(fix);
     gps.textContent = fix.accuracy > 35
@@ -337,8 +338,15 @@ function startRecording(replaySlug) {
     gps.style.color = fix.accuracy > 35 ? 'var(--warm)' : 'var(--ink-3)';
   };
   const onError = err => {
-    gps.textContent = err?.code === 1 ? 'permission denied' : (err?.message || 'no position');
+    const denied = err?.code === 1 || err?.code === 'NOT_AUTHORIZED';
+    gps.textContent = denied ? 'location permission denied' : (err?.message || 'no position');
     gps.style.color = 'var(--hot)';
+    // on Android the permission lives a few screens into Settings, so offer the
+    // way back rather than leaving a dead end
+    if (denied && source?.openSettings) {
+      note.textContent = 'Route3D needs location permission to record. Tap Discard, allow it in Settings, and start again.';
+      source.openSettings();
+    }
   };
 
   if (replaySlug) {
@@ -353,24 +361,32 @@ function startRecording(replaySlug) {
         onEnd: () => { gps.textContent = 'replay finished'; } });
       source.start();
     }).catch(e => onError(e));
-  } else if (!geoAvailable()) {
-    onError(new Error('This browser has no geolocation'));
+  } else if (!nativeGeoAvailable() && !geoAvailable()) {
+    onError(new Error('This device cannot report its position'));
   } else {
-    source = browserGeo({ onFix, onError });
+    source = pickGeo({ onFix, onError, title: 'Route3D', message: 'Recording your route' });
     source.start();
   }
   // hold the screen on, and say which of the two situations we are in rather
   // than promising something the platform may have refused
-  const note = document.getElementById('recnote');
-  awake = keepAwake({
-    onChange: ok => {
-      note.textContent = ok
-        ? 'Keeping the screen on while recording. Leaving the app stops the fixes, so stay on this screen.'
-        : 'This device would not keep the screen on. If it sleeps, recording stops — check back now and then.';
-    },
-  });
-  if (!awake.held()) note.textContent =
-    'If the screen sleeps or you leave the app, recording stops. Recording with the screen off needs the native build.';
+  // Say which kind of recording is actually running. On the native build the
+  // foreground service carries on with the screen off and the phone pocketed;
+  // in a browser it stops the moment you look away, and pretending otherwise
+  // is how someone loses an hour's run.
+  if (nativeGeoAvailable()) {
+    note.textContent = 'Recording in the background. You can lock the screen and put the phone away — '
+      + 'a notification stays in your shade until you finish.';
+  } else {
+    awake = keepAwake({
+      onChange: ok => {
+        note.textContent = ok
+          ? 'Keeping the screen on while recording. Leaving the app stops the fixes, so stay on this screen.'
+          : 'This device would not keep the screen on. If it sleeps, recording stops — check back now and then.';
+      },
+    });
+    if (!awake.held()) note.textContent =
+      'If the screen sleeps or you leave the app, recording stops. Install the Android app to record with the screen off.';
+  }
 
   ticker = setInterval(paint, 500);
   paint();

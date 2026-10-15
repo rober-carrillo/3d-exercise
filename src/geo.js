@@ -7,10 +7,15 @@
  * outing needs a native background service. When that arrives, it arrives as
  * another function in this file, and nothing downstream changes.
  *
- *   browser  — navigator.geolocation. Works today, foreground only.
+ *   browser  — navigator.geolocation. Foreground only: the fixes stop the
+ *              moment the page is hidden or the screen sleeps.
+ *   native   — an Android foreground service, which keeps reporting with the
+ *              screen off and the phone in a pocket. This is the one that makes
+ *              the app usable for an actual outing.
  *   replay   — plays a recorded track back through the same interface, so the
  *              record screen can be built and tested without going outside.
- *   native   — Capacitor background geolocation. Not yet; see the plan.
+ *
+ * `pickGeo` chooses, so callers do not have to care which they got.
  */
 
 export const geoAvailable = () =>
@@ -129,4 +134,87 @@ export function keepAwake({ onChange } = {}) {
       lock = null;
     },
   };
+}
+
+/* ---------- native: keeps going with the screen off ---------- */
+
+/**
+ * The Capacitor bridge exposes registered native plugins on this object at
+ * runtime. Reaching for it there rather than importing the package is what
+ * keeps the browser build working: this project ships plain ES modules with no
+ * bundler, and a bare `import ... from '@capacitor-community/...'` is a
+ * specifier no browser can resolve.
+ */
+const nativePlugin = () =>
+  (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.())
+    ? window.Capacitor.Plugins?.BackgroundGeolocation ?? null
+    : null;
+
+export const nativeGeoAvailable = () => !!nativePlugin();
+
+/**
+ * Recording that survives the screen going off.
+ *
+ * Android stops handing location to a backgrounded app unless that app is
+ * running a foreground service, and a foreground service must show a permanent
+ * notification. That notification is not a formality to be hidden: it is the
+ * deal Android offers, and the text below is what the person sees in their
+ * shade for the next hour, so it says plainly what is happening.
+ *
+ * `distanceFilter: 0` asks for every fix and leaves the filtering to the
+ * recorder, which already knows how to tell walking from wandering and is
+ * tested. Letting the platform pre-filter by distance would quietly undo that.
+ */
+export function nativeGeo({ onFix, onError, title = 'Route3D', message = 'Recording your route' }) {
+  const plugin = nativePlugin();
+  let watcherId = null;
+  return {
+    name: 'native',
+    async start() {
+      if (!plugin) { onError?.(new Error('Background recording needs the Android app')); return; }
+      try {
+        watcherId = await plugin.addWatcher(
+          {
+            backgroundTitle: title,
+            backgroundMessage: message,   // its presence is what starts the service
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 0,
+          },
+          (location, error) => {
+            if (error) {
+              // the user can be sent straight to the settings page to fix this
+              onError?.(Object.assign(new Error(error.message || 'location error'), {
+                code: error.code, canOpenSettings: error.code === 'NOT_AUTHORIZED',
+              }));
+              return;
+            }
+            if (!location) return;
+            onFix({
+              lat: location.latitude,
+              lon: location.longitude,
+              ele: location.altitude ?? 0,
+              accuracy: location.accuracy ?? 999,
+              speed: location.speed ?? null,
+              t: location.time ?? Date.now(),
+            });
+          },
+        );
+      } catch (err) { onError?.(err); }
+    },
+    stop() {
+      if (watcherId && plugin) { plugin.removeWatcher({ id: watcherId }).catch(() => {}); }
+      watcherId = null;
+    },
+    /** Android buries location permission a few screens deep; offer the shortcut. */
+    openSettings() { return plugin?.openSettings?.(); },
+  };
+}
+
+/**
+ * The best source this device can offer. Native where there is one, otherwise
+ * the browser, which works but only while you are looking at it.
+ */
+export function pickGeo(opts) {
+  return nativeGeoAvailable() ? nativeGeo(opts) : browserGeo(opts);
 }
