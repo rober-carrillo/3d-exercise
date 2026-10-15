@@ -84,3 +84,49 @@ export function replayGeo({ points, onFix, onError, speed = 20, jitter = 0, accu
     stop() { if (timer) { clearInterval(timer); timer = null; } },
   };
 }
+
+/**
+ * Hold the screen awake for the duration of a recording.
+ *
+ * Not a nicety. A browser stops delivering position fixes once the page is
+ * hidden, and a phone in a pocket locks its screen within a minute, so without
+ * this a recorded walk is a recorded first minute. The lock is also dropped
+ * every time the page is hidden — answering a message is enough — so it has to
+ * be taken again when the page comes back.
+ *
+ * Wake locks are refused in plenty of places (older WebViews, low battery,
+ * browsers that never implemented it). That is survivable, and the caller is
+ * told so it can say something honest on screen rather than pretend.
+ *
+ * Returns `{ release, held }`.
+ */
+export function keepAwake({ onChange } = {}) {
+  let lock = null, live = true;
+  const held = () => !!lock;
+
+  const take = async () => {
+    if (!live || lock || !navigator.wakeLock) return;
+    try {
+      lock = await navigator.wakeLock.request('screen');
+      lock.addEventListener('release', () => { lock = null; onChange?.(false); });
+      onChange?.(true);
+    } catch {
+      lock = null;
+      onChange?.(false);          // refused: the screen will sleep on its own
+    }
+  };
+  const onVisible = () => { if (document.visibilityState === 'visible') take(); };
+
+  document.addEventListener('visibilitychange', onVisible);
+  take();
+
+  return {
+    held,
+    release() {
+      live = false;
+      document.removeEventListener('visibilitychange', onVisible);
+      try { lock?.release(); } catch {}
+      lock = null;
+    },
+  };
+}

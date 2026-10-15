@@ -151,8 +151,8 @@
       <button id="recstop" class="pri">Finish</button>
       <button id="reccancel">Discard</button>
     </div>
-    <p class="rec-note" id="recnote">Keep this screen open — a browser stops reporting position when the
-      tab goes to the background. The Android build will record with the screen off.</p>
+    <p class="rec-note" id="recnote">Keep this screen open — position reporting stops when the app goes to
+      the background.</p>
   </div>
 </div>
 
@@ -164,7 +164,7 @@ import { rampCss } from './src/terrain.js';
 import { parseGPX, analyze, profileSamples, formatDate } from './src/gpx.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
-import { browserGeo, replayGeo, geoAvailable } from './src/geo.js';
+import { browserGeo, replayGeo, geoAvailable, keepAwake } from './src/geo.js';
 
 const grid = document.getElementById('grid');
 const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -302,7 +302,7 @@ addEventListener('drop', e => {
  * 20x, which is the only way to exercise this from a desk.
  */
 const recEl = document.getElementById('rec');
-let rec = null, source = null, ticker = null, activity = 'run';
+let rec = null, source = null, ticker = null, activity = 'run', awake = null;
 
 const mmss = s => {
   s = Math.max(0, Math.round(s));
@@ -359,12 +359,26 @@ function startRecording(replaySlug) {
     source = browserGeo({ onFix, onError });
     source.start();
   }
+  // hold the screen on, and say which of the two situations we are in rather
+  // than promising something the platform may have refused
+  const note = document.getElementById('recnote');
+  awake = keepAwake({
+    onChange: ok => {
+      note.textContent = ok
+        ? 'Keeping the screen on while recording. Leaving the app stops the fixes, so stay on this screen.'
+        : 'This device would not keep the screen on. If it sleeps, recording stops — check back now and then.';
+    },
+  });
+  if (!awake.held()) note.textContent =
+    'If the screen sleeps or you leave the app, recording stops. Recording with the screen off needs the native build.';
+
   ticker = setInterval(paint, 500);
   paint();
   recEl.classList.add('on');
 }
 
 function closeRecorder() {
+  awake?.release(); awake = null;
   source?.stop(); source = null;
   clearInterval(ticker); ticker = null;
   recEl.classList.remove('on');
