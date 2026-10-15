@@ -11,7 +11,7 @@
 import { loadTrack, parseGPX, analyze, formatDate } from './gpx.js';
 import { Renderer } from './renderer.js';
 import {
-  TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp,
+  TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp, setEsriToken,
 } from './terrain.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -153,6 +153,15 @@ export class RouteViewer {
     renderer.onChaseRelease = () =>
       this.mount.querySelector('.rv-sw[data-key="chase"]').classList.remove('on');
     renderer.state.vex = o.vex;
+
+    // config.json carries the imagery key when the build had one. It is absent
+    // from a standalone file and from a plain checkout, and both of those keep
+    // working on the open endpoint — so this never becomes a reason the app
+    // will not start.
+    try {
+      const cfg = await fetch('./config.json').then(r => r.ok ? r.json() : null);
+      if (cfg?.esriKey) setEsriToken(cfg.esriKey);
+    } catch {}
 
     const frame = sceneFrame(track);
     // The imagery ceiling was 16 — about 2 m a pixel, so a soccer pitch drew

@@ -16,11 +16,26 @@ export const lat2ty = (lat, z) => {
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 
+/**
+ * The Esri API key, when the build was given one.
+ *
+ * Without a key the tiles come from the open ArcGIS endpoint, which is what
+ * this has always done and is fine for a project nobody has heard of. With
+ * one, the same imagery comes from the licensed host instead — same pictures,
+ * same zoom levels, just accounted for. Switching is an environment variable
+ * at build time and nothing else, so the day the key arrives is a one-line day.
+ */
+let esriToken = null;
+export const setEsriToken = token => { esriToken = token || null; };
+export const esriLicensed = () => !!esriToken;
+
 /** Tile services. Esri = /{z}/{row}/{col}; the others = /{z}/{x}/{y}. */
 export const TILES = {
   esri: {
     label: 'Esri World Imagery',
-    url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+    url: (z, x, y) => esriToken
+      ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}?token=${esriToken}`
+      : `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
   },
   osm: {
     label: 'OpenStreetMap',

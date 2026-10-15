@@ -152,6 +152,13 @@ for (const item of STATIC) {
 // newest first, by the day it happened — the same order the library shows
 routes.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 
+// Runtime config. The key is injected from the environment at build time
+// (Vercel → Settings → Environment Variables) so it never sits in a public
+// repository; with none set the viewer stays on the open tile endpoint.
+await writeFile(join(OUT, 'config.json'),
+  JSON.stringify({ esriKey: process.env.ESRI_API_KEY ?? null }));
+if (process.env.ESRI_API_KEY) console.log('  · imagery: licensed Esri endpoint (key from ESRI_API_KEY)');
+
 await writeFile(join(OUT, 'routes.json'),
   JSON.stringify({ generated: new Date().toISOString(), routes }, null, 2));
 
