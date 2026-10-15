@@ -75,7 +75,9 @@
   .figs .k{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
   .figs .v{font-size:14px;font-weight:620;font-variant-numeric:tabular-nums;margin-top:2px}
   .figs .v small{font-size:9.5px;font-weight:500;color:var(--ink-2);margin-left:2px}
-  a.dl{position:absolute;right:16px;bottom:12px;font-size:10px;letter-spacing:.04em;color:var(--ink-3);
+  button.dl{background:none;font:inherit;cursor:pointer}
+  button.dl:disabled{opacity:.5;cursor:wait}
+  a.dl,button.dl{position:absolute;right:16px;bottom:12px;font-size:10px;letter-spacing:.04em;color:var(--ink-3);
     text-decoration:none;padding:3px 7px;border-radius:6px;border:1px solid transparent;transition:color .15s,border-color .15s}
   a.dl:hover{color:var(--accent);border-color:rgba(34,211,238,.35)}
   .tag{display:inline-block;margin-left:8px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
@@ -161,7 +163,8 @@
 
 <script type="module">
 import { rampCss } from './src/terrain.js';
-import { parseGPX, analyze, profileSamples, formatDate } from './src/gpx.js';
+import { parseGPX, analyze, profileSamples, formatDate, trackToGPX } from './src/gpx.js';
+import { saveGPX, safeName, canShareFiles } from './src/export.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
 import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake } from './src/geo.js';
@@ -187,6 +190,24 @@ function render() {
     return;
   }
   for (const r of routes) grid.insertAdjacentHTML('beforeend', card(r));
+  // Export a route this browser holds. The track is rebuilt into GPX rather
+  // than a copy of the file being kept around: for anything this app recorded
+  // that is the same points it captured, and it means an imported route can be
+  // taken back out too.
+  grid.querySelectorAll('.dl.gpx').forEach(b => b.addEventListener('click', async e => {
+    e.preventDefault();
+    const entry = listLocalRoutes().find(r => r.slug === b.dataset.slug);
+    if (!entry) return toast('That route is no longer in this browser.');
+    b.disabled = true;
+    try {
+      const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.track?.activity ?? 'other' });
+      const how = await saveGPX(safeName(entry.name), gpx);
+      toast(how === 'shared' ? 'Choose where to send it.' : `Saved ${safeName(entry.name)}`);
+    } catch (err) {
+      toast(`Could not save the file: ${err.message}`);
+    } finally { b.disabled = false; }
+  }));
+
   grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
     removeLocalRoute(b.dataset.slug);
@@ -240,7 +261,8 @@ function card(r) {
         </div>
       </a>
       ${r.local
-        ? `<button class="rm" data-slug="${r.slug}" title="Remove from this browser">✕</button>`
+        ? `<button class="rm" data-slug="${r.slug}" title="Remove from this browser">✕</button>
+           <button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓ gpx</button>`
         : `<a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓ single file</a>`}
     </div>`;
 }

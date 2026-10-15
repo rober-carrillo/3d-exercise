@@ -145,6 +145,46 @@ export function analyze({ name, time = null, points }, { targetPoints = 1400, sm
   };
 }
 
+/**
+ * An analysed track written back out as GPX.
+ *
+ * The app keeps tracks in its own decimated form rather than hoarding the
+ * original file, so getting a route back out means rebuilding one. Per-point
+ * times are reconstructed from the start time plus the elapsed seconds the
+ * track already carries, which is what keeps a recorded route replayable at
+ * its own pace after a round trip through a file.
+ *
+ * For a route this app recorded the result is effectively the original: the
+ * recorder's own filtering already thinned the fixes well below the point
+ * where analysis decimates. For a large imported file it is the track as the
+ * app sees it — a faithful shape at a coarser sampling than the source.
+ */
+export function trackToGPX(track, { name = track.name, activity = 'other' } = {}) {
+  const esc = s => String(s).replace(/[<>&'"]/g, c =>
+    ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+  const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const t0 = track.time ? Date.parse(track.time) : null;
+  const stamped = t0 !== null && Array.isArray(track.secs) && track.secs.length === track.lat.length;
+
+  const body = track.lat.map((lat, i) =>
+    `   <trkpt lat="${lat.toFixed(7)}" lon="${track.lon[i].toFixed(7)}">\n` +
+    `    <ele>${(track.ele[i] ?? 0).toFixed(1)}</ele>\n` +
+    (stamped ? `    <time>${iso(t0 + track.secs[i] * 1000)}</time>\n` : '') +
+    `   </trkpt>`).join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx creator="route3d" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+${t0 !== null ? ` <metadata>\n  <time>${iso(t0)}</time>\n </metadata>\n` : ''} <trk>
+  <name>${esc(name || 'Route')}</name>
+  <type>${esc(activity)}</type>
+  <trkseg>
+${body}
+  </trkseg>
+ </trk>
+</gpx>
+`;
+}
+
 /** Small evenly-spaced elevation series, used for the cards on the index page. */
 export function profileSamples(track, n = 96) {
   const out = [];
