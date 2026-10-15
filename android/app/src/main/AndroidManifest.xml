@@ -33,6 +33,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+        <!-- Owning this service is what lets the notification carry live
+             distance and a pause button; a foreground service of type
+             location is also the only way Android keeps giving an app
+             position once the screen is off. -->
+        <service
+            android:name=".RecordingService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location" />
+
     </application>
 
     <!-- Permissions -->
@@ -47,6 +58,16 @@
          here records with the screen off. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Declared here rather than inherited from a plugin's manifest, now that
+         the recording service is ours. FOREGROUND_SERVICE_LOCATION is what
+         Android 14 and later require to start a service of that type, and
+         POST_NOTIFICATIONS is what Android 13 and later require before any
+         notification is shown at all — including the one the service must
+         display to exist. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- GPS is how this app is meant to be used, but the viewer works without
          it, so the hardware is optional and the Play listing stays open to

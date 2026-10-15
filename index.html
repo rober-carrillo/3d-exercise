@@ -167,7 +167,7 @@ import { parseGPX, analyze, profileSamples, formatDate, trackToGPX } from './src
 import { saveGPX, safeName, canShareFiles } from './src/export.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
-import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake } from './src/geo.js';
+import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState } from './src/geo.js';
 
 const grid = document.getElementById('grid');
 const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -334,9 +334,21 @@ const mmss = s => {
 const paceText = p => p == null ? '—'
   : `${Math.floor(p / 60)}:${String(Math.round(p % 60)).padStart(2, '0')}<small>/km</small>`;
 
+let lastShade = '';
 function paint() {
   if (!rec) return;
   const s = rec.stats;
+  // keep the shade in step with the screen. The text is rebuilt only when it
+  // changes, so a notification is not re-posted twice a second for an hour.
+  if (source?.update) {
+    const shade = `${(s.distance_m / 1000).toFixed(2)} km · ${mmss(s.elapsed_s)}`
+      + (s.pace_s_per_km ? ` · ${Math.floor(s.pace_s_per_km / 60)}:${String(Math.round(s.pace_s_per_km % 60)).padStart(2, '0')} /km` : '');
+    if (shade !== lastShade) {
+      lastShade = shade;
+      source.update({ title: rec.state === 'paused' ? 'Recording paused' : 'Recording a route',
+                      text: shade, paused: rec.state === 'paused' });
+    }
+  }
   document.getElementById('rectime').textContent = mmss(s.elapsed_s);
   document.getElementById('recdist').innerHTML = (s.distance_m / 1000).toFixed(2) + '<small>km</small>';
   document.getElementById('recpace').innerHTML = paceText(s.pace_s_per_km);
@@ -386,7 +398,18 @@ function startRecording(replaySlug) {
   } else if (!nativeGeoAvailable() && !geoAvailable()) {
     onError(new Error('This device cannot report its position'));
   } else {
-    source = pickGeo({ onFix, onError, title: 'Route3D', message: 'Recording your route' });
+    source = pickGeo({
+      onFix, onError,
+      title: 'Recording a route',
+      text: 'Waiting for GPS…',
+      // pressing a button in the shade runs exactly the same code as pressing
+      // the one on screen, so the two can never disagree about the state
+      onAction: which => {
+        if (which === 'finish') document.getElementById('recstop').click();
+        else if (which === 'pause' && rec?.state === 'recording') document.getElementById('recpause').click();
+        else if (which === 'resume' && rec?.state === 'paused') document.getElementById('recpause').click();
+      },
+    });
     source.start();
   }
   // hold the screen on, and say which of the two situations we are in rather
@@ -396,8 +419,14 @@ function startRecording(replaySlug) {
   // in a browser it stops the moment you look away, and pretending otherwise
   // is how someone loses an hour's run.
   if (nativeGeoAvailable()) {
-    note.textContent = 'Recording in the background. You can lock the screen and put the phone away — '
-      + 'a notification stays in your shade until you finish.';
+    note.textContent = 'Recording in the background. You can lock the screen and put the phone away.';
+    notificationState().then(state => {
+      note.textContent = state === 'blocked'
+        ? 'Recording in the background. Notifications are switched off for this app, so nothing will '
+          + 'appear in your shade — recording still works, and the numbers are here when you come back.'
+        : 'Recording in the background. Lock the screen and put the phone away — distance and time '
+          + 'keep updating in your notification shade.';
+    });
   } else {
     awake = keepAwake({
       onChange: ok => {

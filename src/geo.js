@@ -139,87 +139,85 @@ export function keepAwake({ onChange } = {}) {
 /* ---------- native: keeps going with the screen off ---------- */
 
 /**
- * The Capacitor bridge exposes registered native plugins on this object at
- * runtime. Reaching for it there rather than importing the package is what
- * keeps the browser build working: this project ships plain ES modules with no
- * bundler, and a bare `import ... from '@capacitor-community/...'` is a
- * specifier no browser can resolve.
+ * Our own recording service, built into the app rather than installed from a
+ * package, because the notification is the point: it has to show how far you
+ * have gone and offer a way to pause without unlocking the phone, and a
+ * notification can only be changed by whoever owns the service showing it.
  */
-const nativePlugin = () =>
+const recorderPlugin = () =>
   (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.())
-    ? window.Capacitor.Plugins?.BackgroundGeolocation ?? null
+    ? window.Capacitor.Plugins?.Route3DRecorder ?? null
     : null;
 
-export const nativeGeoAvailable = () => !!nativePlugin();
+export const nativeGeoAvailable = () => !!recorderPlugin();
 
 /**
  * Recording that survives the screen going off.
  *
- * Android stops handing location to a backgrounded app unless that app is
- * running a foreground service, and a foreground service must show a permanent
- * notification. That notification is not a formality to be hidden: it is the
- * deal Android offers, and the text below is what the person sees in their
- * shade for the next hour, so it says plainly what is happening.
- *
- * `distanceFilter: 0` asks for every fix and leaves the filtering to the
- * recorder, which already knows how to tell walking from wandering and is
- * tested. Letting the platform pre-filter by distance would quietly undo that.
+ * `onAction` is called when one of the notification's buttons is pressed, with
+ * 'pause', 'resume' or 'finish'. Those buttons are best effort: some launchers
+ * and locked-down OEM shells drop notification actions without reporting it,
+ * and Android offers no way to ask whether they survived. So nothing depends
+ * on them — they are a shortcut to controls that also exist on the screen.
  */
-export function nativeGeo({ onFix, onError, title = 'Route3D', message = 'Recording your route' }) {
-  const plugin = nativePlugin();
-  let watcherId = null;
+export function nativeGeo({ onFix, onError, onAction, title = 'Recording a route', text = 'Waiting for GPS…' }) {
+  const plugin = recorderPlugin();
+  let handles = [];
   return {
     name: 'native',
     async start() {
       if (!plugin) { onError?.(new Error('Background recording needs the Android app')); return; }
       try {
-        // Android 13 and later hide every notification from an app that has
-        // not been granted POST_NOTIFICATIONS — including the one a foreground
-        // service is obliged to show. The service still runs and the recording
-        // is still made, but the user sees nothing at all, which looks exactly
-        // like the feature being broken. The background-geolocation plugin
-        // declares the permission and never asks for it, so ask here, before
-        // the service that depends on it starts.
-        const notifications = window.Capacitor?.Plugins?.LocalNotifications;
-        if (notifications?.requestPermissions) {
-          try { await notifications.requestPermissions(); } catch {}
-        }
-        watcherId = await plugin.addWatcher(
-          {
-            backgroundTitle: title,
-            backgroundMessage: message,   // its presence is what starts the service
-            requestPermissions: true,
-            stale: false,
-            distanceFilter: 0,
-          },
-          (location, error) => {
-            if (error) {
-              // the user can be sent straight to the settings page to fix this
-              onError?.(Object.assign(new Error(error.message || 'location error'), {
-                code: error.code, canOpenSettings: error.code === 'NOT_AUTHORIZED',
-              }));
-              return;
-            }
-            if (!location) return;
-            onFix({
-              lat: location.latitude,
-              lon: location.longitude,
-              ele: location.altitude ?? 0,
-              accuracy: location.accuracy ?? 999,
-              speed: location.speed ?? null,
-              t: location.time ?? Date.now(),
-            });
-          },
-        );
-      } catch (err) { onError?.(err); }
+        handles.push(await plugin.addListener('fix', f => onFix({
+          lat: f.lat, lon: f.lon, ele: f.ele ?? 0,
+          accuracy: f.accuracy ?? 999, speed: f.speed ?? null, t: f.t ?? Date.now(),
+        })));
+        handles.push(await plugin.addListener('action', e => onAction?.(e.action)));
+        handles.push(await plugin.addListener('recordingError', e =>
+          onError?.(new Error(e.message || 'recording error'))));
+        const res = await plugin.start({ title, text });
+        return res;
+      } catch (err) {
+        onError?.(Object.assign(new Error(err.message || 'could not start recording'), {
+          code: err.code, canOpenSettings: err.code === 'NOT_AUTHORIZED',
+        }));
+      }
     },
+    /** New numbers for the notification. Cheap enough to call every second. */
+    update(fields) { return plugin?.update(fields).catch(() => {}); },
     stop() {
-      if (watcherId && plugin) { plugin.removeWatcher({ id: watcherId }).catch(() => {}); }
-      watcherId = null;
+      for (const h of handles) { try { h.remove(); } catch {} }
+      handles = [];
+      plugin?.stop().catch(() => {});
     },
-    /** Android buries location permission a few screens deep; offer the shortcut. */
-    openSettings() { return plugin?.openSettings?.(); },
+    openSettings() {},
   };
+}
+
+/**
+ * What the shade will actually show.
+ *
+ * Three of the four failure modes can be detected and the fourth cannot, so
+ * this reports what is knowable and the caller degrades on that:
+ *
+ *   'full'     notifications are permitted — post the rich one and hope the
+ *              buttons survive, because nothing reports whether they did
+ *   'blocked'  the permission was refused, or the channel was switched off:
+ *              nothing will be shown however it is posted
+ *   'unknown'  no way to ask, which is every browser
+ *
+ * Whether a shown notification kept its buttons is the unknowable one. Android
+ * exposes no signal for it, so the app screen stays the control that works.
+ */
+export async function notificationState() {
+  const plugin = recorderPlugin();
+  if (!plugin?.notificationState) return 'unknown';
+  try {
+    const { state } = await plugin.notificationState();
+    return state ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 /**
