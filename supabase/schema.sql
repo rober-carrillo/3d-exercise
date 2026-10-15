@@ -119,3 +119,23 @@ $$;
 
 revoke all on function route_by_token(uuid) from public;
 grant execute on function route_by_token(uuid) to anon, authenticated;
+
+-- Revoking a link.
+--
+-- Deliberately NOT security definer: this one runs as the caller, so the
+-- owner policy decides whose routes may be rotated. A stranger calling it
+-- with somebody else's id updates nothing and gets null back, which is the
+-- behaviour you want from a function that hands out a new key.
+create or replace function rotate_share_token(route_id uuid)
+returns uuid
+language sql
+volatile
+set search_path = public, pg_temp
+as $$
+  update routes set share_token = gen_random_uuid()
+   where id = route_id
+  returning share_token;
+$$;
+
+revoke all on function rotate_share_token(uuid) from public;
+grant execute on function rotate_share_token(uuid) to authenticated;

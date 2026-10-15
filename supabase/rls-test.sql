@@ -118,10 +118,20 @@ select assert((select owner_handle from route_by_token('dddddddd-0000-0000-0000-
 \echo 'REVOKING A LINK'
 reset role; set role authenticated;
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
-update routes set share_token = gen_random_uuid()
- where id = 'aaaaaaaa-0000-0000-0000-000000000002';
+select rotate_share_token('aaaaaaaa-0000-0000-0000-000000000002') as fresh \gset
 select assert((select count(*) from route_by_token('dddddddd-0000-0000-0000-000000000002')) = 0,
               'rotating the token kills every link already handed out');
+select assert((select count(*) from route_by_token(:'fresh')) = 1,
+              'the new token works immediately');
+
+-- and a stranger cannot rotate what is not theirs
+set role authenticated;
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+select assert(rotate_share_token('aaaaaaaa-0000-0000-0000-000000000002') is null,
+              'a stranger rotating someone else''s token changes nothing');
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+select assert((select count(*) from route_by_token(:'fresh')) = 1,
+              'and the owner''s link still works afterwards');
 
 reset role;
 \echo ''
