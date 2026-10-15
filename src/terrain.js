@@ -226,6 +226,26 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   };
 
   const M = track.lat.length;
+
+  // Where the recording stopped and started again. Nothing may be drawn across
+  // one of these: the straight line from where you paused to where you resumed
+  // is not a path anybody took, and drawing it would put a kilometre of road
+  // through the side of a hill. The ribbon is cut into one strip per segment
+  // and the figure simply appears at the far side, which is what a pause is.
+  const breaks = (track.breaks || []).filter(b => b > 0 && b < M);
+  const strips = [];
+  for (let s0 = 0, k = 0; s0 < M;) {
+    const end = k < breaks.length ? breaks[k++] : M;
+    if (end - s0 >= 2) strips.push({ first: s0 * 2, count: (end - s0) * 2 });
+    s0 = end;
+  }
+  /** first and last index of the segment containing i, so nothing reaches over a gap */
+  const segBounds = i => {
+    let lo = 0, hi = M - 1;
+    for (const b of breaks) { if (b <= i) lo = b; else { hi = b - 1; break; } }
+    return [lo, hi];
+  };
+
   const tx = new Float32Array(M), ty = new Float32Array(M), tz = new Float32Array(M);
   const head = new Float32Array(M), course = new Float32Array(M);
   const lift = fit(Math.max(9, hSpan * 0.02), 0.005);
@@ -246,11 +266,12 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   // camera aims at a point on the far side of the field the whole time.
   const AHEAD = fit(clamp(totalD * 0.04, 120, 500), 0.12), BEHIND = fit(40, 0.04);
   for (let i = 0; i < M; i++) {
-    const a = Math.max(0, i - 10), b = Math.min(M - 1, i + 10);
+    const [slo, shi] = segBounds(i);
+    const a = Math.max(slo, i - 10), b = Math.min(shi, i + 10);
     head[i] = Math.atan2(ty[b] - ty[a], tx[b] - tx[a]);
 
-    let j = i; while (j < M - 1 && track.dist[j] - track.dist[i] < AHEAD) j++;
-    let k = i; while (k > 0 && track.dist[i] - track.dist[k] < BEHIND) k--;
+    let j = i; while (j < shi && track.dist[j] - track.dist[i] < AHEAD) j++;
+    let k = i; while (k > slo && track.dist[i] - track.dist[k] < BEHIND) k--;
     if (j === k) { course[i] = head[i]; continue; }
     const fx = tx[j] - tx[k], fy = ty[j] - ty[k], fl = Math.hypot(fx, fy) || 1;
     // blend the long look-ahead with the local tangent so tight bends still register
@@ -281,8 +302,9 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
   const sx = new Float32Array(M), sy = new Float32Array(M), sz = new Float32Array(M);
   for (let i = 0; i < M; i++) {
     let wx = 0, wy = 0, wz = 0, ws = 0;
+    const [lo, hi] = segBounds(i);
     for (let k = -2; k <= 2; k++) {
-      const j = clamp(i + k, 0, M - 1), w = [1, 4, 6, 4, 1][k + 2];
+      const j = clamp(i + k, lo, hi), w = [1, 4, 6, 4, 1][k + 2];
       wx += tx[j] * w; wy += ty[j] * w; wz += tz[j] * w; ws += w;
     }
     sx[i] = wx / ws; sy[i] = wy / ws; sz[i] = wz / ws;
@@ -324,6 +346,6 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     terrain: { pos, slope, uv, idx },
     skirt: { pos: new Float32Array(sp), col: new Float32Array(sc) },
     ribbon: { pos: rp, col: rc }, outline: { pos: op, col: oc }, curtain: { pos: wp, col: wc },
-    track: { tx, ty, tz, sx, sy, sz, head, course, bearing, n: M, width: w, lift },
+    track: { tx, ty, tz, sx, sy, sz, head, course, bearing, n: M, width: w, lift, strips, breaks },
   };
 }

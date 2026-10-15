@@ -637,13 +637,16 @@ void main(){vec4 c=vCol;
       this._attr(pC, 'aPos', B.skirt.pos, 3); this._attr(pC, 'aCol', B.skirt.col, 4);
       gl.drawArrays(gl.TRIANGLES, 0, B.skirt.n);
 
+      // one strip per recorded segment: a paused stretch leaves a gap rather
+      // than a line across whatever happened while the recording was stopped
+      const strips = this.g.track.strips ?? [{ first: 0, count: B.rib.n }];
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(-2.0, -3);
       this._attr(pC, 'aPos', B.out.pos, 3); this._attr(pC, 'aCol', B.out.col, 4);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, B.out.n);
+      for (const s of strips) gl.drawArrays(gl.TRIANGLE_STRIP, s.first, s.count);
       gl.polygonOffset(-4.0, -8);
       this._attr(pC, 'aPos', B.rib.pos, 3); this._attr(pC, 'aCol', B.rib.col, 4);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, B.rib.n);
+      for (const s of strips) gl.drawArrays(gl.TRIANGLE_STRIP, s.first, s.count);
       gl.disable(gl.POLYGON_OFFSET_FILL);
 
       this._buildFigure();
@@ -653,7 +656,8 @@ void main(){vec4 c=vCol;
       if (this.state.curtain) {
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
         this._attr(pC, 'aPos', B.wall.pos, 3); this._attr(pC, 'aCol', B.wall.col, 4);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, B.wall.n);
+        for (const s of (this.g.track.strips ?? [{ first: 0, count: B.wall.n }]))
+          gl.drawArrays(gl.TRIANGLE_STRIP, s.first, s.count);
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
 

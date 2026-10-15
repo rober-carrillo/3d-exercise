@@ -77,6 +77,7 @@ export class TrackRecorder {
     this.maxSpeed = LIMITS[activity] ?? LIMITS.run;
     this._win = [];            // recent raw fixes, for telling walking from wandering
     this.points = [];          // the track as written: {lat, lon, ele, t}
+    this.breaks = [];          // indices where the recording resumed after a pause
     this.distance_m = 0;
     this.moving_ms = 0;
     this.rejected = { accuracy: 0, teleport: 0, still: 0, stale: 0 };
@@ -103,7 +104,16 @@ export class TrackRecorder {
     this.pausedFor += now - this._pauseBegan;
     this._pauseBegan = null;
     this.state = 'recording';
-    this._last = null;         // don't draw a line across wherever you went
+    // Everything that remembers where you were has to forget. The distance
+    // anchor, or the walk across the pause is counted; the smoothed position,
+    // or it eases over from the old place and drags a tail behind it; and the
+    // movement window, or the first fixes back get judged against fixes from
+    // before you stopped. The next point recorded starts a new segment, which
+    // is how the file says the pen came off the paper.
+    this._last = null;
+    this._pos = null;
+    this._win = [];
+    this._resumed = this.points.length > 0;
   }
   stop(now = Date.now()) {
     if (this.state === 'paused') this.pausedFor += now - this._pauseBegan;
@@ -186,6 +196,7 @@ export class TrackRecorder {
       this.moving_ms += Math.min(dt, 10) * 1000;   // a long gap is a pause, not a sprint
     }
 
+    if (this._resumed) { this.breaks.push(this.points.length); this._resumed = false; }
     this.points.push({ lat: pos.lat, lon: pos.lon, ele: fix.ele ?? 0, t });
     this._lastFixT = t;
     this._last = { lat: pos.lat, lon: pos.lon, accuracy: acc, t };
@@ -210,13 +221,21 @@ export class TrackRecorder {
 
   /** Live numbers for the recording screen. */
   get stats() {
-    // Elapsed is measured between fixes rather than off the wall clock. Live
-    // they are the same thing, since fixes arrive about once a second; but a
-    // track replayed through the recorder for testing carries its own clock,
-    // and the numbers should describe the outing, not the test harness.
-    const first = this.points.length ? this.points[0].t : null;
-    const elapsed_ms = first === null ? 0
-      : Math.max(0, (this._lastFixT ?? first) - first - this.pausedFor);
+    // Elapsed is the sum of the recorded segments: within each one, the last
+    // fix minus the first. Nothing needs to be subtracted afterwards, because
+    // a pause is simply a span that no segment covers.
+    //
+    // The arithmetic it replaces kept a running total of paused milliseconds
+    // and took it off the overall span. That double-counted whenever the fixes
+    // had not resumed — stopping while still paused subtracted a pause that
+    // the fix clock had never included, and a ten minute run that ended on a
+    // twenty minute pause reported an elapsed time of zero.
+    let elapsed_ms = 0;
+    for (let seg = 0, bi = 0; seg < this.points.length;) {
+      const end = bi < this.breaks.length ? this.breaks[bi++] : this.points.length;
+      if (end - seg >= 2) elapsed_ms += this.points[end - 1].t - this.points[seg].t;
+      seg = end;
+    }
     const moving_s = this.moving_ms / 1000;
     return {
       distance_m: this.distance_m,
@@ -235,6 +254,7 @@ export class TrackRecorder {
       name,
       time: this.points.length ? new Date(this.points[0].t).toISOString() : null,
       points: this.points.map(p => [p.lat, p.lon, p.ele, p.t]),
+      breaks: [...this.breaks],
     };
   }
 
@@ -246,7 +266,9 @@ export class TrackRecorder {
     const esc = s => String(s).replace(/[<>&'"]/g, c =>
       ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
     const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const body = this.points.map(p =>
+    const brk = new Set(this.breaks);
+    const body = this.points.map((p, i) =>
+      (brk.has(i) && i > 0 ? `  </trkseg>\n  <trkseg>\n` : '') +
       `   <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">\n` +
       `    <ele>${p.ele.toFixed(1)}</ele>\n` +
       `    <time>${iso(p.t)}</time>\n` +

@@ -207,7 +207,9 @@ export function trackToGPX(track, { name = track.name, activity = 'other' } = {}
   const t0 = track.time ? Date.parse(track.time) : null;
   const stamped = t0 !== null && Array.isArray(track.secs) && track.secs.length === track.lat.length;
 
+  const brk = new Set(track.breaks || []);
   const body = track.lat.map((lat, i) =>
+    (brk.has(i) && i > 0 ? `  </trkseg>\n  <trkseg>\n` : '') +
     `   <trkpt lat="${lat.toFixed(7)}" lon="${track.lon[i].toFixed(7)}">\n` +
     `    <ele>${(track.ele[i] ?? 0).toFixed(1)}</ele>\n` +
     (stamped ? `    <time>${iso(t0 + track.secs[i] * 1000)}</time>\n` : '') +
