@@ -9,5 +9,12 @@
     "dev": "node scripts/build.mjs && npx --yes serve dist -l 5173",
     "serve": "npx --yes serve dist -l 5173"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  }
 }

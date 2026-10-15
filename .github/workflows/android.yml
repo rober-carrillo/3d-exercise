@@ -1,0 +1,89 @@
+# Builds the Android app. Nothing here needs Android Studio: the runner image
+# already carries the JDK and the Android SDK, and the native project in
+# android/ was generated once by `npx cap add android` and committed.
+#
+#   push a tag  -> a signed release build, .apk and .aab
+#   run by hand -> whatever you point it at
+#
+# Signing needs four repository secrets. Without them the release step is
+# skipped and only the debug build runs, so a fork still gets a green tick:
+#   KEYSTORE_B64       base64 of your release.jks
+#   KEYSTORE_PASSWORD  store password
+#   KEY_ALIAS          key alias inside the store
+#   KEY_PASSWORD       key password
+name: android
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Build a signed release (needs the signing secrets)'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the web app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy it into the native project
+        run: npx cap sync android
+
+      # The key never touches the repository: it arrives as base64 in a secret,
+      # is written outside the source tree, and the runner is thrown away after.
+      - name: Restore the signing key
+        id: signing
+        if: ${{ github.ref_type == 'tag' || inputs.release }}
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "no signing secrets configured — debug build only"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assemble release
+        if: steps.signing.outputs.signed == 'true'
+        working-directory: android
+        env:
+          ROUTE3D_KEYSTORE: ${{ runner.temp }}/release.jks
+          ROUTE3D_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ROUTE3D_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ROUTE3D_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew bundleRelease assembleRelease
+
+      - name: Assemble debug
+        if: steps.signing.outputs.signed != 'true'
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: route3d-android
+          if-no-files-found: error
+          path: |
+            android/app/build/outputs/apk/**/*.apk
+            android/app/build/outputs/bundle/**/*.aab
