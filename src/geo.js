@@ -190,7 +190,8 @@ export function nativeGeo({ onFix, onError, onAction, title = 'Recording a route
       handles = [];
       plugin?.stop().catch(() => {});
     },
-    openSettings() {},
+    /** Android's own page for this app's notifications, for when they are off. */
+    openSettings() { return plugin?.openNotificationSettings?.().catch(() => {}); },
   };
 }
 

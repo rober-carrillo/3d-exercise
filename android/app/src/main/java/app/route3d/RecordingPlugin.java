@@ -162,6 +162,34 @@ public class RecordingPlugin extends Plugin {
         call.resolve(res);
     }
 
+    /**
+     * Open the page where this can be fixed.
+     *
+     * Android stops asking once a permission prompt has been refused, so a
+     * refusal is permanent as far as the app is concerned: there is no second
+     * chance to ask, only Settings. Dropping someone into the right screen is
+     * the difference between a fixable problem and a feature that is simply
+     * broken for them.
+     */
+    @PluginMethod
+    public void openNotificationSettings(PluginCall call) {
+        Intent i;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            i = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+        } else {
+            i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(android.net.Uri.fromParts("package", getContext().getPackageName(), null));
+        }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open the notification settings");
+        }
+    }
+
     @PluginMethod
     public void stop(PluginCall call) {
         getContext().stopService(new Intent(getContext(), RecordingService.class));

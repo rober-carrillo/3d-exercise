@@ -421,11 +421,18 @@ function startRecording(replaySlug) {
   if (nativeGeoAvailable()) {
     note.textContent = 'Recording in the background. You can lock the screen and put the phone away.';
     notificationState().then(state => {
-      note.textContent = state === 'blocked'
-        ? 'Recording in the background. Notifications are switched off for this app, so nothing will '
-          + 'appear in your shade — recording still works, and the numbers are here when you come back.'
-        : 'Recording in the background. Lock the screen and put the phone away — distance and time '
-          + 'keep updating in your notification shade.';
+      if (state !== 'blocked') {
+        note.textContent = 'Recording in the background. Lock the screen and put the phone away — '
+          + 'distance and time keep updating in your notification shade.';
+        return;
+      }
+      // Android will not ask a second time once a prompt has been refused, so
+      // offer the only route left rather than describing the problem.
+      note.innerHTML = 'Recording works, but notifications are off for this app, so nothing will show '
+        + 'in your shade while the screen is locked. <button type="button" id="recfix" '
+        + 'style="font:inherit;color:var(--accent);background:none;border:0;padding:0;'
+        + 'text-decoration:underline;cursor:pointer">Turn them on</button>';
+      document.getElementById('recfix')?.addEventListener('click', () => source?.openSettings?.());
     });
   } else {
     awake = keepAwake({
