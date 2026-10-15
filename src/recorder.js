@@ -46,10 +46,12 @@ export const LIMITS = {
  * stationary phone is not a thing that happens mid-match.
  */
 export const PRESETS = {
-  walk:  { smooth: 0.20, stillFactor: 2.2, minMove: 3 },
-  run:   { smooth: 0.20, stillFactor: 2.2, minMove: 3 },
-  ride:  { smooth: 0.25, stillFactor: 2.2, minMove: 4 },
-  field: { smooth: 0.55, stillFactor: 0.9, minMove: 2 },
+  walk:  { smooth: 0.12, stillFactor: 1.5, minMove: 3, windowMs: 24000 },
+  run:   { smooth: 0.12, stillFactor: 1.5, minMove: 3, windowMs: 24000 },
+  ride:  { smooth: 0.12, stillFactor: 1.5, minMove: 4, windowMs: 24000 },
+  // A game is played inside a few dozen metres, so a long window would decide
+  // you were going nowhere — which, in the sense the window means, you are.
+  field: { smooth: 0.55, stillFactor: 0.9, minMove: 2, windowMs: 12000 },
 };
 
 export class TrackRecorder {
@@ -62,7 +64,7 @@ export class TrackRecorder {
   constructor(opts = {}) {
     const activity = opts.activity ?? 'run';
     const preset = PRESETS[activity] ?? PRESETS.run;
-    const { maxAccuracy = 35, windowMs = 16000,
+    const { maxAccuracy = 35, windowMs = preset.windowMs,
             minMove = preset.minMove, stillFactor = preset.stillFactor, smooth = preset.smooth } = opts;
     this.activity = activity;
     this.maxAccuracy = maxAccuracy;
@@ -143,12 +145,19 @@ export class TrackRecorder {
     this._lastFixT = Math.max(this._lastFixT ?? 0, t);
     if (acc > this.maxAccuracy) { this.rejected.accuracy++; return 'accuracy'; }
 
-    // A short window of raw fixes, kept whatever we decide about them. Drift is
+    // A window of raw fixes, kept whatever we decide about them. Drift is
     // a random walk: it wanders but it does not *go* anywhere, so over ten-odd
     // seconds it stays within a few metres of where it started while even a
     // slow walk has plainly left. Net displacement across the window separates
     // the two; comparing each fix with the one before it cannot, because single
     // steps of drift are the same size as single steps of walking.
+    //
+    // Its length is the thing to get right. Half the window of travel has to
+    // stand clearly above the scatter, and a stroll covers very little: at
+    // 0.8 m/s a sixteen second window separates the halves by six metres,
+    // which a phone reporting six metres of accuracy cannot be distinguished
+    // from. Twenty-four seconds is what it takes for a slow walk to be
+    // obviously going somewhere.
     this._win.push({ lat: fix.lat, lon: fix.lon, t });
     while (this._win.length > 1 && t - this._win[0].t > this.windowMs) this._win.shift();
     const span_s = (t - this._win[0].t) / 1000;
