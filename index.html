@@ -29,6 +29,38 @@
     .qr{flex-direction:column;align-items:flex-start;gap:20px;padding:20px}
     .qrimg{width:168px;height:168px}
   }
+  .rec-btn{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:#ffd9de;
+    background:rgba(244,63,94,.16);border:1px solid rgba(244,63,94,.5);border-radius:10px;
+    padding:9px 15px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;gap:7px}
+  .rec-btn:hover{background:rgba(244,63,94,.3)}
+  .rec-btn i{width:9px;height:9px;border-radius:50%;background:var(--hot);display:block}
+  #rec{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    background:rgba(5,8,12,.9);backdrop-filter:blur(8px);padding:20px}
+  #rec.on{display:flex}
+  .rec-card{width:min(420px,100%);padding:26px 26px 22px;display:flex;flex-direction:column;gap:18px}
+  .rec-live{display:flex;align-items:baseline;gap:10px}
+  .rec-dot{width:10px;height:10px;border-radius:50%;background:var(--hot);animation:rec-pulse 1.6s infinite}
+  @keyframes rec-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){.rec-dot{animation:none}}
+  .rec-state{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+  .rec-gps{margin-left:auto;font-size:11px;letter-spacing:.04em;color:var(--ink-3)}
+  .rec-time{font-size:46px;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+  .rec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+    border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);padding:14px 0}
+  .rec-grid div{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .rec-k{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+  .rec-v{font-size:19px;font-weight:620;font-variant-numeric:tabular-nums}
+  .rec-v small{font-size:10px;font-weight:500;color:var(--ink-2);margin-left:2px}
+  .rec-acts{display:flex;gap:6px;flex-wrap:wrap}
+  .rec-acts button{font:inherit;font-size:11.5px;color:var(--ink-2);background:rgba(255,255,255,.06);
+    border:1px solid transparent;border-radius:8px;padding:5px 11px;cursor:pointer}
+  .rec-acts button.on{color:#06202a;background:var(--accent);font-weight:560}
+  .rec-btns{display:flex;gap:9px}
+  .rec-btns button{flex:1;font:inherit;font-size:13px;font-weight:580;border-radius:10px;padding:11px;cursor:pointer;
+    border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:var(--ink)}
+  .rec-btns .pri{background:var(--hot);border-color:var(--hot);color:#fff}
+  .rec-btns button:disabled{opacity:.4;cursor:not-allowed}
+  .rec-note{font-size:11.5px;line-height:1.6;color:var(--ink-3)}
   .count{margin:34px 0 14px;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
   .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
   .cardwrap{position:relative}
@@ -72,7 +104,10 @@
       <h1>Route Library</h1>
       <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the walker in chase view.</p>
     </div>
-    <button class="add" id="add">＋ Add a GPX</button>
+    <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <button class="rec-btn" id="recbtn"><i></i>Record</button>
+      <button class="add" id="add">＋ Add a GPX</button>
+    </div>
   </header>
   <section class="qr rv-panel">
     <img class="qrimg" src="./exercise-QR-code.png" width="514" height="510" loading="lazy"
@@ -94,6 +129,33 @@
 </div>
 
 <input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
+<div id="rec">
+  <div class="rec-card rv-panel">
+    <div class="rec-live">
+      <span class="rec-dot" id="recdot"></span>
+      <span class="rec-state" id="recstate">recording</span>
+      <span class="rec-gps" id="recgps">waiting for GPS…</span>
+    </div>
+    <div class="rec-time" id="rectime">0:00</div>
+    <div class="rec-grid">
+      <div><span class="rec-k">Distance</span><span class="rec-v" id="recdist">0.00<small>km</small></span></div>
+      <div><span class="rec-k">Pace</span><span class="rec-v" id="recpace">—</span></div>
+      <div><span class="rec-k">Points</span><span class="rec-v" id="recpts">0</span></div>
+    </div>
+    <div class="rec-acts" id="recacts">
+      <button data-a="run" class="on">Run</button><button data-a="walk">Walk</button>
+      <button data-a="ride">Ride</button><button data-a="field">Field sport</button>
+    </div>
+    <div class="rec-btns">
+      <button id="recpause">Pause</button>
+      <button id="recstop" class="pri">Finish</button>
+      <button id="reccancel">Discard</button>
+    </div>
+    <p class="rec-note" id="recnote">Keep this screen open — a browser stops reporting position when the
+      tab goes to the background. The Android build will record with the screen off.</p>
+  </div>
+</div>
+
 <div id="drop"><div>Drop GPX files to build them</div></div>
 <div id="toast" class="rv-panel"></div>
 
@@ -101,6 +163,8 @@
 import { rampCss } from './src/terrain.js';
 import { parseGPX, analyze, profileSamples, formatDate } from './src/gpx.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
+import { TrackRecorder } from './src/recorder.js';
+import { browserGeo, replayGeo, geoAvailable } from './src/geo.js';
 
 const grid = document.getElementById('grid');
 const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -226,6 +290,136 @@ addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth <= 0) {
 addEventListener('drop', e => {
   e.preventDefault(); dragDepth = 0; dropEl.classList.remove('on');
   ingest(e.dataTransfer.files);
+});
+
+/* ---------- record ---------- */
+/**
+ * The record screen. The recorder does the thinking; this just starts a source
+ * of fixes, paints numbers twice a second, and hands the finished track to the
+ * same local-route store that drag-and-drop already uses.
+ *
+ * `?replay=<slug>` plays an existing route back through the real pipeline at
+ * 20x, which is the only way to exercise this from a desk.
+ */
+const recEl = document.getElementById('rec');
+let rec = null, source = null, ticker = null, activity = 'run';
+
+const mmss = s => {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + ':' + String(s % 60).padStart(2, '0');
+};
+const paceText = p => p == null ? '—'
+  : `${Math.floor(p / 60)}:${String(Math.round(p % 60)).padStart(2, '0')}<small>/km</small>`;
+
+function paint() {
+  if (!rec) return;
+  const s = rec.stats;
+  document.getElementById('rectime').textContent = mmss(s.elapsed_s);
+  document.getElementById('recdist').innerHTML = (s.distance_m / 1000).toFixed(2) + '<small>km</small>';
+  document.getElementById('recpace').innerHTML = paceText(s.pace_s_per_km);
+  document.getElementById('recpts').textContent = s.points;
+  const st = document.getElementById('recstate');
+  st.textContent = rec.state === 'paused' ? 'paused' : 'recording';
+  document.getElementById('recdot').style.background =
+    rec.state === 'paused' ? 'var(--ink-3)' : 'var(--hot)';
+}
+
+function startRecording(replaySlug) {
+  rec = new TrackRecorder({ activity });
+  rec.start();
+  const gps = document.getElementById('recgps');
+  const onFix = fix => {
+    const why = rec.addFix(fix);
+    gps.textContent = fix.accuracy > 35
+      ? `weak signal · ±${Math.round(fix.accuracy)} m`
+      : `±${Math.round(fix.accuracy)} m` + (why === 'still' ? ' · holding still' : '');
+    gps.style.color = fix.accuracy > 35 ? 'var(--warm)' : 'var(--ink-3)';
+  };
+  const onError = err => {
+    gps.textContent = err?.code === 1 ? 'permission denied' : (err?.message || 'no position');
+    gps.style.color = 'var(--hot)';
+  };
+
+  if (replaySlug) {
+    const entry = [...built, ...listLocalRoutes()].find(r => r.slug === replaySlug);
+    const file = entry && !entry.local ? './routes/' + entry.file : null;
+    document.getElementById('recnote').textContent = `Replaying ${entry ? entry.name : replaySlug} at 20×, through the real recorder.`;
+    (file ? fetch(file).then(r => r.text()).then(t => analyze(parseGPX(t)))
+          : Promise.resolve(entry.track)).then(track => {
+      const pts = track.lat.map((la, i) => [la, track.lon[i], track.ele[i],
+        (track.secs ? track.secs[i] : i) * 1000]);
+      source = replayGeo({ points: pts, onFix, onError, speed: 20, jitter: 4,
+        onEnd: () => { gps.textContent = 'replay finished'; } });
+      source.start();
+    }).catch(e => onError(e));
+  } else if (!geoAvailable()) {
+    onError(new Error('This browser has no geolocation'));
+  } else {
+    source = browserGeo({ onFix, onError });
+    source.start();
+  }
+  ticker = setInterval(paint, 500);
+  paint();
+  recEl.classList.add('on');
+}
+
+function closeRecorder() {
+  source?.stop(); source = null;
+  clearInterval(ticker); ticker = null;
+  recEl.classList.remove('on');
+  rec = null;
+}
+
+document.getElementById('recbtn').addEventListener('click', () => {
+  startRecording(new URLSearchParams(location.search).get('replay'));
+});
+document.getElementById('recacts').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  activity = b.dataset.a;
+  document.querySelectorAll('#recacts button').forEach(x => x.classList.toggle('on', x === b));
+  // switching sport before the first fix just restarts with the right filtering
+  if (rec && rec.points.length === 0) { rec = new TrackRecorder({ activity }); rec.start(); }
+});
+document.getElementById('recpause').addEventListener('click', () => {
+  if (!rec) return;
+  if (rec.state === 'paused') { rec.resume(); document.getElementById('recpause').textContent = 'Pause'; }
+  else { rec.pause(); document.getElementById('recpause').textContent = 'Resume'; }
+  paint();
+});
+// Discard asks twice rather than opening a dialog: confirm() does nothing in
+// some hosts, and throwing away a recorded run on one stray tap is unforgivable.
+let armed = false;
+document.getElementById('reccancel').addEventListener('click', e => {
+  if (rec && rec.points.length > 2 && !armed) {
+    armed = true;
+    e.target.textContent = 'Tap to confirm';
+    setTimeout(() => { armed = false; e.target.textContent = 'Discard'; }, 4000);
+    return;
+  }
+  armed = false;
+  document.getElementById('reccancel').textContent = 'Discard';
+  closeRecorder();
+});
+document.getElementById('recstop').addEventListener('click', () => {
+  if (!rec) return;
+  const finished = rec.stop();
+  source?.stop();
+  if (!finished || finished.points.length < 2) {
+    toast('Nothing recorded — no usable position fixes.');
+    closeRecorder();
+    return;
+  }
+  const when = new Date(finished.points[0][3]);
+  const name = `${activity[0].toUpperCase() + activity.slice(1)} · ${when.toLocaleDateString('en-US',
+    { day: 'numeric', month: 'short' })}`;
+  const gpx = rec.toGPX(name, { activity });
+  const track = analyze(parseGPX(gpx));
+  const entry = addLocalRoute(name + '.gpx', track, profileSamples(track, 96));
+  closeRecorder();
+  render();
+  toast(`Saved ${name} — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
+  setTimeout(() => { location.href = `./view.html?local=${encodeURIComponent(entry.slug)}`; }, 700);
 });
 
 render();
