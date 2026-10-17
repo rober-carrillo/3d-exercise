@@ -99,7 +99,7 @@ const haversine = (a, b) => {
  * cumulative distance, ascent/descent, bounding box, and a distance-decimated
  * copy of the track (full-resolution GPS traces are far denser than any screen).
  */
-export function analyze({ name, time = null, points, breaks = [] }, { targetPoints = 1400, smoothWindow = 9, gainThreshold = 1 } = {}) {
+export function analyze({ name, time = null, points, breaks = [] }, { targetPoints = 1400, smoothWindow = 31, gainThreshold = 5 } = {}) {
   if (points.length < 2) throw new Error('track has fewer than two points');
 
   // Nothing accumulates across a break. The gap between the last point before
@@ -113,7 +113,13 @@ export function analyze({ name, time = null, points, breaks = [] }, { targetPoin
     cum.push(cum[i - 1] + (isBreak.has(i) ? 0 : haversine(points[i - 1], points[i])));
   const total = cum[cum.length - 1];
 
-  // light moving average — raw barometric/GPS elevation is far too noisy to sum
+  // A heavy moving average, and a threshold to match. Satellite altitude is
+  // two or three times worse than the horizontal position, and summing it
+  // straight invents mountains: a dead-flat route with six metres of altitude
+  // noise reported four hundred and ninety-five metres of climbing, because
+  // every wobble upwards counted and every wobble down was ignored. Thirty-one
+  // samples of smoothing and a five metre threshold leave a flat route flat
+  // while keeping about nine tenths of a real hill.
   const raw = points.map(p => p[2]);
   const sm = raw.map((_, i) => {
     const lo = Math.max(0, i - (smoothWindow >> 1)), hi = Math.min(raw.length, i + (smoothWindow >> 1) + 1);
@@ -216,7 +222,7 @@ export function trackToGPX(track, { name = track.name, activity = 'other' } = {}
     `   </trkpt>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx creator="route3d" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx creator="Relieve" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
 ${t0 !== null ? ` <metadata>\n  <time>${iso(t0)}</time>\n </metadata>\n` : ''} <trk>
   <name>${esc(name || 'Route')}</name>
   <type>${esc(activity)}</type>

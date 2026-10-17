@@ -12,7 +12,14 @@
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
-const SKY = [0.043, 0.063, 0.086];
+/** The haze and clear colour come from the page's --sky token, so the scene follows light and dark mode. */
+function readSky() {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--sky').trim();
+  const m = /^#([0-9a-f]{6})$/i.exec(v);
+  if (!m) return [0.875, 0.898, 0.827];   // #dfe5d3, the light sheet haze
+  const n = parseInt(m[1], 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+}
 /** shortest signed angular difference, so the camera never spins the long way */
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** frame-rate independent easing */
@@ -48,7 +55,7 @@ function mul(o, a, b) {
 
 const RAMP_GLSL = `
 vec3 ramp(float t){t=clamp(t,0.0,1.0);
-  vec3 c0=vec3(0.133,0.827,0.933),c1=vec3(0.639,0.902,0.208),c2=vec3(0.984,0.749,0.141),c3=vec3(0.957,0.247,0.369);
+  vec3 c0=vec3(0.310,0.541,0.235),c1=vec3(0.831,0.647,0.078),c2=vec3(0.604,0.416,0.227),c3=vec3(0.784,0.063,0.180);
   if(t<0.35)return mix(c0,c1,t/0.35);
   if(t<0.70)return mix(c1,c2,(t-0.35)/0.35);
   return mix(c2,c3,(t-0.70)/0.30);}`;
@@ -61,6 +68,8 @@ export class Renderer {
             || canvas.getContext('webgl', { antialias: true, alpha: false });
     if (!gl) throw new Error('WebGL is not available in this browser');
     this.gl = gl;
+    this.sky = readSky();
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => { this.sky = readSky(); });
     const gl2 = !!(window.WebGL2RenderingContext && gl instanceof WebGL2RenderingContext);
     this.caps = { gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint') };
 
@@ -162,7 +171,7 @@ void main(){vec4 c=vCol;
     B.wall = { pos: this._buf(g.curtain.pos), col: this._buf(g.curtain.col), n: g.track.n * 2 };
     B.mk = {
       pos: gl.createBuffer(),
-      col: this._buf(new Float32Array([0.62, 0.90, 0.20, 1, 0.96, 0.25, 0.37, 1, 1, 1, 1, 1])),
+      col: this._buf(new Float32Array([0.31, 0.54, 0.24, 1, 0.78, 0.06, 0.18, 1, 1, 1, 1, 1])),
     };
     B.fig = { pos: gl.createBuffer(), col: gl.createBuffer(), n: 0 };
     this._figPos = new Float32Array(FIG_MAX * 3);
@@ -251,7 +260,7 @@ void main(){vec4 c=vCol;
    */
   poseWalker({ S, ph, quad, block, limb, frustum }) {
     const legA = Math.sin(ph) * 0.55, armA = Math.sin(ph + Math.PI) * 0.42;
-    const body = [0.58, 0.34, 0.94], skin = [0.66, 0.44, 0.98];   // purple, head a shade lighter
+    const body = [0.83, 0.65, 0.08], skin = [0.93, 0.78, 0.30];   // gold, head a shade lighter
 
     // legs, swinging from the hip
     const legW = 0.032 * S, hip = 0.36 * S;
@@ -298,8 +307,8 @@ void main(){vec4 c=vCol;
    */
   poseCyclist({ S, ph, quad, poly8, block }) {
     const B = S * 0.82;
-    const body = [0.58, 0.34, 0.94], skin = [0.66, 0.44, 0.98];
-    const frame = [0.13, 0.80, 0.92], rubber = [0.21, 0.24, 0.29];   // tyres light enough to read on dark ground
+    const body = [0.83, 0.65, 0.08], skin = [0.93, 0.78, 0.30];
+    const frame = [0.78, 0.06, 0.18], rubber = [0.21, 0.20, 0.16];   // tyres light enough to read on dark ground
 
     /** a box between two points in the x–z plane, `w` thick each way */
     const strut = (ax, az, bx, bz, y, w, col) => {
@@ -598,7 +607,7 @@ void main(){vec4 c=vCol;
       this._resize();
       const W = this.canvas.width, H = this.canvas.height;
       gl.viewport(0, 0, W, H);
-      gl.clearColor(SKY[0], SKY[1], SKY[2], 1);
+      gl.clearColor(this.sky[0], this.sky[1], this.sky[2], 1);
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       if (!this.g) return;
@@ -619,7 +628,7 @@ void main(){vec4 c=vCol;
       gl.uniform1f(pT.u.uHasTex, useTex);
       gl.uniform1f(pT.u.uHSpan, this.g.hSpan);
       gl.uniform3fv(pT.u.uLight, new Float32Array([Math.cos(0.86) * Math.cos(0.62), Math.sin(0.86) * Math.cos(0.62), Math.sin(0.62)]));
-      gl.uniform3fv(pT.u.uSky, new Float32Array(SKY));
+      gl.uniform3fv(pT.u.uSky, new Float32Array(this.sky));
       gl.uniform1f(pT.u.uFogNear, fogN); gl.uniform1f(pT.u.uFogFar, fogF);
       if (useTex) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texture); gl.uniform1i(pT.u.uTex, 0); }
       this._attr(pT, 'aPos', B.ter.pos, 3); this._attr(pT, 'aSlope', B.ter.slope, 2); this._attr(pT, 'aUv', B.ter.uv, 2);
@@ -630,7 +639,7 @@ void main(){vec4 c=vCol;
       gl.uniformMatrix4fv(pC.u.uMVP, false, this._MVP);
       gl.uniform1f(pC.u.uVex, this.state.vex);
       gl.uniform3fv(pC.u.uCam, eye);
-      gl.uniform3fv(pC.u.uSky, new Float32Array(SKY));
+      gl.uniform3fv(pC.u.uSky, new Float32Array(this.sky));
       gl.uniform1f(pC.u.uFogNear, fogN); gl.uniform1f(pC.u.uFogFar, fogF);
       gl.uniform1f(pC.u.uIsPoint, 0); gl.uniform1f(pC.u.uPointSize, 1);
       gl.disable(gl.BLEND);

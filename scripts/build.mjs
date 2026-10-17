@@ -17,7 +17,7 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
-const STATIC = ['index.html', 'view.html', 'src', 'routes', 'exercise-QR-code.png'];
+const STATIC = ['index.html', 'view.html', 'src', 'routes', 'brand', 'exercise-QR-code.png'];
 
 const run = promisify(execFile);
 
@@ -114,6 +114,7 @@ const esc = s => JSON.stringify(s).replace(/</g, '\\u003c');
 async function writeStandalone(route, track) {
   const bundle = await bundleModules(['gpx', 'terrain', 'renderer', 'viewer']);   // library.js is browser-storage only
   const css = await readFile(join(root, 'src', 'ui.css'), 'utf8');
+  const favicon = await readFile(join(root, 'brand', 'favicon.svg'), 'utf8');   // inlined: a single file can't load it
   const data = {
     name: track.name, time: track.time, stats: track.stats, bbox: track.bbox,
     lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist, secs: track.secs,
@@ -123,7 +124,8 @@ async function writeStandalone(route, track) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>${route.name} · 3D route</title>
+<title>${route.name} · Relieve</title>
+<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(favicon.trim())}">
 <style>
 ${css}
 html,body{height:100%;overflow:hidden}

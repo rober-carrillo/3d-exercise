@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Survey sheet palette, shared with src/ui.css -->
+    <color name="colorPrimary">#4F7A45</color>
+    <color name="colorPrimaryDark">#3F6337</color>
+    <color name="colorAccent">#C8102E</color>
+    <color name="route_crimson">#C8102E</color>
+    <color name="sheet">#E6EAD6</color>
+    <color name="splash_background">#E6EAD6</color>
+</resources>

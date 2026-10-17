@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The sheet at night, as in src/ui.css. The icon keeps its own light circle. -->
+    <color name="splash_background">#15180F</color>
+</resources>

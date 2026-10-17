@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon layer (Android 13+): one colour, the system tints it. Generated from brand/relieve-mark.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.66" android:scaleY="0.66" android:translateX="21.66" android:translateY="15.98">
+        <path android:pathData="M18,62 C14,40 34,20 56,22 C78,24 90,44 84,62 C78,80 54,86 38,82 C26,79 20,72 18,62Z" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.4"/>
+        <path android:pathData="M30,60 C28,45 42,32 57,34 C72,36 78,50 73,62 C68,72 52,75 42,72 C34,70 31,66 30,60Z" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.4"/>
+        <path android:pathData="M43,56 C42,48 50,43 57,45 C64,47 66,54 62,59 C58,64 49,64 45,61 C44,60 43,58 43,56Z" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.4"/>
+        <path android:pathData="M50,95 C49,88 38.77,81.83 28.77,77.83" android:strokeColor="#FFFFFFFF" android:strokeWidth="4.6" android:strokeLineCap="round"/>
+        <path android:pathData="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53" android:strokeColor="#FFFFFFFF" android:strokeWidth="4.6" android:strokeLineCap="round"/>
+        <path android:pathData="M48,53 A6,6 0 1,0 60,53 A6,6 0 1,0 48,53Z" android:fillColor="#FFFFFFFF"/>
+    </group>
+</vector>

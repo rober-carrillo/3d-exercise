@@ -73,8 +73,17 @@ export function pickZoom(frame, zHi, zLo, maxTiles) {
   return null;
 }
 
-/** Stitch a tile grid into one canvas. Missing tiles are skipped, never fatal. */
-export function loadTiles(spec, url, onTick, timeout = 20000) {
+/**
+ * Stitch a tile grid into one canvas.
+ *
+ * Tiles are retried before being given up on. A phone that has just come off
+ * wifi onto a weak cell signal drops requests in bursts, and a single failure
+ * used to mean that tile was simply absent for the life of the scene — which
+ * is how a route gets drawn over a coloured gradient instead of a map. The
+ * result reports how many arrived so the caller can decide whether that is
+ * good enough to show.
+ */
+export function loadTiles(spec, url, onTick, timeout = 20000, attempts = 3) {
   const cv = document.createElement('canvas');
   cv.width = spec.nx * 256; cv.height = spec.ny * 256;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
@@ -82,18 +91,30 @@ export function loadTiles(spec, url, onTick, timeout = 20000) {
   const jobs = [];
   for (let x = spec.x0; x <= spec.x1; x++) for (let y = spec.y0; y <= spec.y1; y++) {
     jobs.push(new Promise(res => {
-      const im = new Image();
-      im.crossOrigin = 'anonymous';
-      let settled = false;
-      const done = good => {
-        if (settled) return; settled = true;
-        if (good) { try { ctx.drawImage(im, (x - spec.x0) * 256, (y - spec.y0) * 256); ok++; } catch {} }
-        onTick && onTick(); res();
+      let tries = 0;
+      const attempt = () => {
+        const im = new Image();
+        im.crossOrigin = 'anonymous';
+        let settled = false;
+        const done = good => {
+          if (settled) return; settled = true;
+          if (good) {
+            try { ctx.drawImage(im, (x - spec.x0) * 256, (y - spec.y0) * 256); ok++; } catch {}
+            onTick && onTick(); res();
+            return;
+          }
+          if (++tries < attempts) {
+            // back off a little; a burst of failures usually means the radio
+            // is busy rather than the tile being missing
+            setTimeout(attempt, 400 * tries);
+          } else { onTick && onTick(); res(); }
+        };
+        im.onload = () => done(true);
+        im.onerror = () => done(false);
+        setTimeout(() => done(false), timeout);
+        im.src = url(spec.z, x, y) + (tries ? `${url(spec.z, x, y).includes('?') ? '&' : '?'}retry=${tries}` : '');
       };
-      im.onload = () => done(true);
-      im.onerror = () => done(false);
-      setTimeout(() => done(false), timeout);
-      im.src = url(spec.z, x, y);
+      attempt();
     }));
   }
   return Promise.all(jobs).then(() => ({ cv, ctx, ok, total: spec.nx * spec.ny, spec, w: cv.width, h: cv.height }));
@@ -134,7 +155,8 @@ export function idwSampler(track, frame) {
 }
 
 /** Elevation ramp shared by the ribbon, the profile and the legend. */
-const STOPS = [[0, 34, 211, 238], [0.35, 163, 230, 53], [0.70, 251, 191, 36], [1, 244, 63, 94]];
+// Relief-map tints: forest green low, gold, brown, crimson at the top. Keep in step with RAMP_GLSL and .rv-ramp.
+const STOPS = [[0, 79, 138, 60], [0.35, 212, 165, 20], [0.70, 154, 106, 58], [1, 200, 16, 46]];
 export function ramp(t) {
   t = clamp(t, 0, 1);
   for (let i = 0; i < STOPS.length - 1; i++) {
@@ -200,7 +222,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
 
   // side walls, so the terrain reads as a solid block rather than paper
   const sp = [], sc = [], base = -fit(Math.max(120, hSpan * 0.35), 0.06);
-  const top = [0.055, 0.075, 0.10], bot = [0.016, 0.024, 0.035];
+  const top = [0.43, 0.31, 0.17], bot = [0.22, 0.16, 0.09];      // soil brown, like the cut edge of a relief model
   const put = (x, y, z, c) => { sp.push(x, y, z); sc.push(c[0], c[1], c[2], 1); };
   const edge = (k1, k2) => {
     const x1 = pos[k1 * 3], y1 = pos[k1 * 3 + 1], z1 = pos[k1 * 3 + 2];
@@ -335,7 +357,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     wp[i * 6 + 3] = tx[i]; wp[i * 6 + 4] = ty[i]; wp[i * 6 + 5] = 0;
     for (const k of [0, 4]) {
       rc[i * 8 + k] = c[0]; rc[i * 8 + k + 1] = c[1]; rc[i * 8 + k + 2] = c[2]; rc[i * 8 + k + 3] = 1;
-      oc[i * 8 + k] = 0.03; oc[i * 8 + k + 1] = 0.045; oc[i * 8 + k + 2] = 0.07; oc[i * 8 + k + 3] = 1;
+      oc[i * 8 + k] = 0.153; oc[i * 8 + k + 1] = 0.149; oc[i * 8 + k + 2] = 0.114; oc[i * 8 + k + 3] = 1;
     }
     wc[i * 8] = c[0]; wc[i * 8 + 1] = c[1]; wc[i * 8 + 2] = c[2]; wc[i * 8 + 3] = 0.42;
     wc[i * 8 + 4] = c[0]; wc[i * 8 + 5] = c[1]; wc[i * 8 + 6] = c[2]; wc[i * 8 + 7] = 0.02;

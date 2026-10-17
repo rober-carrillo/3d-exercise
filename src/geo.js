@@ -228,3 +228,46 @@ export async function notificationState() {
 export function pickGeo(opts) {
   return nativeGeoAvailable() ? nativeGeo(opts) : browserGeo(opts);
 }
+
+/**
+ * Get the receiver warm before anyone presses Record.
+ *
+ * A GPS that has been idle takes tens of seconds to go from a rough
+ * cell-tower guess to a real fix, and the first stretch of a route is exactly
+ * where that shows: a scatter of wild points before the track settles down.
+ * Holding a watch open from the moment the app is opened means the receiver
+ * already has satellites by the time anyone is ready to start.
+ *
+ * It asks for nothing. If the location permission has not been granted yet
+ * this does nothing at all rather than throwing a prompt at someone who has
+ * only just opened the app — they will be asked when they press Record, which
+ * is the moment it makes sense to ask.
+ */
+export function warmUp({ onAccuracy, maxMs = 10 * 60 * 1000 } = {}) {
+  let id = null, timer = null, best = Infinity;
+  const stop = () => {
+    if (id !== null) { try { navigator.geolocation.clearWatch(id); } catch {} id = null; }
+    if (timer) { clearTimeout(timer); timer = null; }
+  };
+
+  (async () => {
+    if (!geoAvailable()) return;
+    try {
+      // only if it is already ours; never prompt from here
+      const st = await navigator.permissions?.query?.({ name: 'geolocation' });
+      if (st && st.state !== 'granted') return;
+    } catch { return; }           // no Permissions API: do not risk a prompt
+    id = navigator.geolocation.watchPosition(
+      p => {
+        best = Math.min(best, p.coords.accuracy ?? Infinity);
+        onAccuracy?.(p.coords.accuracy ?? null, best);
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 },
+    );
+    // a receiver left running all afternoon is a flat battery
+    timer = setTimeout(stop, maxMs);
+  })();
+
+  return { stop, best: () => best };
+}

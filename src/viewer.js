@@ -15,6 +15,31 @@ import {
 } from './terrain.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
+
+/** How long the replay should last, in seconds at 1x. */
+const FLY = { min: 5, max: 45, short_s: 5 * 60, long_s: 60 * 60 };
+
+/**
+ * A fixed forty-five seconds suited a long hike and made nonsense of a short
+ * one: twenty minutes round a park took as long to watch as a day in the
+ * mountains, so the figure crawled. The replay now lasts somewhere between
+ * five and forty-five seconds depending on how long the outing took — the
+ * floor for anything under five minutes, the ceiling for anything over an
+ * hour, and a straight line between.
+ *
+ * It is the *moving* time that counts where there is one, since the replay
+ * skips pauses rather than sitting through them. A track with no timestamps
+ * has no duration to go on and keeps the full forty-five seconds.
+ */
+function flyDurationFor(track) {
+  const s = track.stats || {};
+  const recorded = s.moving_s ?? s.duration_s;
+  if (!recorded || !isFinite(recorded)) return FLY.max;
+  if (recorded <= FLY.short_s) return FLY.min;
+  if (recorded >= FLY.long_s) return FLY.max;
+  const t = (recorded - FLY.short_s) / (FLY.long_s - FLY.short_s);
+  return FLY.min + (FLY.max - FLY.min) * t;
+}
 const fmt = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 /** first index whose value reaches `v`, in a non-decreasing array */
 const bisect = (arr, v) => {
@@ -32,7 +57,7 @@ const TEMPLATE = `
     <h1 class="rv-name">—</h1><span class="rv-caret">▾</span>
   </button>
   <div class="rv-fold">
-  <div class="rv-sub">3D route</div>
+  <div class="rv-sub">Relieve</div>
   <div class="rv-stats">
     <div><span class="rv-k">Distance</span><span class="rv-v rv-s-dist">—</span></div>
     <div><span class="rv-k">Ascent</span><span class="rv-v rv-s-gain">—</span></div>
@@ -95,7 +120,7 @@ export class RouteViewer {
   constructor(opts) {
     this.opts = Object.assign({
       imagery: 'esri',        // 'esri' | 'osm' | false
-      flyDuration: 45,        // seconds for the full route at 1×
+      flyDuration: null,      // seconds for the full route at 1×; derived below
       satMaxTiles: 8,
       demMaxTiles: 4,
       vex: 1,
@@ -115,6 +140,27 @@ export class RouteViewer {
   }
 
   msg(t) { const n = this.$('msg'); if (n) n.textContent = t; }
+
+  /**
+   * Hold the loading screen and let the person choose. Resolves true if they
+   * want another go at the imagery, false to carry on without it.
+   */
+  offerRetry(share) {
+    const msg = this.$('msg'), bar = this.mount.querySelector('.rv-bar');
+    if (!msg) return Promise.resolve(false);
+    if (bar) bar.style.display = 'none';
+    msg.innerHTML = (share > 0
+        ? `Only part of the map arrived (${Math.round(share * 100)}%).`
+        : 'The map imagery did not load.')
+      + ' It needs a connection the first time a route is opened.'
+      + '<span class="rv-choice"><button type="button" class="rv-again">Try again</button>'
+      + '<button type="button" class="rv-skip">Show the route anyway</button></span>';
+    return new Promise(resolve => {
+      const done = v => { if (bar) bar.style.display = ''; resolve(v); };
+      msg.querySelector('.rv-again').addEventListener('click', () => done(true), { once: true });
+      msg.querySelector('.rv-skip').addEventListener('click', () => done(false), { once: true });
+    });
+  }
   tick() {
     this.progress.done++;
     const i = this.mount.querySelector('.rv-bar i');
@@ -146,6 +192,7 @@ export class RouteViewer {
     this.$('lg-lo').textContent = fmt(s.ele_min) + ' m';
     this.$('lg-hi').textContent = fmt(s.ele_max) + ' m';
     if (o.backHref) { const b = this.$('back'); b.href = o.backHref; b.hidden = false; }
+    this.flyDuration = o.flyDuration ?? flyDurationFor(track);
     this.buildProfile();
     this.buildPace();
 
@@ -181,6 +228,25 @@ export class RouteViewer {
       this.msg('imagery unavailable — trying map tiles…');
       const alt = await loadTiles(satSpec, TILES.osm.url, null);
       if (alt.ok) { sat = alt; imageryLabel = TILES.osm.label; }
+    }
+
+    // Enough of the map, or none of it? A scene with no imagery falls back to
+    // a coloured gradient, which looks like a rendering fault rather than a
+    // network one — and on a phone that has just walked out of wifi it is
+    // always a network one. Rather than present that as the finished article,
+    // stop and offer the two things worth offering: try again, or go on
+    // without it. Waiting forever on a train with no signal is not a kindness.
+    if (satSpec) {
+      const share = sat.total ? sat.ok / sat.total : 0;
+      if (share < 0.5) {
+        const again = await this.offerRetry(share);
+        if (again) {
+          this.msg('fetching satellite imagery…');
+          this.progress = { done: 0, total: satSpec.nx * satSpec.ny };
+          const retry = await loadTiles(satSpec, TILES[o.imagery].url, () => this.tick(), 25000, 4);
+          if (retry.ok > sat.ok) sat = retry;
+        }
+      }
     }
 
     this.msg('shaping terrain…');
@@ -324,7 +390,7 @@ export class RouteViewer {
     if (!this.play) return;
     // the clock always runs evenly — the flight lasts flyDuration whichever
     // pace is on; what changes is where along the route that clock points
-    this.playT += dt * this.speed / this.opts.flyDuration;
+    this.playT += dt * this.speed / this.flyDuration;
     if (this.playT >= 1) { this.playT = 1; this.setPlay(false); }
     this.scrub(this.distFrac(this.playT), true);
     this.cadence();
@@ -433,7 +499,7 @@ export class RouteViewer {
     const defs = document.createElementNS(SVGNS, 'defs');
     defs.innerHTML = `<linearGradient id="rv-pg" x1="0" x2="1">${stops}</linearGradient>
       <linearGradient id="rv-pf" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(34,211,238,.30)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient>`;
+        <stop offset="0%" stop-color="rgba(79,122,69,.30)"/><stop offset="100%" stop-color="rgba(79,122,69,0)"/></linearGradient>`;
     svg.appendChild(defs);
     const mk = (tag, at) => {
       const n = document.createElementNS(SVGNS, tag);
@@ -442,8 +508,8 @@ export class RouteViewer {
     };
     mk('path', { d: d + `L${W} ${H} L0 ${H} Z`, fill: 'url(#rv-pf)' });
     mk('path', { d, fill: 'none', stroke: 'url(#rv-pg)', 'stroke-width': 2, 'stroke-linejoin': 'round' });
-    this._cursorLine = mk('line', { x1: 0, y1: 0, x2: 0, y2: H, stroke: 'rgba(255,255,255,.45)', 'stroke-width': 1 });
-    this._cursorDot = mk('circle', { cx: 0, cy: 0, r: 3.6, fill: '#fff', stroke: '#22d3ee', 'stroke-width': 2 });
+    this._cursorLine = mk('line', { x1: 0, y1: 0, x2: 0, y2: H, style: 'stroke:var(--ink-3)', 'stroke-width': 1 });
+    this._cursorDot = mk('circle', { cx: 0, cy: 0, r: 3.6, fill: '#fff', stroke: '#c8102e', 'stroke-width': 2 });
     svg.style.cursor = 'crosshair';
     svg.addEventListener('pointermove', e => {
       const box = svg.getBoundingClientRect();

@@ -136,11 +136,13 @@ public class RecordingService extends Service implements LocationListener {
                 .setContentTitle(line1)
                 .setContentText(line2)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                // tints the icon and app name in the shade with the trail crimson
+                .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.route_crimson))
                 .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | immutable))
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 // show the distance and the time on the lock screen itself,
-                // rather than "Route3D: contents hidden"
+                // rather than "Relieve: contents hidden"
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setShowWhen(false)
