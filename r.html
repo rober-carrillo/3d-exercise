@@ -3,10 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<!-- This page is reached at /r/<token>, which the host rewrites to /r. The
+     browser knows nothing of that rewrite: it resolves every relative URL
+     against /r/<token>/, so the scripts and config 404 and the page sits on
+     its loading message for ever. Anchoring to the root fixes all of them at
+     once, and costs nothing anywhere else since the app is served from one. -->
+<base href="/">
 <title>A shared route · Salpicón!</title>
 <meta name="description" content="Somebody shared a route with you.">
-<link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./src/ui.css">
+<link rel="icon" href="/brand/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/src/ui.css">
 <style>
   html,body{height:100%;overflow:hidden}
   .msg{display:flex;min-height:100%;align-items:center;justify-content:center;padding:24px}
