@@ -17,7 +17,7 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
-const STATIC = ['index.html', 'view.html', 'dash.html', 'src', 'routes', 'brand'];
+const STATIC = ['index.html', 'view.html', 'dash.html', 'r.html', 'src', 'routes', 'brand'];
 
 const run = promisify(execFile);
 
@@ -164,13 +164,41 @@ routes.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 // Runtime config. The key is injected from the environment at build time
 // (Vercel → Settings → Environment Variables) so it never sits in a public
 // repository; with none set the viewer stays on the open tile endpoint.
+/** The first of these environment variables that is actually set. */
+const firstOf = (...names) => {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v && v.trim()) return v.trim();
+  }
+  return null;
+};
+
+/**
+ * A publishable key is safe in a browser; a service-role key is not — it
+ * bypasses row-level security completely. They are easy to confuse because
+ * both are long strings in the same settings page, so the build refuses
+ * rather than shipping one to every visitor.
+ */
+const guard = firstOf('SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY',
+                      'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
+if (guard && (guard.startsWith('sb_secret_') || guard.includes('service_role'))) {
+  throw new Error('That looks like a Supabase SECRET key. It bypasses row-level security and must never '
+    + 'reach the browser — use the publishable key instead.');
+}
+
 await writeFile(join(OUT, 'config.json'), JSON.stringify({
   esriKey: process.env.ESRI_API_KEY ?? null,
   // Both are meant to be public: the publishable key names the project, and
   // row-level security decides what any request may see. They come from the
   // environment so the repository, which is public, never carries them.
-  supabaseUrl: process.env.SUPABASE_URL ?? null,
-  supabaseKey: process.env.SUPABASE_PUBLISHABLE_KEY ?? null,
+  // Vercel's Supabase integration injects a whole set of variables under
+  // several names, so take the first that turns up. The service-role key is
+  // deliberately not among them and never will be: it bypasses row-level
+  // security entirely, and this file is served to every browser that opens
+  // the app.
+  supabaseUrl: firstOf('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'VITE_SUPABASE_URL'),
+  supabaseKey: firstOf('SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY',
+                       'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
 }));
 if (process.env.ESRI_API_KEY) console.log('  · imagery: licensed Esri endpoint (key from ESRI_API_KEY)');
 if (process.env.SUPABASE_URL) console.log('  · accounts: Supabase configured');

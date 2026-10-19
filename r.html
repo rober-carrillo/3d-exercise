@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>A shared route · Salpicón!</title>
+<meta name="description" content="Somebody shared a route with you.">
+<link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./src/ui.css">
+<style>
+  html,body{height:100%;overflow:hidden}
+  .msg{display:flex;min-height:100%;align-items:center;justify-content:center;padding:24px}
+  .msg .card{max-width:430px;padding:28px;display:flex;flex-direction:column;gap:12px}
+  .msg h1{margin:0;font-size:20px;font-weight:650;letter-spacing:-.02em}
+  .msg p{margin:0;font-size:13.5px;line-height:1.65;color:var(--ink-2)}
+  .msg a.cta{align-self:flex-start;margin-top:6px;font-size:12.5px;font-weight:560;color:#fff;
+    background:var(--accent);border-radius:10px;padding:9px 15px;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="msg" id="msg">
+  <div class="card rv-panel">
+    <h1>Opening a shared route…</h1>
+    <p>Fetching it from the link you followed.</p>
+  </div>
+</div>
+
+<script type="module">
+import { RouteViewer } from './src/viewer.js';
+import { createClient } from './src/supabase.js';
+import { createCloud } from './src/cloud.js';
+
+/**
+ * A route somebody shared.
+ *
+ * The whole point is that this works for a person with no account and no app:
+ * a link in a message, opened on whatever phone it lands on. So nothing here
+ * asks anyone to sign in, and the only thing it knows is the token out of the
+ * URL — which is exactly what the database is prepared to answer, through a
+ * function that returns a route only when its owner chose to share it.
+ *
+ * The token arrives either as a tidy path (`/r/<token>`, rewritten by the
+ * host) or as a query (`?t=<token>`) when there is no rewrite in front.
+ */
+const card = (title, body, cta) => {
+  document.getElementById('msg').innerHTML =
+    `<div class="card rv-panel"><h1>${title}</h1><p>${body}</p>` +
+    (cta ? `<a class="cta" href="./">${cta}</a>` : '') + `</div>`;
+};
+
+const params = new URLSearchParams(location.search);
+const fromPath = location.pathname.match(/\/r\/([0-9a-f-]{36})/i);
+const token = params.get('t') || (fromPath ? fromPath[1] : null);
+
+if (!token) {
+  card('That link is incomplete', 'It is missing the part that identifies the route. Ask for the link again.', 'Open Salpicón!');
+} else {
+  let config = null;
+  try { config = await fetch('./config.json').then(r => (r.ok ? r.json() : null)); } catch {}
+
+  if (!config?.supabaseUrl || !config?.supabaseKey) {
+    card('Shared routes are not set up here',
+      'This copy of the app has no database behind it, so it cannot open a shared link.', 'Open Salpicón!');
+  } else {
+    try {
+      const cloud = createCloud(createClient(config.supabaseUrl, config.supabaseKey));
+      const shared = await cloud.byToken(token);
+      if (!shared) {
+        // One message for both cases on purpose: saying "that route exists but
+        // is private" would confirm the existence of something to anybody who
+        // guessed, and a withdrawn link should look the same as a wrong one.
+        card('That link does not open anything',
+          'It may have been withdrawn by the person who shared it, or the address may be wrong.',
+          'Open Salpicón!');
+      } else {
+        document.title = `${shared.name} · Salpicón!`;
+        document.getElementById('msg').remove();
+        document.body.style.overflow = 'hidden';
+        window.viewer = new RouteViewer({
+          mount: document.body,
+          track: shared.track,
+          name: shared.name,
+          date: shared.date,
+          backHref: './',
+        });
+      }
+    } catch (err) {
+      card('Could not open that route',
+        /failed to fetch|networkerror/i.test(String(err?.message))
+          ? 'No connection to the server. Try again when you are back online.'
+          : 'Something went wrong fetching it. Try the link again in a moment.',
+        'Open Salpicón!');
+    }
+  }
+}
+</script>
+</body>
+</html>
