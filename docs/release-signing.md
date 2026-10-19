@@ -62,35 +62,39 @@ git tag v0.1.0 && git push origin v0.1.0
 Without them the workflow falls back to a debug build, so a fork still goes
 green. Play needs the `.aab`; the `.apk` is what you sideload to test.
 
-## Wire the signing config
+## The signing config is already wired
 
-Gradle needs telling where the key is. In `android/app/build.gradle`, inside
-`android { }`:
+`android/app/build.gradle` reads all four values from the environment, which is
+what keeps the passwords out of the repository: the workflow sets them, and on
+your machine they are simply unset, so a local release build comes out unsigned
+and a local debug build is unaffected.
 
-```groovy
-signingConfigs {
-    release {
-        def ks = System.getenv("SALPICON_KEYSTORE")
-        if (ks) {
-            storeFile file(ks)
-            storePassword System.getenv("SALPICON_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("SALPICON_KEY_ALIAS")
-            keyPassword System.getenv("SALPICON_KEY_PASSWORD")
-        }
-    }
-}
-buildTypes {
-    release {
-        signingConfig signingConfigs.release
-        minifyEnabled false
-    }
-}
-```
+It fails loudly rather than quietly in the one case that matters. If
+`SALPICON_KEYSTORE` is set but points at nothing, the build stops; and CI
+verifies the finished `.aab` and `.apk` really carry a signature before
+uploading them, because an unsigned release assembles perfectly happily and
+only gets rejected later, at the Play console, a long way from the commit that
+caused it.
 
-Reading from the environment rather than a properties file is what keeps the
-passwords out of the repository: the workflow sets those four variables, and
-locally they are simply unset, so a local release build is unsigned and a local
-debug build is unaffected.
+## Version numbers come from the tag
+
+Nothing in the repository records a version. `versionName` and `versionCode`
+are both derived from the tag you push:
+
+| Tag | `versionName` | `versionCode` |
+|---|---|---|
+| `v0.1.0` | `0.1.0` | `100` |
+| `v0.2.0` | `0.2.0` | `200` |
+| `v1.2.3` | `1.2.3` | `10203` |
+
+`versionCode` is `major × 10000 + minor × 100 + patch`, so it rises with the
+version on its own. This matters more than it looks: Play refuses an upload
+whose `versionCode` it has seen before, for ever, and a number edited by hand
+is a number that eventually gets used twice.
+
+A tag that is not `vMAJOR.MINOR.PATCH` fails the build rather than guessing. A
+run started by hand has no tag at all, so it calls itself `0.0.0` and takes the
+run number as its code — installable, never uploadable.
 
 ## Before the first upload
 

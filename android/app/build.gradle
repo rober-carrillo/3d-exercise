@@ -1,5 +1,32 @@
 apply plugin: 'com.android.application'
 
+/**
+ * Release signing and the version number both arrive through the environment.
+ *
+ * The keystore is the one thing that cannot be replaced: Play ties the listing
+ * to whatever signed the first upload, so it lives outside the repository and
+ * reaches a build as a path handed over by CI. The version comes the same way,
+ * derived from the git tag, because a number edited by hand is a number that
+ * eventually gets uploaded twice.
+ *
+ *   SALPICON_VERSION_NAME        "0.1.0", from the v0.1.0 tag
+ *   SALPICON_VERSION_CODE        100, derived from the same tag
+ *   SALPICON_KEYSTORE            path to the decoded release.jks
+ *   SALPICON_KEYSTORE_PASSWORD   store password
+ *   SALPICON_KEY_ALIAS           key alias inside the store
+ *   SALPICON_KEY_PASSWORD        key password
+ *
+ * All six are unset on a developer machine. A local build then calls itself
+ * 0.0.0-dev and comes out unsigned, which is what a debug build wants.
+ */
+def envOr = { String name, String fallback -> System.getenv(name)?.trim() ?: fallback }
+def keystorePath = envOr('SALPICON_KEYSTORE', null)
+def hasKeystore = keystorePath != null && file(keystorePath).exists()
+if (keystorePath != null && !hasKeystore) {
+    throw new GradleException("SALPICON_KEYSTORE points at ${keystorePath}, which does not exist. "
+        + "A release built without it would be unsigned and Play would reject it.")
+}
+
 android {
     namespace = "app.salpicon"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +34,8 @@ android {
         applicationId "app.salpicon"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode envOr('SALPICON_VERSION_CODE', '1') as int
+        versionName envOr('SALPICON_VERSION_NAME', '0.0.0-dev')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +43,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasKeystore) {
+                storeFile file(keystorePath)
+                storePassword envOr('SALPICON_KEYSTORE_PASSWORD', '')
+                keyAlias envOr('SALPICON_KEY_ALIAS', '')
+                keyPassword envOr('SALPICON_KEY_PASSWORD', '')
+            }
+        }
+    }
     buildTypes {
         release {
+            // Only point at the config when there is a key behind it. An empty
+            // signingConfig makes Gradle fail assembleRelease outright, which
+            // would break the build for anyone without the secrets — a fork,
+            // or this machine.
+            signingConfig hasKeystore ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

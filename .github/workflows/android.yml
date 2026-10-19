@@ -41,6 +41,36 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The tag is the only place a version number is written down. Deriving
+      # both figures from it means they cannot drift apart, and that nobody
+      # uploads versionCode 1 twice — which Play rejects, permanently, for
+      # that number.
+      #
+      #   v0.1.0  ->  versionName 0.1.0   versionCode 100
+      #   v1.2.3  ->  versionName 1.2.3   versionCode 10203
+      #
+      # A build started by hand has no tag, so it stays on 0.0.0 and takes the
+      # run number as its code: installable, never uploadable.
+      - name: Work out the version
+        id: ver
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            name="${GITHUB_REF_NAME#v}"
+            if ! printf '%s' "$name" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH, so no version can be derived from it"
+              exit 1
+            fi
+            IFS=. read -r a b c <<< "$name"
+            code=$(( a * 10000 + b * 100 + c ))
+            [ "$code" -gt 0 ] || { echo "::error::v0.0.0 has no usable versionCode"; exit 1; }
+          else
+            name="0.0.0"
+            code="${{ github.run_number }}"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "building $name (versionCode $code)"
+
       - name: Build the web app
         run: |
           npm ci
@@ -73,16 +103,45 @@ jobs:
           SALPICON_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           SALPICON_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           SALPICON_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SALPICON_VERSION_NAME: ${{ steps.ver.outputs.name }}
+          SALPICON_VERSION_CODE: ${{ steps.ver.outputs.code }}
         run: ./gradlew bundleRelease assembleRelease
+
+      # Check the signature here rather than finding out at the Play console.
+      # An unsigned release still assembles and still uploads as an artifact,
+      # so without this the first sign that the signing config is wrong is a
+      # rejected upload — which is a long way from the commit that caused it.
+      - name: Check the release really is signed
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          set -eu
+          aab=$(find android/app/build/outputs/bundle -name '*.aab' | head -1)
+          apk=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          [ -n "$aab" ] || { echo "::error::no .aab was produced"; exit 1; }
+          [ -n "$apk" ] || { echo "::error::no .apk was produced"; exit 1; }
+          echo "verifying $aab"
+          jarsigner -verify -strict "$aab" > /dev/null
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -r | head -1)
+          if [ -n "$signer" ]; then
+            echo "verifying $apk"
+            "$signer" verify --print-certs "$apk"
+          else
+            echo "no apksigner on this image; verified the bundle only"
+          fi
+          unzip -p "$apk" AndroidManifest.xml > /dev/null || true
+          echo "signed: ${{ steps.ver.outputs.name }} (versionCode ${{ steps.ver.outputs.code }})"
 
       - name: Assemble debug
         if: steps.signing.outputs.signed != 'true'
         working-directory: android
+        env:
+          SALPICON_VERSION_NAME: ${{ steps.ver.outputs.name }}
+          SALPICON_VERSION_CODE: ${{ steps.ver.outputs.code }}
         run: ./gradlew assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
-          name: salpicon-android
+          name: salpicon-android-${{ steps.ver.outputs.name }}
           if-no-files-found: error
           path: |
             android/app/build/outputs/apk/**/*.apk
