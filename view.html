@@ -21,9 +21,29 @@ import { getLocalRoute } from './src/library.js';
 
 const params = new URLSearchParams(location.search);
 const localSlug = params.get('local');
+const cloudId = params.get('cloud');
 const fail = html => { document.body.innerHTML = `<p class="msg">${html}</p>`; };
 
-if (localSlug) {
+if (cloudId) {
+  // a route that lives in the account; row-level security decides whether this
+  // request is allowed to see it, so a wrong id simply finds nothing
+  const { ready, enabled, routes } = await import('./src/account.js');
+  await ready();
+  if (!enabled()) {
+    fail('This copy of the app has no account database behind it.');
+  } else {
+    try {
+      const entry = await routes().route(cloudId);
+      document.title = entry.name + ' · 3D route';
+      window.viewer = new RouteViewer({
+        mount: document.body, track: entry.track, name: entry.name, backHref: './', date: entry.date,
+      });
+    } catch (err) {
+      fail(`That route could not be opened. It may have been deleted, or you may need to
+        <a href="./">sign in</a> again.`);
+    }
+  }
+} else if (localSlug) {
   // a route this browser added — its data lives in localStorage, not the build
   const entry = getLocalRoute(localSlug);
   if (!entry) {

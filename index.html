@@ -29,6 +29,18 @@
     padding:9px 15px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;gap:7px}
   .rec-btn:hover{background:var(--route-2)}
   .rec-btn i{width:9px;height:9px;border-radius:50%;background:var(--on-accent);display:block}
+  #share{position:fixed;inset:0;z-index:61;display:none;align-items:center;justify-content:center;
+    background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
+  #share.on{display:flex}
+  .share-opts{display:flex;flex-direction:column;gap:2px}
+  .share-opts label{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:10px;cursor:pointer}
+  .share-opts label:hover{background:var(--fill)}
+  .share-opts input{margin-top:3px;flex:0 0 auto}
+  .share-opts span{font-size:12.5px;line-height:1.5;color:var(--ink-2)}
+  .share-opts b{display:block;font-size:14px;color:var(--ink);font-weight:600}
+  .share-lbl{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+  #share-url{width:100%;font:inherit;font-size:13px;padding:10px 12px;border-radius:9px;margin-top:5px;
+    border:1px solid var(--line-2);background:var(--bg-hi);color:var(--ink)}
   #acct{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
     background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
   #acct.on{display:flex}
@@ -151,6 +163,33 @@
 </div>
 
 <input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
+<div id="share">
+  <div class="acct-card rv-panel">
+    <h2>Who can see this route?</h2>
+    <div class="share-opts" id="share-opts">
+      <label><input type="radio" name="vis" value="private"><span><b>Only me</b>
+        Nobody else can open it, even with the address.</span></label>
+      <label><input type="radio" name="vis" value="link"><span><b>Anyone with the link</b>
+        It will not appear anywhere public. Only people you send the link to.</span></label>
+      <label><input type="radio" name="vis" value="public"><span><b>Public</b>
+        Anyone can find and open it.</span></label>
+    </div>
+    <div id="share-link" hidden>
+      <label class="share-lbl" for="share-url">Link</label>
+      <input id="share-url" readonly>
+      <div class="acct-btns">
+        <button type="button" class="add" id="share-copy">Copy link</button>
+        <button type="button" class="add quiet" id="share-rotate"
+          title="Everyone you already sent the old link to will lose access">Replace link</button>
+      </div>
+    </div>
+    <p class="acct-msg" id="share-msg" role="status"></p>
+    <div class="acct-btns">
+      <button type="button" class="add quiet" id="share-close">Done</button>
+    </div>
+  </div>
+</div>
+
 <div id="acct">
   <div class="acct-card rv-panel">
     <h2 id="acct-title">Sign in</h2>
@@ -232,8 +271,28 @@ const built = (manifest.routes || []).map(r => ({ ...r, local: false }));
  *  files that never carried a time. ISO strings sort chronologically as text. */
 const byDate = (a, b) => String(b.date || b.added || '').localeCompare(String(a.date || a.added || ''));
 
+let cloudRoutes = [];                 // whatever the account holds, once fetched
+
+/**
+ * Pull the signed-in person's routes and redraw.
+ *
+ * A failure here is not fatal and must not empty the page: the built-in routes
+ * and anything in this browser are still perfectly good, so a dropped
+ * connection costs the cloud list and nothing else.
+ */
+async function refreshCloud() {
+  if (!account.enabled() || !account.user()) { cloudRoutes = []; render(); return; }
+  try {
+    cloudRoutes = (await account.routes().myRoutes()).map(r => ({ ...r, cloud: true }));
+  } catch {
+    cloudRoutes = [];
+    toast('Could not reach your account. Showing what is on this device.');
+  }
+  render();
+}
+
 function render() {
-  const routes = [...built, ...listLocalRoutes()].sort(byDate);
+  const routes = [...built, ...cloudRoutes, ...listLocalRoutes()].sort(byDate);
   grid.innerHTML = '';
   document.getElementById('count').textContent =
     routes.length ? `${routes.length} route${routes.length > 1 ? 's' : ''}` : '';
@@ -248,6 +307,9 @@ function render() {
   // than a copy of the file being kept around: for anything this app recorded
   // that is the same points it captured, and it means an imported route can be
   // taken back out too.
+  grid.querySelectorAll('.dl.share').forEach(b =>
+    b.addEventListener('click', e => { e.preventDefault(); openShare(b.dataset.id); }));
+
   grid.querySelectorAll('.dl.gpx').forEach(b => b.addEventListener('click', async e => {
     e.preventDefault();
     const entry = listLocalRoutes().find(r => r.slug === b.dataset.slug);
@@ -323,9 +385,11 @@ function row(r) {
     stops += `<stop offset="${k * 10}%" stop-color="${rampCss((e - r.stats.ele_min) / Math.max(1, r.stats.ele_max - r.stats.ele_min))}"/>`;
   }
   const id = 'g' + r.slug.replace(/[^a-z0-9]/gi, '');
-  const href = r.local
-    ? `./view.html?local=${encodeURIComponent(r.slug)}`
-    : `./view.html?route=${encodeURIComponent(r.slug)}`;
+  const href = r.cloud
+    ? `./view.html?cloud=${encodeURIComponent(r.id)}`
+    : r.local
+      ? `./view.html?local=${encodeURIComponent(r.slug)}`
+      : `./view.html?route=${encodeURIComponent(r.slug)}`;
   const act = activityOf(r);
   const added = r.dateSource === 'recorded' ? '' : 'added';
   const meta = [act, added].filter(Boolean).join(' · ');
@@ -343,7 +407,12 @@ function row(r) {
         </svg>
         <span class="num"><b>${(r.stats.distance_m / 1000).toFixed(2)} km</b><small>↑ ${fmt(r.stats.gain_m)} m</small></span>
       </a>
-      <span class="acts">${r.local
+      <span class="acts">${r.cloud
+        ? `<button class="dl share" data-id="${r.id}" data-vis="${r.visibility}"
+             title="Choose who can see this route">${
+             r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
+           }<span> ${r.visibility === 'link' ? 'shared' : r.visibility}</span></button>`
+        : ''}${r.local
         ? `<button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓<span> gpx</span></button>
            <button class="rm" data-slug="${r.slug}" title="Remove from this browser" aria-label="Remove ${escapeHtml(r.name)} from this browser">✕</button>`
         : `<a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓<span> single file</span></a>`}</span>
@@ -647,12 +716,31 @@ document.getElementById('recstop').addEventListener('click', () => {
     { day: 'numeric', month: 'short' })}`;
   const gpx = rec.toGPX(name, { activity });
   const track = analyze(parseGPX(gpx));
-  const entry = addLocalRoute(name + '.gpx', track, profileSamples(track, 96));
-  // a moment on the full glass before the route opens
+  const profile = profileSamples(track, 96);
+  // Saved here first, always. The upload can fail — no signal at the end of a
+  // run is the normal case, not the exception — and a route that exists only
+  // in a request that did not arrive is a route somebody just lost.
+  const entry = addLocalRoute(name + '.gpx', track, profile);
   paint();
   render();
-  toast(`Saved ${name} — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
-  setTimeout(() => { closeRecorder(); location.href = `./view.html?local=${encodeURIComponent(entry.slug)}`; }, 1100);
+
+  let href = `./view.html?local=${encodeURIComponent(entry.slug)}`;
+  if (account.enabled() && account.user()) {
+    try {
+      const saved = await account.routes().save(track, { name, activity, source: 'recorded', profile });
+      // safely in the account now, so the local copy is no longer a second
+      // entry in the list pretending to be a different route
+      removeLocalRoute(entry.slug);
+      await refreshCloud();
+      href = `./view.html?cloud=${encodeURIComponent(saved.id)}`;
+      toast(`Saved to your account — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
+    } catch {
+      toast('Saved on this device. It will upload when you are back online.');
+    }
+  } else {
+    toast(`Saved ${name} — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
+  }
+  setTimeout(() => { closeRecorder(); location.href = href; }, 1100);
 });
 
 /* ---------- accounts ---------- */
@@ -750,8 +838,93 @@ document.getElementById('acct-upload').addEventListener('click', async e => {
   finally { e.target.disabled = false; }
 });
 
+/* ---------- sharing ---------- */
+/**
+ * Who can see a route.
+ *
+ * Three states rather than a switch, because "anyone with the link" is a real
+ * third thing and collapsing it into public or private misrepresents what
+ * happens. The link is shown only when it can actually be used, and replacing
+ * it is offered next to it with a warning, since revoking access is the whole
+ * reason the token can be rotated.
+ */
+const shareEl = document.getElementById('share');
+const shareMsg = document.getElementById('share-msg');
+let sharing = null;                       // the route being configured
+
+const shareUrlFor = token => `${location.origin}/r/${token}`;
+
+function paintShare() {
+  const linked = sharing && sharing.visibility !== 'private' && sharing.shareToken;
+  document.getElementById('share-link').hidden = !linked;
+  if (linked) document.getElementById('share-url').value = shareUrlFor(sharing.shareToken);
+  for (const i of document.querySelectorAll('#share-opts input')) i.checked = i.value === sharing?.visibility;
+}
+
+function openShare(id) {
+  sharing = cloudRoutes.find(r => r.id === id);
+  if (!sharing) return;
+  shareMsg.textContent = '';
+  paintShare();
+  shareEl.classList.add('on');
+}
+
+document.getElementById('share-opts').addEventListener('change', async e => {
+  if (!sharing) return;
+  const visibility = e.target.value;
+  shareMsg.textContent = 'Saving…';
+  shareMsg.classList.add('ok');
+  try {
+    const updated = await account.routes().setVisibility(sharing.id, visibility);
+    sharing = { ...sharing, ...updated, cloud: true };
+    cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
+    shareMsg.textContent = visibility === 'private'
+      ? 'Private. Any link you sent before no longer opens it.'
+      : 'Saved.';
+    paintShare();
+    render();
+  } catch (err) {
+    shareMsg.classList.remove('ok');
+    shareMsg.textContent = account.explain(err);
+  }
+});
+
+document.getElementById('share-copy').addEventListener('click', async e => {
+  const url = document.getElementById('share-url').value;
+  try {
+    await navigator.clipboard.writeText(url);
+    shareMsg.classList.add('ok');
+    shareMsg.textContent = 'Link copied.';
+  } catch {
+    // clipboard refused: select it so it can be copied by hand
+    const f = document.getElementById('share-url');
+    f.focus(); f.select();
+    shareMsg.classList.add('ok');
+    shareMsg.textContent = 'Press copy on your keyboard — the link is selected.';
+  }
+});
+
+document.getElementById('share-rotate').addEventListener('click', async () => {
+  if (!sharing) return;
+  shareMsg.classList.add('ok');
+  shareMsg.textContent = 'Replacing…';
+  try {
+    const fresh = await account.routes().rotateShareToken(sharing.id);
+    sharing = { ...sharing, shareToken: fresh };
+    cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
+    paintShare();
+    shareMsg.textContent = 'New link ready. The old one has stopped working.';
+  } catch (err) {
+    shareMsg.classList.remove('ok');
+    shareMsg.textContent = account.explain(err);
+  }
+});
+
+document.getElementById('share-close').addEventListener('click', () => shareEl.classList.remove('on'));
+shareEl.addEventListener('click', e => { if (e.target === shareEl) shareEl.classList.remove('on'); });
+
 await account.ready();
-account.onChange(paintAccount);
+account.onChange(user => { paintAccount(user); refreshCloud(); });
 setMode('in');
 
 render();
