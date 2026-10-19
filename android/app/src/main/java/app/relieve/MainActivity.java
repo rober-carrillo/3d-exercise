@@ -1,4 +1,4 @@
-package app.route3d;
+package app.relieve;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;

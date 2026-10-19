@@ -130,7 +130,7 @@ export class RouteViewer {
     this.mount.classList.add('rv-root');
     this.mount.innerHTML = TEMPLATE;
     this.mount.querySelector('.rv-ttl').textContent = `Building 3D terrain · v${VERSION}`;
-    console.info(`route3d v${VERSION}`);
+    console.info(`Relieve! v${VERSION}`);
     this.$ = sel => this.mount.querySelector('.rv-' + sel);
     this.play = false;
     this.playT = 0;
@@ -265,7 +265,7 @@ export class RouteViewer {
     renderer.cam.tz = (s.ele_min + s.ele_max) / 2 - g.zRef;
     renderer.onFrame = dt => this.frame(dt);
 
-    this.$('status').title = `route3d v${VERSION}`;
+    this.$('status').title = `Relieve! v${VERSION}`;
     const okTex = renderer.hasTexture;
     this.$('dot').className = 'rv-dot ' + (okTex && demReal ? 'ok' : 'warn');
     this.$('st-txt').textContent = okTex && demReal

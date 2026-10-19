@@ -29,6 +29,26 @@ function parseTime(text) {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * What the outing was, from the <type> a recorder wrote.
+ *
+ * Everybody spells it differently — Strava says "running" and "Soccer", ours
+ * says "run" and "field" — so the vocabulary is normalised on the way in. It
+ * decides more than a label: a bike ride would win every personal best going,
+ * and the distance covered jinking about a pitch is not a five kilometre
+ * split, so both are kept out of the running figures.
+ */
+function parseActivity(text) {
+  const m = text.match(/<type>\s*([^<]*?)\s*<\/type>/i);
+  const raw = (m ? m[1] : '').toLowerCase();
+  if (!raw) return null;
+  if (/cycl|bike|bicicleta|ride|ebike/.test(raw)) return 'ride';
+  if (/soccer|football|tennis|basket|field/.test(raw)) return 'field';
+  if (/walk|hike|caminata|senderismo/.test(raw)) return 'walk';
+  if (/run|correr|carrera|jog/.test(raw)) return 'run';
+  return 'other';
+}
+
 /** Month names, so a date reads the same for every visitor. */
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -58,6 +78,7 @@ export function parseGPX(text) {
   const nameMatch = text.match(/<trk>[\s\S]*?<name>([\s\S]*?)<\/name>/) || text.match(/<name>([\s\S]*?)<\/name>/);
   const name = nameMatch ? nameMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/\s+/g, ' ').trim() : 'Untitled route';
   const time = parseTime(text);
+  const activity = parseActivity(text);
   const points = [], breaks = [];
   const re = /<trkpt\b([^>]*?)(\/>|>([\s\S]*?)<\/trkpt>)/g;
   const readPoints = chunk => {
@@ -84,7 +105,7 @@ export function parseGPX(text) {
   } else {
     readPoints(text);                     // no segments declared: one continuous track
   }
-  return { name, time, points, breaks };
+  return { name, time, activity, points, breaks };
 }
 
 const haversine = (a, b) => {
@@ -99,7 +120,7 @@ const haversine = (a, b) => {
  * cumulative distance, ascent/descent, bounding box, and a distance-decimated
  * copy of the track (full-resolution GPS traces are far denser than any screen).
  */
-export function analyze({ name, time = null, points, breaks = [] }, { targetPoints = 1400, smoothWindow = 31, gainThreshold = 5 } = {}) {
+export function analyze({ name, time = null, activity = null, points, breaks = [] }, { targetPoints = 1400, smoothWindow = 31, gainThreshold = 5 } = {}) {
   if (points.length < 2) throw new Error('track has fewer than two points');
 
   // Nothing accumulates across a break. The gap between the last point before
@@ -167,6 +188,7 @@ export function analyze({ name, time = null, points, breaks = [] }, { targetPoin
   return {
     name,
     time,
+    activity,
     stats: {
       points: points.length,
       distance_m: total,
@@ -222,7 +244,7 @@ export function trackToGPX(track, { name = track.name, activity = 'other' } = {}
     `   </trkpt>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx creator="Relieve" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx creator="Relieve!" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
 ${t0 !== null ? ` <metadata>\n  <time>${iso(t0)}</time>\n </metadata>\n` : ''} <trk>
   <name>${esc(name || 'Route')}</name>
   <type>${esc(activity)}</type>

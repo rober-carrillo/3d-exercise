@@ -17,7 +17,7 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
-const STATIC = ['index.html', 'view.html', 'src', 'routes', 'brand', 'exercise-QR-code.png'];
+const STATIC = ['index.html', 'view.html', 'dash.html', 'src', 'routes', 'brand', 'exercise-QR-code.png'];
 
 const run = promisify(execFile);
 
@@ -59,7 +59,11 @@ for (const file of files) {
     routes.push({
       slug: slugify(file),
       file,
-      name: track.name,
+      // a file with no <name> of its own is better called by its filename
+      // than "Untitled route", which is what the parser falls back to
+      name: track.name && track.name !== 'Untitled route'
+        ? track.name : basename(file, extname(file)).replace(/[_-]+/g, ' '),
+      activity: track.activity,
       date,
       dateSource: track.time ? 'recorded' : 'added',
       pace: !!track.secs,               // per-point times → the replay can follow them
@@ -70,6 +74,9 @@ for (const file of files) {
         loss_m: +track.stats.loss_m.toFixed(1),
         ele_min: track.stats.ele_min,
         ele_max: track.stats.ele_max,
+        // the clock, without which the dashboard can show no times at all
+        duration_s: track.stats.duration_s,
+        moving_s: track.stats.moving_s,
       },
       bbox: b,
       center: [(b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2],

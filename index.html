@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Relieve</title>
-<meta name="description" content="GPX tracks rendered as interactive 3D terrain flyovers.">
+<title>Relieve!</title>
+<meta name="description" content="Relieve! — your routes as interactive 3D terrain flyovers.">
 <meta name="theme-color" content="#e6ead6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#15180f" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -16,6 +16,9 @@
   .wrap{max-width:1080px;margin:0 auto;padding:72px 24px 96px}
   header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap}
   header h1{margin:0;font-size:30px;font-weight:660;letter-spacing:-.025em}
+  /* the mark: the name is Spanish for the shape of the ground, which is the
+     whole point of the app, and the exclamation is part of it */
+  header h1 .bang{color:var(--accent)}
   .brand{display:flex;align-items:center;gap:12px}
   .brand-mark{width:46px;height:46px;flex:0 0 auto;fill:none;stroke-linecap:round}
   .bm-r1,.bm-r2,.bm-r3{stroke-width:3.4}.bm-r1{stroke:var(--brown)}.bm-r2{stroke:var(--accent)}.bm-r3{stroke:var(--ring-3)}
@@ -122,10 +125,11 @@
 <div class="wrap">
   <header>
     <div>
-      <h1 class="brand"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"><path class="bm-r1" d="M18,62 C14,40 34,20 56,22 C78,24 90,44 84,62 C78,80 54,86 38,82 C26,79 20,72 18,62Z"/><path class="bm-r2" d="M30,60 C28,45 42,32 57,34 C72,36 78,50 73,62 C68,72 52,75 42,72 C34,70 31,66 30,60Z"/><path class="bm-r3" d="M43,56 C42,48 50,43 57,45 C64,47 66,54 62,59 C58,64 49,64 45,61 C44,60 43,58 43,56Z"/><path class="bm-halo" d="M50,95 C49,88 38.77,81.83 28.77,77.83"/><path class="bm-gold" d="M50,95 C49,88 38.77,81.83 28.77,77.83"/><path class="bm-halo" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/><path class="bm-red" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/><circle class="bm-dot" cx="54" cy="53" r="6"/></svg>Relieve</h1>
+      <h1 class="brand"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"><path class="bm-r1" d="M18,62 C14,40 34,20 56,22 C78,24 90,44 84,62 C78,80 54,86 38,82 C26,79 20,72 18,62Z"/><path class="bm-r2" d="M30,60 C28,45 42,32 57,34 C72,36 78,50 73,62 C68,72 52,75 42,72 C34,70 31,66 30,60Z"/><path class="bm-r3" d="M43,56 C42,48 50,43 57,45 C64,47 66,54 62,59 C58,64 49,64 45,61 C44,60 43,58 43,56Z"/><path class="bm-halo" d="M50,95 C49,88 38.77,81.83 28.77,77.83"/><path class="bm-gold" d="M50,95 C49,88 38.77,81.83 28.77,77.83"/><path class="bm-halo" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/><path class="bm-red" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/><circle class="bm-dot" cx="54" cy="53" r="6"/></svg>Relieve<span class="bang">!</span></h1>
       <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the walker in chase view.</p>
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <a class="add" href="./dash.html" style="text-decoration:none;display:inline-flex;align-items:center">Your figures</a>
       <button class="rec-btn" id="recbtn"><i></i>Record</button>
       <button class="add" id="add">＋ Add a GPX</button>
     </div>
@@ -135,8 +139,8 @@
          alt="QR code that opens https://3d-exercise.vercel.app">
     <div class="qrsay">
       <h2>Open it on your phone</h2>
-      <p>Scan the code to carry the library across to a phone. The routes render in the mobile
-        browser exactly as they do here — satellite terrain, chase camera and all.</p>
+      <p>Scan the code to carry Relieve! across to a phone. Routes render in the mobile browser
+        exactly as they do here — satellite terrain, chase camera and all.</p>
       <a class="qrlink" href="https://3d-exercise.vercel.app">3d-exercise.vercel.app</a>
     </div>
   </section>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your figures · Relieve!</title>
+<meta name="description" content="Totals and best efforts across your routes.">
+<link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
+<link rel="stylesheet" href="./src/ui.css">
+<style>
+  body{min-height:100%;background:radial-gradient(120% 80% at 50% -10%,var(--bg-hi) 0%,var(--bg) 60%) fixed}
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 24px 96px}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand h1{margin:0;font-size:26px;font-weight:660;letter-spacing:-.025em}
+  .brand h1 .bang{color:var(--accent)}
+  .back{font-size:12.5px;font-weight:560;color:var(--accent);text-decoration:none;
+    border:1px solid var(--panel-brd);border-radius:10px;padding:9px 15px;background:var(--panel)}
+  .back:hover{background:var(--bg-hi)}
+
+  h2{margin:40px 0 14px;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+
+  /* totals: the shape of everything recorded so far */
+  .totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+    background:var(--line);border:1px solid var(--panel-brd);border-radius:14px;overflow:hidden}
+  .totals div{background:var(--panel);padding:16px 18px}
+  .totals dt{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+  .totals dd{margin:6px 0 0;font-size:25px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .totals dd small{font-size:12px;font-weight:500;color:var(--ink-2);margin-left:3px}
+
+  /* best efforts */
+  .efforts{border:1px solid var(--panel-brd);border-radius:14px;overflow:hidden;background:var(--panel)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line)}
+  thead th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);background:var(--fill)}
+  tbody tr:last-child td{border-bottom:0}
+  td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .time{font-weight:650;font-size:16px}
+  .dist{font-weight:600}
+  .from{color:var(--ink-2);font-size:13px}
+  .from a{color:var(--accent);text-decoration:none}
+  .from a:hover{text-decoration:underline}
+  .none{color:var(--ink-3)}
+  tr.unset td{opacity:.55}
+
+  /* routes */
+  .routes{display:flex;flex-direction:column;gap:1px;background:var(--line);
+    border:1px solid var(--panel-brd);border-radius:14px;overflow:hidden}
+  a.row{display:grid;grid-template-columns:1fr auto auto auto;gap:16px;align-items:baseline;
+    background:var(--panel);padding:13px 18px;text-decoration:none;color:inherit}
+  a.row:hover{background:var(--bg-hi)}
+  a.row .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  a.row .meta{font-size:11px;color:var(--ink-3);letter-spacing:.05em;text-transform:uppercase}
+  a.row .v{font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-2);white-space:nowrap}
+  .pill{display:inline-block;margin-left:8px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+    border-radius:5px;padding:1px 6px;border:1px solid var(--line-2);color:var(--ink-2)}
+  .pill.run{color:var(--tag-green);border-color:var(--tag-green)}
+  .pill.ride{color:var(--tag-brown);border-color:var(--tag-brown)}
+  .pill.field{color:var(--warm);border-color:var(--warm)}
+
+  .note{margin-top:14px;font-size:12px;line-height:1.65;color:var(--ink-3);max-width:70ch}
+  .empty{padding:26px;font-size:13.5px;color:var(--ink-2);line-height:1.7;
+    background:var(--panel);border:1px solid var(--panel-brd);border-radius:14px}
+  @media (max-width:640px){
+    .wrap{padding:36px 16px 72px}
+    a.row{grid-template-columns:1fr auto;row-gap:4px}
+    a.row .v:last-child{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true" style="width:40px;height:40px;fill:none;stroke-linecap:round">
+        <path class="bm-r1" d="M18,62 C14,40 34,20 56,22 C78,24 90,44 84,62 C78,80 54,86 38,82 C26,79 20,72 18,62Z"/>
+        <path class="bm-r2" d="M30,60 C28,45 42,32 57,34 C72,36 78,50 73,62 C68,72 52,75 42,72 C34,70 31,66 30,60Z"/>
+        <path class="bm-r3" d="M43,56 C42,48 50,43 57,45 C64,47 66,54 62,59 C58,64 49,64 45,61 C44,60 43,58 43,56Z"/>
+        <path class="bm-halo" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/>
+        <path class="bm-red" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/>
+        <circle class="bm-dot" cx="54" cy="53" r="6"/>
+      </svg>
+      <h1>Your figures</h1>
+    </div>
+    <a class="back" href="./">← All routes</a>
+  </header>
+
+  <h2>Everything so far</h2>
+  <dl class="totals" id="totals"></dl>
+
+  <h2>Best efforts on foot</h2>
+  <div class="efforts">
+    <table>
+      <thead><tr><th>Distance</th><th>Time</th><th>Pace</th><th>From</th></tr></thead>
+      <tbody id="efforts"></tbody>
+    </table>
+  </div>
+  <p class="note" id="effortnote"></p>
+
+  <h2>Routes</h2>
+  <div id="routelist"></div>
+</div>
+
+<script type="module">
+import { parseGPX, analyze, formatDate } from './src/gpx.js';
+import { listLocalRoutes } from './src/library.js';
+import { EFFORTS, personalBests, totals, clock, pace } from './src/stats.js';
+
+const $ = id => document.getElementById(id);
+const km = m => (m / 1000).toFixed(m < 10000 ? 2 : 1);
+
+/**
+ * Best efforts need the whole track, not the summary a card is built from, so
+ * the manifest's routes are fetched and analysed here. It is a few hundred
+ * kilobytes and happens once; when routes live in a database this becomes one
+ * query instead.
+ */
+const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
+const built = await Promise.all((manifest.routes || []).map(async entry => {
+  try {
+    const track = analyze(parseGPX(await fetch('./routes/' + entry.file).then(r => r.text())));
+    return { ...entry, track, local: false };
+  } catch { return { ...entry, track: null, local: false }; }
+}));
+const routes = [...built, ...listLocalRoutes()]
+  .sort((a, b) => String(b.date || b.added || '').localeCompare(String(a.date || a.added || '')));
+
+/* ---------- totals ---------- */
+const t = totals(routes);
+$('totals').innerHTML = [
+  ['Routes', t.routes, ''],
+  ['Distance', km(t.distance_m), 'km'],
+  ['Moving time', clock(t.moving_s), ''],
+  ['Climbed', Math.round(t.gain_m).toLocaleString(), 'm'],
+].map(([k, v, u]) => `<div><dt>${k}</dt><dd>${v}${u ? `<small>${u}</small>` : ''}</dd></div>`).join('');
+
+/* ---------- best efforts ---------- */
+const pb = personalBests(routes);
+$('efforts').innerHTML = EFFORTS.map(e => {
+  const b = pb[e.key];
+  if (!b) return `<tr class="unset"><td class="dist">${e.label}</td>`
+    + `<td class="none" colspan="3">no timed route this long yet</td></tr>`;
+  const href = b.slug ? (routes.find(r => r.slug === b.slug)?.local
+      ? `./view.html?local=${encodeURIComponent(b.slug)}`
+      : `./view.html?route=${encodeURIComponent(b.slug)}`) : null;
+  return `<tr>
+    <td class="dist">${e.label}</td>
+    <td class="n time">${clock(b.seconds)}</td>
+    <td class="n">${pace(b.seconds, e.metres)}<small> /km</small></td>
+    <td class="from">${href ? `<a href="${href}">${esc(b.route)}</a>` : esc(b.route)}${
+      b.date ? ` · ${formatDate(b.date)}` : ''}</td>
+  </tr>`;
+}).join('');
+
+const timed = routes.filter(r => r.track?.secs).length;
+$('effortnote').textContent = timed
+  ? `The quickest window of each distance anywhere inside a route, not the first `
+    + `few kilometres of one. Rides and pitch sports are left out, and a window never `
+    + `spans a pause. ${timed} of ${routes.length} routes carry the timestamps this needs.`
+  : 'None of these routes carry per-point timestamps, which is what a best effort is measured from. '
+    + 'Anything recorded in the app will.';
+
+/* ---------- routes ---------- */
+$('routelist').innerHTML = routes.length
+  ? `<div class="routes">${routes.map(r => {
+      const href = r.local ? `./view.html?local=${encodeURIComponent(r.slug)}`
+                           : `./view.html?route=${encodeURIComponent(r.slug)}`;
+      const act = r.activity ?? r.track?.activity;
+      const when = r.date || r.added;
+      const secs = r.stats?.moving_s ?? r.stats?.duration_s;
+      return `<a class="row" href="${href}">
+        <span class="nm">${esc(r.name)}${act ? `<span class="pill ${act}">${act}</span>` : ''}</span>
+        <span class="meta">${when ? formatDate(when) : ''}</span>
+        <span class="v">${km(r.stats.distance_m)} km</span>
+        <span class="v">${secs ? clock(secs) : '—'}</span>
+      </a>`;
+    }).join('')}</div>`
+  : `<div class="empty">No routes yet. Record one in the app, or drop a <code>.gpx</code> on the
+     <a href="./">library page</a>.</div>`;
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+</script>
+</body>
+</html>
