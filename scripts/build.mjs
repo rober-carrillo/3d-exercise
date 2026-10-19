@@ -17,7 +17,8 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
-const STATIC = ['index.html', 'view.html', 'dash.html', 'r.html', 'src', 'routes', 'brand'];
+const STATIC = ['index.html', 'routes.html', 'library.html', 'view.html', 'r.html',
+                'src', 'routes', 'brand'];
 
 const run = promisify(execFile);
 
@@ -37,6 +38,32 @@ async function addedDate(file) {
     if (iso) return new Date(iso).toISOString();
   } catch {}                                   // no git, no history, not a repo
   try { return (await stat(path)).mtime.toISOString(); } catch { return null; }
+}
+
+/**
+ * The route's shape, flattened to a unit box, for a thumbnail.
+ *
+ * A preview of a route ought to look like that route — a lap of a park is not
+ * a mountain traverse, and the elevation sparkline cannot tell you which it
+ * was. Sixty-four points is plenty at thumbnail size, longitudes are squeezed
+ * by cos(latitude) so nothing comes out stretched, and the aspect ratio is
+ * kept by scaling both axes by the larger span rather than fitting each.
+ */
+function shapeSamples(track, n = 64) {
+  const b = track.bbox, N = track.lat.length;
+  if (!N) return [];
+  const k = Math.cos((b.minLat + b.maxLat) / 2 * Math.PI / 180);
+  const w = Math.max(1e-9, (b.maxLon - b.minLon) * k);
+  const h = Math.max(1e-9, b.maxLat - b.minLat);
+  const span = Math.max(w, h);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const j = Math.round(i / (n - 1) * (N - 1));
+    const x = ((track.lon[j] - b.minLon) * k - w / 2) / span + 0.5;
+    const y = ((track.lat[j] - b.minLat) - h / 2) / span + 0.5;
+    out.push([+x.toFixed(4), +(1 - y).toFixed(4)]);     // SVG counts y downwards
+  }
+  return out;
 }
 
 const slugify = s => basename(s, extname(s)).toLowerCase()
@@ -74,13 +101,14 @@ for (const file of files) {
         loss_m: +track.stats.loss_m.toFixed(1),
         ele_min: track.stats.ele_min,
         ele_max: track.stats.ele_max,
-        // the clock, without which the dashboard can show no times at all
+        // the clock, without which no total and no best effort can be shown
         duration_s: track.stats.duration_s,
         moving_s: track.stats.moving_s,
       },
       bbox: b,
       center: [(b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2],
       profile: profileSamples(track, 96),
+      shape: shapeSamples(track, 64),
     });
     console.log(`  ✓ ${file} — ${(track.stats.distance_m / 1000).toFixed(2)} km, +${Math.round(track.stats.gain_m)} m`);
   } catch (err) {
@@ -133,6 +161,12 @@ async function writeStandalone(route, track) {
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>${route.name} · Salpicón!</title>
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(favicon.trim())}">
+<!-- A single file has no header and so no switch to change its mind with, so
+     this one follows the system rather than insisting on light. ui.css keys its
+     dark block to the attribute either way. -->
+<script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=
+t==='dark'?'dark':t==='light'?'light':matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}
+catch(e){document.documentElement.dataset.theme='light'}</script>
 <style>
 ${css}
 html,body{height:100%;overflow:hidden}
@@ -187,7 +221,7 @@ async function checkInlineModules(files) {
   }
 }
 
-await checkInlineModules(['index.html', 'view.html', 'dash.html', 'r.html']);
+await checkInlineModules(['index.html', 'routes.html', 'library.html', 'view.html', 'r.html']);
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });

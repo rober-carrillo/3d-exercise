@@ -85,6 +85,9 @@ const TEMPLATE = `
     <button class="rv-speed" title="Playback speed">1×</button>
     <button class="rv-reset">Reset</button>
   </div>
+  <div class="rv-sharerow" hidden>
+    <button type="button" class="rv-share">Copy link to this route</button>
+  </div>
 </div>
 
 <div class="rv-fabs">
@@ -125,9 +128,18 @@ export class RouteViewer {
       demMaxTiles: 4,
       vex: 1,
       date: null,             // fallback date for a track with no time of its own
+      inline: false,          // mounted in a box rather than over the window
+      showcase: false,        // no controls: the route, flying itself, as a sample
+      loop: false,            // start again at the end instead of stopping
+      onShare: null,          // async () => ({ok, why}); shows "Copy link" when given
     }, opts);
     this.mount = opts.mount;
     this.mount.classList.add('rv-root');
+    // A showcase is inline by definition — there is no such thing as a
+    // full-window page element with no controls on it.
+    if (this.opts.showcase) this.opts.inline = true;
+    this.mount.classList.toggle('rv-inline', !!this.opts.inline);
+    this.mount.classList.toggle('rv-showcase', !!this.opts.showcase);
     this.mount.innerHTML = TEMPLATE;
     this.mount.querySelector('.rv-ttl').textContent = `Building 3D terrain · v${VERSION}`;
     console.info(`Salpicón! v${VERSION}`);
@@ -281,6 +293,13 @@ export class RouteViewer {
     this.$('load').classList.add('gone');
     setTimeout(() => { const l = this.$('load'); l && l.remove(); }, 700);
     setTimeout(() => this.$('hint').classList.add('gone'), 7000);
+    // A showcase has no play button to press, so it presses its own: the point
+    // is that somebody arriving on the page sees a route being flown without
+    // having worked out that they were meant to ask for it.
+    if (o.showcase) {
+      this.renderer.beginChase();
+      this.setPlay(true);
+    }
   }
 
   wire() {
@@ -363,13 +382,45 @@ export class RouteViewer {
     this.$('fab-play').addEventListener('click', () => this.$('play').click());
     // touching the scene puts the settings away again
     this.$('gl').addEventListener('pointerdown', () => { if (this.narrow()) setPanel(false); });
-    window.addEventListener('keydown', e => {
+    // Only the viewer that *is* the page may claim the keyboard. One embedded
+    // in a landing page would otherwise eat the space bar from whatever the
+    // reader was actually doing — scrolling, usually.
+    if (!this.opts.inline) window.addEventListener('keydown', e => {
       if (e.code === 'Space') { e.preventDefault(); this.$('play').click(); }
       if (e.key === 'r' || e.key === 'R') this.$('reset').click();
       if (e.key === 'c' || e.key === 'C') this.mount.querySelector('.rv-sw[data-key="chase"]').click();
       if (e.key === 'p' || e.key === 'P') this.mount.querySelector('.rv-sw[data-key="pace"]').click();
       if (e.key === 'b' || e.key === 'B')
         this.mount.querySelector(`.rv-seg button[data-mode="${r.state.bike ? 'foot' : 'bike'}"]`).click();
+    });
+
+    this.wireShare();
+  }
+
+  /**
+   * "Copy link to this route", for the page that knows what the link is.
+   *
+   * The viewer has no idea whether this route lives in an account, in the
+   * build or only in this browser, and should not: it is handed a function
+   * that does the work and reports back in a sentence, and all it does is show
+   * the button and say what happened.
+   */
+  wireShare() {
+    const row = this.mount.querySelector('.rv-sharerow');
+    const btn = this.$('share');
+    if (!row || !btn || !this.opts.onShare) return;
+    row.hidden = false;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const label = btn.textContent;
+      btn.textContent = 'Copying…';
+      let res;
+      try { res = await this.opts.onShare(); }
+      catch (err) { res = { ok: false, why: err?.message || 'Could not copy that link.' }; }
+      btn.classList.toggle('done', !!res?.ok);
+      btn.textContent = res?.why || (res?.ok ? 'Link copied' : 'Could not copy');
+      btn.disabled = false;
+      setTimeout(() => { btn.classList.remove('done'); btn.textContent = label; }, 4000);
     });
   }
 
@@ -391,7 +442,12 @@ export class RouteViewer {
     // the clock always runs evenly — the flight lasts flyDuration whichever
     // pace is on; what changes is where along the route that clock points
     this.playT += dt * this.speed / this.flyDuration;
-    if (this.playT >= 1) { this.playT = 1; this.setPlay(false); }
+    if (this.playT >= 1) {
+      // a showcase runs the route over and over; everywhere else the flight
+      // ends where the route does and waits to be asked again
+      if (this.opts.loop) this.playT = 0;
+      else { this.playT = 1; this.setPlay(false); }
+    }
     this.scrub(this.distFrac(this.playT), true);
     this.cadence();
   }

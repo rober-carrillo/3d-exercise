@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your routes · Salpicón!</title>
+<meta name="description" content="Every route in your account and in this browser.">
+<meta name="theme-color" content="#fcf1ee">
+<script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
+<link rel="stylesheet" href="./src/ui.css">
+<style>
+  body{min-height:100%;background:radial-gradient(120% 80% at 50% -10%,var(--bg-hi) 0%,var(--bg) 60%) fixed}
+  .brand .mk{width:56px}
+  .page-head h1{font-size:26px}
+
+  /* the figures: what the whole library adds up to, and the best of it.
+     A strip above the diary rather than a page of its own — the page it used
+     to live on also listed every route, which is this page, and two lists of
+     the same routes under different headings is one list too many. */
+  .figures{margin-top:26px;padding:16px 18px 15px;display:flex;flex-direction:column;gap:13px}
+  .figures dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:14px 20px;margin:0}
+  .figures dt{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+  .figures dd{margin:4px 0 0;font-size:21px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .figures dd small{font-size:11px;font-weight:500;color:var(--ink-2);margin-left:3px}
+  .bests{display:flex;align-items:baseline;gap:8px 16px;flex-wrap:wrap;
+    border-top:1px solid var(--line);padding-top:13px;font-size:12.5px;color:var(--ink-2)}
+  .bests .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+  .bests a{color:inherit;text-decoration:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bests a:hover{color:var(--accent)}
+  .bests a b{font-weight:650;color:var(--ink)}
+  .bests .none{color:var(--ink-3)}
+  .bests .busy{color:var(--ink-3);font-size:11.5px}
+
+  /* signed out, this page has nothing of its own to show yet */
+  .nowt{margin-top:34px;padding:30px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+  .nowt h2{margin:0;font-size:19px;font-weight:650;letter-spacing:-.02em}
+  .nowt p{margin:0;font-size:13.5px;line-height:1.7;color:var(--ink-2);max-width:60ch}
+  .nowt .acct-btns{margin-top:4px}
+
+  #share{position:fixed;inset:0;z-index:61;display:none;align-items:center;justify-content:center;
+    background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
+  #share.on{display:flex}
+  .acct-card{width:min(420px,100%);padding:26px;display:flex;flex-direction:column;gap:14px}
+  .acct-card h2{margin:0;font-size:19px;font-weight:650;letter-spacing:-.02em}
+  .acct-msg{margin:4px 0 0;font-size:12.5px;line-height:1.5;min-height:1.2em;color:var(--hot)}
+  .acct-msg.ok{color:var(--accent)}
+  .acct-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .acct-btns button{flex:1 1 auto}
+  .share-opts{display:flex;flex-direction:column;gap:2px}
+  .share-opts label{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:10px;cursor:pointer}
+  .share-opts label:hover{background:var(--fill)}
+  .share-opts input{margin-top:3px;flex:0 0 auto}
+  .share-opts span{font-size:12.5px;line-height:1.5;color:var(--ink-2)}
+  .share-opts b{display:block;font-size:14px;color:var(--ink);font-weight:600}
+  .share-lbl{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+  #share-url{width:100%;font:inherit;font-size:13px;padding:10px 12px;border-radius:9px;margin-top:5px;
+    border:1px solid var(--line-2);background:var(--bg-hi);color:var(--ink)}
+
+  #drop{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
+    background:var(--scrim);backdrop-filter:blur(6px)}
+  #drop.on{display:flex}
+  #drop div{border:2px dashed var(--accent);border-radius:18px;padding:44px 64px;font-size:15px;color:var(--ink)}
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);z-index:40;
+    padding:11px 18px;font-size:12.5px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:80vw}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <div class="brand"><a href="./"><span id="brandmark"></span><h1>Your routes</h1></a></div>
+    <div class="nav">
+      <button class="theme-btn" id="themebtn" type="button"></button>
+      <button class="add quiet" id="acctbtn" hidden>Sign in</button>
+      <a class="add quiet" href="./library.html">Public library</a>
+      <a class="rec-btn" href="./?record=1"><i></i>Record</a>
+      <button class="add quiet" id="add">＋ Add a GPX</button>
+    </div>
+  </header>
+
+  <div class="rv-panel nowt" id="nowt" hidden>
+    <h2>Nothing here yet</h2>
+    <p id="nowt-why">Record a route or add a <code>.gpx</code> file and it will appear here. You can also
+      drop a file anywhere on this page.</p>
+    <div class="acct-btns" id="nowt-cta" hidden>
+      <button class="add" id="nowt-up">Create an account</button>
+      <button class="add quiet" id="nowt-in">I already have one</button>
+    </div>
+  </div>
+
+  <section class="rv-panel figures" id="figures" hidden>
+    <dl id="totals"></dl>
+    <div class="bests" id="bests"></div>
+  </section>
+
+  <div class="count" id="count"></div>
+  <div id="grid"></div>
+
+  <footer>
+    Imagery © Esri and its contributors · Elevation from
+    <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others)
+  </footer>
+</div>
+
+<input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
+
+<div id="share">
+  <div class="acct-card rv-panel">
+    <h2>Who can see this route?</h2>
+    <div class="share-opts" id="share-opts">
+      <label><input type="radio" name="vis" value="private"><span><b>Only me</b>
+        Nobody else can open it, even with the address.</span></label>
+      <label><input type="radio" name="vis" value="link"><span><b>Anyone with the link</b>
+        It will not appear anywhere public. Only people you send the link to.</span></label>
+      <label><input type="radio" name="vis" value="public"><span><b>Public</b>
+        Anyone can find and open it.</span></label>
+    </div>
+    <div id="share-link" hidden>
+      <label class="share-lbl" for="share-url">Link</label>
+      <input id="share-url" readonly>
+      <div class="acct-btns">
+        <button type="button" class="add" id="share-copy">Copy link</button>
+        <button type="button" class="add quiet" id="share-rotate"
+          title="Everyone you already sent the old link to will lose access">Replace link</button>
+      </div>
+    </div>
+    <p class="acct-msg" id="share-msg" role="status"></p>
+    <div class="acct-btns">
+      <button type="button" class="add quiet" id="share-close">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="drop"><div>Drop GPX files to build them</div></div>
+<div id="toast" class="rv-panel"></div>
+
+<script type="module">
+import { parseGPX, analyze, profileSamples, trackToGPX } from './src/gpx.js';
+import { saveGPX, safeName } from './src/export.js';
+import * as account from './src/account.js';
+import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
+import { routeDiary, escapeHtml, routeHref } from './src/cards.js';
+import { EFFORTS, ON_FOOT, personalBests, totals, clock, pace } from './src/stats.js';
+import { shareRoute, routeLink, canLink } from './src/share.js';
+import { markSVG } from './src/mark.js';
+import { initTheme, themeToggle } from './src/theme.js';
+
+initTheme();
+themeToggle(document.getElementById('themebtn'));
+document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
+
+const grid = document.getElementById('grid');
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 4200);
+}
+
+let cloudRoutes = [];                 // whatever the account holds, once fetched
+
+/**
+ * Pull the signed-in person's routes and redraw.
+ *
+ * A failure here is not fatal and must not empty the page: anything in this
+ * browser is still perfectly good, so a dropped connection costs the cloud
+ * list and nothing else.
+ */
+async function refreshCloud() {
+  if (!account.enabled() || !account.user()) { cloudRoutes = []; render(); return; }
+  try {
+    cloudRoutes = (await account.routes().myRoutes()).map(r => ({ ...r, cloud: true }));
+  } catch {
+    cloudRoutes = [];
+    toast('Could not reach your account. Showing what is on this device.');
+  }
+  render();
+  fetchEffortTracks();
+}
+
+const all = () => [...cloudRoutes, ...listLocalRoutes()];
+
+/**
+ * The buttons at the right-hand end of a row.
+ *
+ * "Copy link" is first because it is the one anybody reaches for — the whole
+ * point of keeping a route is being able to show it to somebody. The rest is
+ * housekeeping: who can see it, a copy of the file back out, and removal.
+ */
+function actions(r) {
+  const out = [];
+  // On every row, including the browser-only ones. A route with nowhere to
+  // live cannot be linked to, and the button saying so when it is pressed
+  // teaches that in the moment somebody wants it — which is a better place to
+  // learn it than a paragraph nobody read on the way in.
+  out.push(`<button class="dl copy" data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"
+    title="${canLink(r) ? 'Copy a link to this route'
+      : 'This route is only in this browser — an account is what gives it a link'}">🔗<span> copy link</span></button>`);
+  if (r.cloud) {
+    out.push(`<button class="dl share" data-id="${r.id}" title="Choose who can see this route">${
+      r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
+    }<span> ${r.visibility === 'link' ? 'shared' : r.visibility}</span></button>`);
+  }
+  if (r.local) {
+    out.push(`<button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓<span> gpx</span></button>
+      <button class="rm" data-slug="${r.slug}" title="Remove from this browser"
+        aria-label="Remove ${escapeHtml(r.name)} from this browser">✕</button>`);
+  }
+  return out.join('');
+}
+
+/* ---------- the figures ----------
+ * What the library adds up to, and the best of it.
+ *
+ * Totals are free: every row already carries its own summary. Best efforts
+ * are not — they are measured from the points, and the list query leaves the
+ * points behind on purpose, because downloading every track to draw a page of
+ * summaries would be absurd. So the ones already in hand are shown at once and
+ * the account's are fetched behind them, newest first, for the routes that
+ * could possibly hold a best: on foot, long enough, and timed. `moving_s` is
+ * the tell for that last one — a track with no timestamps has no moving time.
+ */
+const km = m => (m / 1000).toFixed(m < 10000 ? 2 : 1);
+const EFFORT_FETCH_MAX = 40;         // a cap, so a big library cannot stampede
+
+function paintFigures() {
+  const routes = all();
+  const fig = document.getElementById('figures');
+  fig.hidden = !routes.length;
+  if (!routes.length) return;
+
+  const t = totals(routes);
+  document.getElementById('totals').innerHTML = [
+    ['Routes', t.routes, ''],
+    ['Distance', km(t.distance_m), 'km'],
+    ['Moving time', clock(t.moving_s), ''],
+    ['Climbed', Math.round(t.gain_m).toLocaleString(), 'm'],
+  ].map(([k, v, u]) => `<div><dt>${k}</dt><dd>${v}${u ? `<small>${u}</small>` : ''}</dd></div>`).join('');
+
+  const pb = personalBests(routes);
+  const got = EFFORTS.filter(e => pb[e.key]);
+  const busy = effortsPending
+    ? `<span class="busy">checking ${effortsPending} more…</span>` : '';
+  document.getElementById('bests').innerHTML = got.length
+    ? `<span class="lbl">Best on foot</span>` + got.map(e => {
+        const b = pb[e.key];
+        const r = routes.find(x => x.slug === b.slug);
+        const label = `${e.label} <b>${clock(b.seconds)}</b> <span style="color:var(--ink-3)">${pace(b.seconds, e.metres)}/km</span>`;
+        return r ? `<a href="${routeHref(r)}" title="${escapeHtml(b.route)}">${label}</a>` : `<span>${label}</span>`;
+      }).join('') + busy
+    : `<span class="lbl">Best on foot</span><span class="none">nothing timed and long enough yet —
+       anything you record in the app will count</span>${busy}`;
+}
+
+let effortsPending = 0;
+
+async function fetchEffortTracks() {
+  const want = cloudRoutes.filter(r => !r.track?.secs
+    && ON_FOOT.has(r.activity)
+    && (r.stats?.moving_s ?? 0) > 0
+    && (r.stats?.distance_m ?? 0) >= EFFORTS[0].metres)
+    .slice(0, EFFORT_FETCH_MAX);
+  if (!want.length) return;
+  effortsPending = want.length;
+  paintFigures();
+  for (const r of want) {
+    try {
+      const full = await account.routes().route(r.id);
+      r.track = full.track;
+    } catch { /* one route short of a best effort is not worth a message */ }
+    effortsPending--;
+    paintFigures();
+  }
+}
+
+function render() {
+  const routes = all();
+  const cloud = routes.filter(r => r.cloud).length, local = routes.length - cloud;
+  document.getElementById('count').textContent = !routes.length ? ''
+    : [cloud ? `${cloud} in your account` : '', local ? `${local} in this browser` : '']
+        .filter(Boolean).join(' · ');
+
+  const nowt = document.getElementById('nowt');
+  nowt.hidden = !!routes.length;
+  if (!routes.length) {
+    const signedOut = account.enabled() && !account.user();
+    document.getElementById('nowt-cta').hidden = !signedOut;
+    document.getElementById('nowt-why').innerHTML = signedOut
+      ? `Record a route or add a <code>.gpx</code> file and it will appear here. Routes kept in this
+         browser disappear with it — an account is what makes them survive, and lets you hand one to
+         somebody else with a link.`
+      : `Record a route or add a <code>.gpx</code> file and it will appear here. You can also drop a
+         file anywhere on this page.`;
+  }
+
+  paintFigures();
+  grid.innerHTML = routeDiary(routes, { actions });
+
+  grid.querySelectorAll('.dl.share').forEach(b =>
+    b.addEventListener('click', e => { e.preventDefault(); openShare(b.dataset.id); }));
+
+  /**
+   * One tap, link on the clipboard.
+   *
+   * The old way out of here was the visibility dialog, three radio buttons and
+   * a Copy inside it — correct, and far too much ceremony for "send this to my
+   * sister". A private route is opened up to a link on the way, which is what
+   * pressing a share button asks for, and the button says so rather than doing
+   * it quietly.
+   */
+  grid.querySelectorAll('.dl.copy').forEach(b => b.addEventListener('click', async e => {
+    e.preventDefault();
+    const route = all().find(r => (b.dataset.id && r.id === b.dataset.id)
+      || (b.dataset.slug && r.slug === b.dataset.slug));
+    b.disabled = true;
+    const res = await shareRoute(route, { cloud: account.routes() });
+    b.disabled = false;
+    b.classList.toggle('done', res.ok);
+    setTimeout(() => b.classList.remove('done'), 2500);
+    toast(res.why);
+    if (res.opened) {
+      cloudRoutes = cloudRoutes.map(r => (r.id === route.id ? route : r));
+      render();
+    }
+  }));
+
+  // Export a route this browser holds. The track is rebuilt into GPX rather
+  // than a copy of the file being kept around: for anything this app recorded
+  // that is the same points it captured, and it means an imported route can be
+  // taken back out too.
+  grid.querySelectorAll('.dl.gpx').forEach(b => b.addEventListener('click', async e => {
+    e.preventDefault();
+    const entry = listLocalRoutes().find(r => r.slug === b.dataset.slug);
+    if (!entry) return toast('That route is no longer in this browser.');
+    b.disabled = true;
+    try {
+      const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.track?.activity ?? 'other' });
+      const how = await saveGPX(safeName(entry.name), gpx);
+      toast(how === 'shared' ? 'Choose where to send it.' : `Saved ${safeName(entry.name)}`);
+    } catch (err) {
+      toast(`Could not save the file: ${err.message}`);
+    } finally { b.disabled = false; }
+  }));
+
+  grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault();
+    removeLocalRoute(b.dataset.slug);
+    render();
+  }));
+}
+
+/* ---------- adding files ---------- */
+async function ingest(files) {
+  const gpx = [...files].filter(f => /\.gpx$/i.test(f.name));
+  if (!gpx.length) return toast('That is not a .gpx file.');
+  let last = null, added = 0;
+  for (const file of gpx) {
+    try {
+      const track = analyze(parseGPX(await file.text()));
+      last = addLocalRoute(file.name, track, profileSamples(track, 96));
+      added++;
+    } catch (err) {
+      toast(`${file.name}: ${err.message}`);
+    }
+  }
+  if (!added) return;
+  render();
+  toast(added === 1
+    ? `Added ${last.name} — opening it…`
+    : `Added ${added} routes to this browser.`);
+  if (added === 1) setTimeout(() => { location.href = `./view.html?local=${encodeURIComponent(last.slug)}`; }, 700);
+}
+
+document.getElementById('add').addEventListener('click', () => document.getElementById('file').click());
+document.getElementById('file').addEventListener('change', e => { ingest(e.target.files); e.target.value = ''; });
+
+const dropEl = document.getElementById('drop');
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); if (++dragDepth === 1) dropEl.classList.add('on'); });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropEl.classList.remove('on'); } });
+addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; dropEl.classList.remove('on');
+  ingest(e.dataTransfer.files);
+});
+
+/* ---------- who can see a route ---------- */
+/**
+ * Three states rather than a switch, because "anyone with the link" is a real
+ * third thing and collapsing it into public or private misrepresents what
+ * happens. The link is shown only when it can actually be used, and replacing
+ * it is offered next to it with a warning, since revoking access is the whole
+ * reason the token can be rotated.
+ */
+const shareEl = document.getElementById('share');
+const shareMsg = document.getElementById('share-msg');
+let sharing = null;                       // the route being configured
+
+function paintShare() {
+  const url = sharing ? routeLink(sharing) : null;
+  document.getElementById('share-link').hidden = !url;
+  if (url) document.getElementById('share-url').value = url;
+  for (const i of document.querySelectorAll('#share-opts input')) i.checked = i.value === sharing?.visibility;
+}
+
+function openShare(id) {
+  sharing = cloudRoutes.find(r => r.id === id);
+  if (!sharing) return;
+  shareMsg.textContent = '';
+  paintShare();
+  shareEl.classList.add('on');
+}
+
+document.getElementById('share-opts').addEventListener('change', async e => {
+  if (!sharing) return;
+  const visibility = e.target.value;
+  shareMsg.textContent = 'Saving…';
+  shareMsg.classList.add('ok');
+  try {
+    const updated = await account.routes().setVisibility(sharing.id, visibility);
+    sharing = { ...sharing, ...updated, cloud: true };
+    cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
+    shareMsg.textContent = visibility === 'private'
+      ? 'Private. Any link you sent before no longer opens it.'
+      : 'Saved.';
+    paintShare();
+    render();
+  } catch (err) {
+    shareMsg.classList.remove('ok');
+    shareMsg.textContent = account.explain(err);
+  }
+});
+
+document.getElementById('share-copy').addEventListener('click', async () => {
+  const res = await shareRoute(sharing, { cloud: account.routes() });
+  shareMsg.classList.toggle('ok', res.ok);
+  shareMsg.textContent = res.why;
+  if (res.opened) { paintShare(); render(); }
+});
+
+document.getElementById('share-rotate').addEventListener('click', async () => {
+  if (!sharing) return;
+  shareMsg.classList.add('ok');
+  shareMsg.textContent = 'Replacing…';
+  try {
+    const fresh = await account.routes().rotateShareToken(sharing.id);
+    sharing = { ...sharing, shareToken: fresh };
+    cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
+    paintShare();
+    shareMsg.textContent = 'New link ready. The old one has stopped working.';
+  } catch (err) {
+    shareMsg.classList.remove('ok');
+    shareMsg.textContent = account.explain(err);
+  }
+});
+
+document.getElementById('share-close').addEventListener('click', () => shareEl.classList.remove('on'));
+shareEl.addEventListener('click', e => { if (e.target === shareEl) shareEl.classList.remove('on'); });
+
+/* ---------- accounts ----------
+ * The sign-in form itself lives on the landing page; from here the two buttons
+ * go there rather than this page carrying a second copy of the dialog.
+ */
+for (const [id, mode] of [['nowt-up', 'up'], ['nowt-in', 'in']]) {
+  document.getElementById(id).addEventListener('click', () => { location.href = `./?signin=${mode}`; });
+}
+
+await account.ready();
+document.getElementById('acctbtn').hidden = !account.enabled();
+document.getElementById('acctbtn').addEventListener('click', () => { location.href = './?signin=in'; });
+account.onChange(user => {
+  const btn = document.getElementById('acctbtn');
+  btn.hidden = !account.enabled();
+  btn.textContent = user ? (user.email?.split('@')[0] ?? 'Account') : 'Sign in';
+  refreshCloud();
+});
+
+render();
+</script>
+</body>
+</html>

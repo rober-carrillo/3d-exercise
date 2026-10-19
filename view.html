@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Salpicón!</title>
-<meta name="theme-color" content="#fcf1ee" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171214" media="(prefers-color-scheme: dark)">
-<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fcf1ee">
+<script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
 <link rel="stylesheet" href="./src/ui.css">
@@ -18,6 +17,20 @@
 <script type="module">
 import { RouteViewer } from './src/viewer.js';
 import { getLocalRoute } from './src/library.js';
+import { shareRoute } from './src/share.js';
+import { initTheme } from './src/theme.js';
+
+initTheme();
+
+/**
+ * The viewer's own "Copy link to this route".
+ *
+ * Which link that is depends entirely on where the route lives, and the viewer
+ * has no business knowing: it is handed a function and told what to put on the
+ * button. A route that is only in this browser has no link at all, and says so
+ * rather than producing an address that opens nothing for anybody else.
+ */
+const sharer = (route, cloud = null) => () => shareRoute(route, { cloud });
 
 const params = new URLSearchParams(location.search);
 const localSlug = params.get('local');
@@ -34,9 +47,11 @@ if (cloudId) {
   } else {
     try {
       const entry = await routes().route(cloudId);
-      document.title = entry.name + ' · 3D route';
+      document.title = entry.name + ' · Salpicón!';
+      entry.cloud = true;
       window.viewer = new RouteViewer({
-        mount: document.body, track: entry.track, name: entry.name, backHref: './', date: entry.date,
+        mount: document.body, track: entry.track, name: entry.name, backHref: './routes.html',
+        date: entry.date, onShare: sharer(entry, routes()),
       });
     } catch (err) {
       fail(`That route could not be opened. It may have been deleted, or you may need to
@@ -52,8 +67,8 @@ if (cloudId) {
   } else {
     document.title = entry.name + ' · Salpicón!';
     window.viewer = new RouteViewer({
-      mount: document.body, track: entry.track, name: entry.name, backHref: './',
-      date: entry.date || entry.added,
+      mount: document.body, track: entry.track, name: entry.name, backHref: './routes.html',
+      date: entry.date || entry.added, onShare: sharer({ ...entry, local: true }),
     });
   }
 } else {
@@ -65,8 +80,8 @@ if (cloudId) {
   } else {
     document.title = entry.name + ' · Salpicón!';
     window.viewer = new RouteViewer({
-      mount: document.body, gpxUrl: './routes/' + entry.file, name: entry.name, backHref: './',
-      date: entry.date,
+      mount: document.body, gpxUrl: './routes/' + entry.file, name: entry.name,
+      backHref: './library.html', date: entry.date, onShare: sharer({ ...entry, cloud: false, local: false }),
     });
   }
 }

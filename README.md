@@ -27,16 +27,23 @@ src/terrain.js    ← mercator maths, tile loading, mesh + ribbon geometry
 src/renderer.js   ← WebGL programs, orbit camera, chase camera
 src/viewer.js     ← RouteViewer: the mountable component
 src/library.js    ← routes added in the browser (localStorage)
-src/ui.css        ← design tokens + viewer chrome
-index.html        ← the route library
-view.html         ← single-route viewer (?route=<slug>)
+src/cards.js      ← the month-by-month route list, shared by the list pages
+src/share.js      ← what a route's link is, and getting it onto the clipboard
+src/theme.js      ← light/dark, chosen rather than inherited
+src/ambient.js    ← the figures wandering across the landing page background
+src/ui.css        ← design tokens + viewer chrome + the page chrome
+index.html        ← the landing page: a live route, flying itself
+routes.html       ← your routes — the account's, plus this browser's
+library.html      ← the public library of sample routes
+view.html         ← single-route viewer (?route=|?local=|?cloud=)
+r.html            ← a shared link (/r/<token>)
 scripts/build.mjs ← scans routes/, writes dist/ + routes.json
 ```
 
 ## Adding a route
 
-**In the browser, for yourself.** Hit *＋ Add a GPX* on the library page, or drop
-files anywhere on it. The track is parsed in the browser, added to the library
+**In the browser, for yourself.** Hit *＋ Add a GPX* on **Your routes**, or drop
+files anywhere on that page. The track is parsed in the browser, added to the library
 and opened straight away — same pipeline as any other route: tiles for its
 bounding box, terrain mesh, ribbon, walker.
 
@@ -63,8 +70,7 @@ git add routes/my-hike.gpx && git commit -m "add my-hike" && git push
 
 ## Viewing it
 
-**The hosted site is the product** — `index.html` + `view.html` served from
-`dist/`. Three ways to look at it, in order of how close they are to production:
+**The hosted site is the product** — the pages above, served from `dist/`. Three ways to look at it, in order of how close they are to production:
 
 | | how | needs |
 |---|---|---|
@@ -83,7 +89,7 @@ A convenience artifact, not the main deliverable. `npm run build` also writes
 `dist/standalone/<slug>.html` for every route: one self-contained file, no server
 and no modules, that you can double-click or mail to someone. It still fetches imagery and elevation at view time (and degrades the
 same way when offline), but the code, styles and track data are all inlined.
-Every card on the index page links to its own.
+Every row in the public library links to its own.
 
 That build is what `scripts/build.mjs` bundles by hand — each module wrapped in an
 IIFE returning its exports, since browsers refuse ES modules over `file://`.

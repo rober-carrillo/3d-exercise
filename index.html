@@ -4,43 +4,59 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Salpicón!</title>
-<meta name="description" content="Salpicón! — your routes as interactive 3D terrain flyovers.">
-<meta name="theme-color" content="#fcf1ee" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171214" media="(prefers-color-scheme: dark)">
-<meta name="color-scheme" content="light dark">
+<meta name="description" content="Salpicón! — record a run, a ride or a walk and watch it played back across real terrain, at the pace you actually went.">
+<meta name="theme-color" content="#fcf1ee">
+<!-- The theme is set before the first paint. Left to the module below it would
+     arrive a frame late and a dark page would flash white on the way in. -->
+<script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
 <link rel="stylesheet" href="./src/ui.css">
 <style>
   body{min-height:100%;background:radial-gradient(120% 80% at 50% -10%,var(--bg-hi) 0%,var(--bg) 60%) fixed}
-  .wrap{max-width:1080px;margin:0 auto;padding:72px 24px 96px}
-  header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap}
-  header h1{margin:0;font-size:30px;font-weight:660;letter-spacing:-.025em}
-  .brand{display:flex;align-items:center;gap:14px}
-  .brand .mk{width:76px;height:auto;flex:0 0 auto}
-  header p{margin:10px 0 0;font-size:14px;line-height:1.6;color:var(--ink-2);max-width:56ch}
-  .add{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:var(--on-accent);background:var(--accent);
-    border:1px solid var(--accent);border-radius:10px;padding:9px 15px;cursor:pointer;transition:background .15s}
-  .add:hover{background:var(--accent-2)}
-  .add.quiet{color:var(--accent);background:var(--panel);border-color:var(--line-2)}
-  .add.quiet:hover{background:var(--bg-hi)}
-  .rec-btn{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:var(--on-accent);
-    background:var(--route);border:1px solid var(--route);border-radius:10px;
-    padding:9px 15px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;gap:7px}
-  .rec-btn:hover{background:var(--route-2)}
-  .rec-btn i{width:9px;height:9px;border-radius:50%;background:var(--on-accent);display:block}
-  #share{position:fixed;inset:0;z-index:61;display:none;align-items:center;justify-content:center;
-    background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
-  #share.on{display:flex}
-  .share-opts{display:flex;flex-direction:column;gap:2px}
-  .share-opts label{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:10px;cursor:pointer}
-  .share-opts label:hover{background:var(--fill)}
-  .share-opts input{margin-top:3px;flex:0 0 auto}
-  .share-opts span{font-size:12.5px;line-height:1.5;color:var(--ink-2)}
-  .share-opts b{display:block;font-size:14px;color:var(--ink);font-weight:600}
-  .share-lbl{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
-  #share-url{width:100%;font:inherit;font-size:13px;padding:10px 12px;border-radius:9px;margin-top:5px;
-    border:1px solid var(--line-2);background:var(--bg-hi);color:var(--ink)}
+  .wrap{padding-top:34px}
+
+  /* the pitch: a short headline, then the thing itself, as big as it will go */
+  .pitch{margin:34px auto 0;max-width:60ch;text-align:center}
+  .pitch h2{margin:0;font-size:clamp(26px,3.8vw,38px);font-weight:680;letter-spacing:-.03em;line-height:1.14;text-wrap:balance}
+  .pitch p{margin:12px auto 0;font-size:14.5px;line-height:1.62;color:var(--ink-2);max-width:54ch}
+  .hero-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;justify-content:center}
+  .hero-note{font-size:12px;color:var(--ink-3);margin:12px 0 0}
+
+  /* the stage: a real route, flying itself. Bigger than everything else on the
+     page on purpose — it is the explanation. */
+  
+  .stage{position:relative;margin-top:24px;height:min(62vh,580px);min-height:360px;
+    border-radius:18px;overflow:hidden;border:1px solid var(--panel-brd);background:var(--panel);
+    box-shadow:var(--shadow-lift)}
+  .stage-cap{margin:10px 2px 0;font-size:11.5px;color:var(--ink-3);display:flex;gap:10px;
+    justify-content:space-between;flex-wrap:wrap}
+  .stage-cap a{color:var(--accent);text-decoration:none}
+  .stage-cap a:hover{text-decoration:underline}
+  .stage-art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px}
+  .stage-art svg{width:100%;height:100%}
+
+  /* three routes to look at, each a drawing of its own shape */
+  .previews{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:16px}
+  .pv{display:flex;flex-direction:column;gap:0;border:1px solid var(--panel-brd);border-radius:14px;
+    background:var(--panel);text-decoration:none;color:inherit;overflow:hidden;
+    transition:transform .16s,box-shadow .16s,border-color .16s}
+  .pv:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--line-2)}
+  .pv:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .pv-art{display:block;width:100%;aspect-ratio:16/10;background:
+    linear-gradient(160deg,var(--bg-hi),var(--fill))}
+  .pv-txt{padding:12px 14px 14px;border-top:1px solid var(--line)}
+  .pv-txt b{display:block;font-size:14px;font-weight:620;letter-spacing:-.01em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pv-txt small{display:block;margin-top:4px;font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+  .more{display:flex;justify-content:center;margin-top:24px}
+
+  @media (max-width:760px){
+    .previews{grid-template-columns:1fr}
+    .stage{height:min(54vh,460px);min-height:300px}
+  }
+
+  /* dialogs, unchanged from the library page they came from */
   #acct{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
     background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
   #acct.on{display:flex}
@@ -57,10 +73,11 @@
   .acct-msg.ok{color:var(--accent)}
   .acct-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   .acct-btns button{flex:1 1 auto}
+
   #rec{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
   #rec.on{display:flex}
-  .rec-card{width:min(420px,100%);padding:26px 26px 22px;display:flex;flex-direction:column;gap:18px}
+  .rec-card{position:relative;width:min(420px,100%);padding:26px 26px 22px;display:flex;flex-direction:column;gap:18px}
   .rec-live{display:flex;align-items:baseline;gap:10px}
   /* the crossing light: the LED mark walks, waits and fills its glass with the recording */
   .rec-card .signal-box{display:flex;justify-content:center}
@@ -84,64 +101,15 @@
   .rec-btns .pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
   .rec-btns button:disabled{opacity:.4;cursor:not-allowed}
   .rec-note{font-size:11.5px;line-height:1.6;color:var(--ink-3)}
+  /* the one thing somebody recording without an account has to know */
+  .rec-warn{margin:0;font-size:12px;line-height:1.55;color:var(--ink-2);
+    background:var(--fill);border-left:2px solid var(--warm);border-radius:0 8px 8px 0;padding:9px 12px}
+  .rec-warn b{color:var(--ink)}
   .rec-count{position:absolute;inset:0;border-radius:inherit;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:10px;background:var(--bg);z-index:3}
+    align-items:center;justify-content:center;gap:10px;background:var(--bg);z-index:3;padding:24px;text-align:center}
   .rec-n{font-size:72px;font-weight:680;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
   .rec-acc{font-size:12px;color:var(--ink-2);letter-spacing:.02em}
-  .rec-card{position:relative}
-  .count{margin:34px 0 0;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
-  /* the diary: one section per month, newest first, a row per route */
-  .month{margin-top:30px}
-  .month-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px 14px;flex-wrap:wrap;
-    padding-bottom:9px;border-bottom:2px solid var(--ink)}
-  .month-head h2{margin:0;font-size:22px;font-weight:680;letter-spacing:-.02em}
-  .month-head span{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
-  .row{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
-  .row a.go{flex:1;min-width:0;display:grid;grid-template-columns:52px minmax(0,1fr) 150px 92px;align-items:center;
-    gap:16px;padding:12px 8px 12px 0;color:inherit;text-decoration:none;border-radius:10px;transition:background .15s}
-  .row a.go:hover{background:var(--fill)}
-  .row a.go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .day{display:flex;flex-direction:column;align-items:center}
-  .day b{font-size:20px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
-  .day small{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:4px}
-  .what{display:flex;flex-direction:column;min-width:0;gap:3px}
-  .what b{font-size:15.5px;font-weight:620;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .what small{font-size:12px;color:var(--ink-3)}
-  .spark{width:150px;height:30px;display:block;overflow:visible}
-  .num{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
-  .num b{font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .num small{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .acts{display:flex;gap:2px}
-  .dl,.rm{font:inherit;font-size:11.5px;color:var(--ink-3);background:none;border:1px solid transparent;border-radius:8px;
-    min-height:40px;padding:0 10px;cursor:pointer;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;
-    transition:color .15s,border-color .15s}
-  .dl:hover{color:var(--accent);border-color:var(--line-2)}
-  .rm:hover{color:var(--hot);border-color:var(--line-2)}
-  .dl:disabled{opacity:.5;cursor:wait}
-  .tag{display:inline-block;margin-left:6px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;vertical-align:1px;
-    color:var(--tag-brown);border:1px solid currentColor;border-radius:5px;padding:0 5px}
-  .tag.pace{color:var(--tag-green)}
-  @media (max-width:640px){
-    .row a.go{grid-template-columns:40px minmax(0,1fr) auto;gap:12px}
-    .spark{display:none}
-    .dl span,.rm span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-  }
-  .hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:30px;align-items:center;
-    margin-top:34px;padding:28px;border:1px solid var(--panel-brd);border-radius:16px;background:var(--panel)}
-  .hero h2{margin:0;font-size:25px;font-weight:660;letter-spacing:-.025em;line-height:1.2;text-wrap:balance}
-  .hero p{margin:12px 0 0;font-size:14px;line-height:1.65;color:var(--ink-2);max-width:48ch}
-  .hero-cta{display:flex;gap:9px;flex-wrap:wrap;margin-top:18px}
-  .hero-note{font-size:12px;color:var(--ink-3);margin-top:12px}
-  .hero-art svg{width:100%;height:auto;display:block;border-radius:14px;border:1px solid var(--line)}
-  @media (max-width:760px){ .hero{grid-template-columns:1fr;gap:22px;padding:22px} .hero-art{order:-1} }
-  .empty{padding:26px;font-size:13.5px;color:var(--ink-2);line-height:1.7}
-  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--accent)}
-  footer{margin-top:44px;font-size:11px;color:var(--ink-3);line-height:1.8}
-  footer a{color:var(--ink-2)}
-  #drop{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
-    background:var(--scrim);backdrop-filter:blur(6px)}
-  #drop.on{display:flex}
-  #drop div{border:2px dashed var(--accent);border-radius:18px;padding:44px 64px;font-size:15px;color:var(--ink)}
+
   #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);z-index:40;
     padding:11px 18px;font-size:12.5px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:80vw}
   #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -149,86 +117,48 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
-      <div class="brand"><span id="brandmark"></span><h1>Salpicón!</h1></div>
-      <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the walker in chase view.</p>
-    </div>
-    <div style="display:flex;gap:9px;flex-wrap:wrap">
+  <header class="page-head">
+    <div class="brand"><a href="./"><span id="brandmark"></span><h1>Salpicón!</h1></a></div>
+    <div class="nav">
+      <button class="theme-btn" id="themebtn" type="button"></button>
       <button class="add quiet" id="acctbtn" hidden>Sign in</button>
-      <a class="add quiet" href="./dash.html" style="text-decoration:none;display:inline-flex;align-items:center">Your figures</a>
+      <a class="add quiet" href="./routes.html">Your routes</a>
       <button class="rec-btn" id="recbtn"><i></i>Record</button>
-      <button class="add quiet" id="add">＋ Add a GPX</button>
     </div>
   </header>
-  <section class="hero" id="hero" hidden>
-    <div class="hero-text">
-      <h2>Your routes, as the ground actually is.</h2>
-      <p>Record a run, a ride or a walk — or bring one you already have — and watch it played back
-        across real terrain, at the pace you actually went. Keep it to yourself, or send somebody a
-        link that opens without an account.</p>
-      <div class="hero-cta">
-        <button class="add" id="hero-up">Create an account</button>
-        <button class="add quiet" id="hero-in">I already have one</button>
-      </div>
-      <p class="hero-note">You can look around without an account. Signing in is what keeps your
-        routes when this browser forgets them.</p>
+
+  <section class="pitch">
+    <h2>Your routes, as the ground actually is.</h2>
+    <p>Record a run, a ride or a walk — or bring one you already have — and watch it played back
+      across real terrain, at the pace you actually went. Keep it to yourself, or send somebody a
+      link that opens without an account.</p>
+    <div class="hero-cta" id="hero-cta">
+      <button class="add" id="hero-up">Create an account</button>
+      <button class="add quiet" id="hero-in">I already have one</button>
     </div>
-    <div class="hero-art" aria-hidden="true">
-      <svg viewBox="0 0 320 210" role="img">
-        <defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--bg-hi)"/><stop offset="100%" stop-color="var(--bg)"/>
-        </linearGradient></defs>
-        <rect width="320" height="210" rx="14" fill="url(#hg)"/>
-        <g fill="none" stroke="var(--brown)" stroke-opacity=".35" stroke-width="1.4">
-          <path d="M8,168 C60,150 96,166 140,150 C188,132 232,150 312,128"/>
-          <path d="M8,144 C64,126 102,142 146,126 C194,108 238,126 312,104"/>
-          <path d="M8,120 C68,102 108,118 152,102 C200,84 244,102 312,80"/>
-          <path d="M8,96 C72,78 114,94 158,78 C206,60 250,78 312,56"/>
-          <path d="M8,72 C76,54 120,70 164,54 C212,36 256,54 312,32"/>
-        </g>
-        <path d="M42,182 C78,160 92,132 128,122 C164,112 178,86 214,74 C244,64 262,52 286,44"
-              fill="none" stroke="var(--route)" stroke-width="4" stroke-linecap="round"/>
-        <circle cx="128" cy="122" r="7" fill="var(--route)" stroke="var(--bg-hi)" stroke-width="3"/>
-      </svg>
+    <div class="hero-cta" id="hero-back" hidden>
+      <a class="add" href="./routes.html">Your routes</a>
+      <button class="rec-btn" id="hero-rec"><i></i>Record something new</button>
     </div>
+    <p class="hero-note" id="hero-note">You can look around without an account. Signing in is what keeps
+      your routes when this browser forgets them.</p>
   </section>
 
-  <div class="count" id="count"></div>
-  <div id="grid"></div>
+  <div class="stage" id="stage"></div>
+  <div class="stage-cap">
+    <span id="stage-note">A real route, flying itself. Drag to look around.</span>
+    <a id="stage-open" href="./view.html">Open it full screen →</a>
+  </div>
+
+  <h2 class="sect">Three to look at</h2>
+  <div class="previews" id="previews"></div>
+  <div class="more"><a class="add quiet" href="./library.html">See the public library of routes →</a></div>
+
   <footer>
     Imagery © Esri and its contributors · Elevation from
     <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) ·
     Map fallback © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
   </footer>
-</div>
-
-<input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
-<div id="share">
-  <div class="acct-card rv-panel">
-    <h2>Who can see this route?</h2>
-    <div class="share-opts" id="share-opts">
-      <label><input type="radio" name="vis" value="private"><span><b>Only me</b>
-        Nobody else can open it, even with the address.</span></label>
-      <label><input type="radio" name="vis" value="link"><span><b>Anyone with the link</b>
-        It will not appear anywhere public. Only people you send the link to.</span></label>
-      <label><input type="radio" name="vis" value="public"><span><b>Public</b>
-        Anyone can find and open it.</span></label>
-    </div>
-    <div id="share-link" hidden>
-      <label class="share-lbl" for="share-url">Link</label>
-      <input id="share-url" readonly>
-      <div class="acct-btns">
-        <button type="button" class="add" id="share-copy">Copy link</button>
-        <button type="button" class="add quiet" id="share-rotate"
-          title="Everyone you already sent the old link to will lose access">Replace link</button>
-      </div>
-    </div>
-    <p class="acct-msg" id="share-msg" role="status"></p>
-    <div class="acct-btns">
-      <button type="button" class="add quiet" id="share-close">Done</button>
-    </div>
-  </div>
 </div>
 
 <div id="acct">
@@ -273,6 +203,8 @@
       <div><span class="rec-k">Pace</span><span class="rec-v" id="recpace">—</span></div>
       <div><span class="rec-k">Points</span><span class="rec-v" id="recpts">0</span></div>
     </div>
+    <p class="rec-warn" id="recwarn" hidden><b>Stored in your web browser until you make an account.</b>
+      Clear your browsing data, switch device or use a different browser and you could lose these routes.</p>
     <div class="rec-acts" id="recacts">
       <button data-a="run" class="on">Run</button><button data-a="walk">Walk</button>
       <button data-a="ride">Ride</button><button data-a="field">Field sport</button>
@@ -287,191 +219,158 @@
   </div>
 </div>
 
-<div id="drop"><div>Drop GPX files to build them</div></div>
 <div id="toast" class="rv-panel"></div>
 
 <script type="module">
-import { rampCss } from './src/terrain.js';
-import { parseGPX, analyze, profileSamples, formatDate, trackToGPX } from './src/gpx.js';
-import { saveGPX, safeName, canShareFiles } from './src/export.js';
+import { parseGPX, analyze, profileSamples } from './src/gpx.js';
 import * as account from './src/account.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
-import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp } from './src/geo.js';
+import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp } from './src/geo.js';
 import { markSVG, signalFor } from './src/mark.js';
+import { initTheme, themeToggle } from './src/theme.js';
+import { startAmbient } from './src/ambient.js';
 
-const grid = document.getElementById('grid');
-// the main logo: the runner arriving at a full glass
-document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
-const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+initTheme();
+themeToggle(document.getElementById('themebtn'));
+startAmbient();
 
+/* ---------- the mark, walking ----------
+ * The logo is the app's own stoplight figure, and standing still it is just a
+ * drawing. Here it does what the product does: she walks, the glass fills, and
+ * at the top of the route she has her drink — one loop, about eight seconds.
+ */
+const brandmark = document.getElementById('brandmark');
+const stillMark = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (stillMark) {
+  brandmark.innerHTML = markSVG({ juice: 1 });
+} else {
+  let step = 0;
+  const LOOP = 22;                       // frames in one fill-and-drink cycle
+  const paintMark = () => {
+    const i = step % LOOP;
+    // the last three frames hold the full glass, so the reward is legible
+    const juice = i >= LOOP - 3 ? 1 : i / (LOOP - 3);
+    brandmark.innerHTML = markSVG({ pose: i % 2 ? 'pass' : 'run', juice });
+    step++;
+  };
+  paintMark();
+  setInterval(paintMark, 360);
+}
+
+const fmtKm = m => (m / 1000).toFixed(2);
 const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
 const built = (manifest.routes || []).map(r => ({ ...r, local: false }));
 
-/** Newest first, by when the activity happened — or when it was added, for the
- *  files that never carried a time. ISO strings sort chronologically as text. */
-const byDate = (a, b) => String(b.date || b.added || '').localeCompare(String(a.date || a.added || ''));
-
-let cloudRoutes = [];                 // whatever the account holds, once fetched
-
-/**
- * Pull the signed-in person's routes and redraw.
- *
- * A failure here is not fatal and must not empty the page: the built-in routes
- * and anything in this browser are still perfectly good, so a dropped
- * connection costs the cloud list and nothing else.
+/* ---------- the stage ----------
+ * One real route, flying itself, as the first thing on the page. A paragraph
+ * explaining a 3D replay is no substitute for showing one, and there is no
+ * sign-in between the visitor and this.
  */
-async function refreshCloud() {
-  if (!account.enabled() || !account.user()) { cloudRoutes = []; render(); return; }
+const STAGE_SLUG = 'caminata-alto-del-toro';
+const stage = document.getElementById('stage');
+const stageRoute = built.find(r => r.slug === STAGE_SLUG) || built[0];
+
+/** A flat drawing of the route, for when a live one is a bad idea or impossible. */
+function shapeArt(route) {
+  const pts = route?.shape || [];
+  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${(x * 100).toFixed(2)} ${(y * 100).toFixed(2)}`).join('');
+  return `<div class="stage-art"><svg viewBox="-6 -6 112 112" role="img"
+      aria-label="${route ? route.name : 'A route'}" preserveAspectRatio="xMidYMid meet">
+      <path d="${d}" fill="none" stroke="var(--route)" stroke-width="2.4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+      ${pts.length ? `<circle cx="${(pts[0][0] * 100).toFixed(2)}" cy="${(pts[0][1] * 100).toFixed(2)}"
+        r="3" fill="var(--route)"/>` : ''}
+    </svg></div>`;
+}
+
+const webglOK = (() => {
   try {
-    cloudRoutes = (await account.routes().myRoutes()).map(r => ({ ...r, cloud: true }));
-  } catch {
-    cloudRoutes = [];
-    toast('Could not reach your account. Showing what is on this device.');
-  }
-  render();
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch { return false; }
+})();
+// Someone on a metered connection did not ask for a few megabytes of satellite
+// imagery to read a landing page, and the browser will tell us if they said so.
+const saveData = !!navigator.connection?.saveData;
+
+if (stageRoute) {
+  document.getElementById('stage-open').href = `./view.html?route=${encodeURIComponent(stageRoute.slug)}`;
+  document.getElementById('stage-note').textContent =
+    `${stageRoute.name} · ${fmtKm(stageRoute.stats.distance_m)} km · ↑ ${Math.round(stageRoute.stats.gain_m)} m`;
 }
 
-function render() {
-  const routes = [...built, ...cloudRoutes, ...listLocalRoutes()].sort(byDate);
-  grid.innerHTML = '';
-  // Say whose these are. Signed out, every route here is a sample that ships
-  // with the app, and calling those "your routes" to somebody who has not made
-  // an account is a small lie that confuses everything after it.
-  const mine = routes.filter(r => r.cloud || r.local).length;
-  const samples = routes.length - mine;
-  document.getElementById('count').textContent = !routes.length ? ''
-    : mine && samples ? `${mine} of yours · ${samples} example${samples > 1 ? 's' : ''}`
-    : mine ? `${mine} route${mine > 1 ? 's' : ''}`
-    : `${samples} example routes · yours will appear here`;
-  if (!routes.length) {
-    grid.innerHTML = `<div class="rv-panel empty">No routes yet. Drop a <code>.gpx</code> file anywhere on this
-      page to build one right now, or commit it to <code>routes/</code> to publish it for everyone.</div>`;
-    return;
-  }
-  // a diary: one section per month, newest first, with the month's totals
-  for (const [key, list] of groupByMonth(routes)) grid.insertAdjacentHTML('beforeend', month(key, list));
-  // Export a route this browser holds. The track is rebuilt into GPX rather
-  // than a copy of the file being kept around: for anything this app recorded
-  // that is the same points it captured, and it means an imported route can be
-  // taken back out too.
-  grid.querySelectorAll('.dl.share').forEach(b =>
-    b.addEventListener('click', e => { e.preventDefault(); openShare(b.dataset.id); }));
-
-  grid.querySelectorAll('.dl.gpx').forEach(b => b.addEventListener('click', async e => {
-    e.preventDefault();
-    const entry = listLocalRoutes().find(r => r.slug === b.dataset.slug);
-    if (!entry) return toast('That route is no longer in this browser.');
-    b.disabled = true;
+if (!stageRoute) {
+  stage.innerHTML = `<div class="stage-art"><p class="rec-note">No routes are published yet.</p></div>`;
+} else if (!webglOK || saveData) {
+  stage.innerHTML = shapeArt(stageRoute);
+  document.getElementById('stage-note').textContent = !webglOK
+    ? `${stageRoute.name} — this browser has no WebGL, so the 3D replay cannot run here.`
+    : `${stageRoute.name} — the 3D replay is held back while your connection is set to save data.`;
+} else {
+  // Mounted when it is actually on screen: on a phone in portrait the stage can
+  // start below the fold, and loading terrain nobody has looked at yet is the
+  // kind of thing that makes a page feel slow.
+  const mountStage = async () => {
     try {
-      const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.track?.activity ?? 'other' });
-      const how = await saveGPX(safeName(entry.name), gpx);
-      toast(how === 'shared' ? 'Choose where to send it.' : `Saved ${safeName(entry.name)}`);
+      const { RouteViewer } = await import('./src/viewer.js');
+      new RouteViewer({
+        mount: stage,
+        gpxUrl: './routes/' + stageRoute.file,
+        name: stageRoute.name,
+        date: stageRoute.date,
+        showcase: true,
+        loop: true,
+        satMaxTiles: 6,
+      });
     } catch (err) {
-      toast(`Could not save the file: ${err.message}`);
-    } finally { b.disabled = false; }
-  }));
-
-  grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
-    e.preventDefault();
-    removeLocalRoute(b.dataset.slug);
-    render();
-  }));
+      stage.innerHTML = shapeArt(stageRoute);
+      console.warn('stage fell back to the flat drawing:', err);
+    }
+  };
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) { io.disconnect(); mountStage(); }
+    }, { rootMargin: '200px' });
+    io.observe(stage);
+  } else {
+    mountStage();
+  }
 }
 
-const ACT = { walk: 'Walk', run: 'Run', ride: 'Ride', field: 'Field sport' };
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-/**
- * When the route happened: the recorded time, or the day it joined the library
- * for files that never carried one. Entries saved by an older version of the
- * page only have `added`, so fall back to it.
+/* ---------- three to look at ----------
+ * A run, a ride and a pitch sport, so three clicks show three different things
+ * rather than three hillsides. Each thumbnail is the route's own shape.
  */
-const whenOf = r => new Date(r.date || r.added || 0);
+const PREVIEWS = ['18k-march-1st', 'ciclismo-exterior', 'afternoon-soccer-rober-sept-20'];
+const picks = PREVIEWS.map(slug => built.find(r => r.slug === slug))
+  .filter(Boolean);
+// if the sample set ever changes, fall back to whatever is there
+while (picks.length < 3) {
+  const next = built.find(r => !picks.includes(r) && r.slug !== STAGE_SLUG);
+  if (!next) break;
+  picks.push(next);
+}
+const ACT = { walk: 'Walk', run: 'Run', ride: 'Ride', field: 'Field sport' };
+document.getElementById('previews').innerHTML = picks.map(r => {
+  const d = r.shape.map(([x, y], i) => `${i ? 'L' : 'M'}${(x * 100).toFixed(2)} ${(y * 100).toFixed(2)}`).join('');
+  return `<a class="pv" href="./view.html?route=${encodeURIComponent(r.slug)}">
+    <svg class="pv-art" viewBox="-8 -8 116 116" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+      <path d="${d}" fill="none" stroke="var(--route)" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${(r.shape[0][0] * 100).toFixed(2)}" cy="${(r.shape[0][1] * 100).toFixed(2)}" r="4" fill="var(--juice)"/>
+    </svg>
+    <span class="pv-txt"><b>${esc(r.name)}</b>
+      <small>${ACT[r.activity] || 'Route'} · ${fmtKm(r.stats.distance_m)} km · ↑ ${Math.round(r.stats.gain_m)} m</small></span>
+  </a>`;
+}).join('');
 
-function groupByMonth(routes) {
-  const groups = new Map();
-  for (const r of routes) {
-    const d = whenOf(r), key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(r);
-  }
-  return groups;
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/** Recorded routes are named "Run · 12 Oct", so a local route's sport comes from its name. */
-function activityOf(r) {
-  if (r.activity) return ACT[r.activity] || '';
-  const m = /^(run|walk|ride|field)\b/i.exec(r.name || '');
-  return m ? ACT[m[1].toLowerCase()] : '';
-}
-
-function month(key, list) {
-  const [y, m] = key.split('-').map(Number);
-  const km = list.reduce((s, r) => s + r.stats.distance_m, 0) / 1000;
-  const up = list.reduce((s, r) => s + r.stats.gain_m, 0);
-  return `
-    <section class="month">
-      <div class="month-head">
-        <h2>${MONTHS[m]} ${y}</h2>
-        <span>${list.length} route${list.length > 1 ? 's' : ''} · ${km.toFixed(1)} km · ↑ ${fmt(up)} m</span>
-      </div>
-      ${list.map(row).join('')}
-    </section>`;
-}
-
-function row(r) {
-  const d = whenOf(r);
-  const lo = Math.min(...r.profile), hi = Math.max(...r.profile), span = Math.max(1, hi - lo);
-  const W = 150, H = 30;
-  const path = r.profile.map((e, i) =>
-    (i ? 'L' : 'M') + (i / (r.profile.length - 1) * W).toFixed(1) + ' ' + (H - 2 - (e - lo) / span * (H - 6)).toFixed(1)
-  ).join('');
-  let stops = '';
-  for (let k = 0; k <= 10; k++) {
-    const e = r.profile[Math.round(k / 10 * (r.profile.length - 1))];
-    stops += `<stop offset="${k * 10}%" stop-color="${rampCss((e - r.stats.ele_min) / Math.max(1, r.stats.ele_max - r.stats.ele_min))}"/>`;
-  }
-  const id = 'g' + r.slug.replace(/[^a-z0-9]/gi, '');
-  const href = r.cloud
-    ? `./view.html?cloud=${encodeURIComponent(r.id)}`
-    : r.local
-      ? `./view.html?local=${encodeURIComponent(r.slug)}`
-      : `./view.html?route=${encodeURIComponent(r.slug)}`;
-  const act = activityOf(r);
-  const added = r.dateSource === 'recorded' ? '' : 'added';
-  const meta = [act, added].filter(Boolean).join(' · ');
-  return `
-    <div class="row">
-      <a class="go" href="${href}">
-        <span class="day"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-US', { weekday: 'short' })}</small></span>
-        <span class="what"><b>${escapeHtml(r.name)}</b><small>${meta}${
-          r.pace ? '<span class="tag pace" title="This track is timed, so the replay can follow the speed it was actually done at">recorded pace</span>' : ''}${
-          r.local ? '<span class="tag">this browser</span>' : ''}${
-          !r.cloud && !r.local ? '<span class="tag" title="A sample route that ships with the app, not one of yours">example</span>' : ''}</small></span>
-        <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-          <defs><linearGradient id="${id}" x1="0" x2="1">${stops}</linearGradient></defs>
-          <path d="${path}L${W} ${H}L0 ${H}Z" fill="rgba(19,138,74,.10)"/>
-          <path d="${path}" fill="none" stroke="url(#${id})" stroke-width="2" vector-effect="non-scaling-stroke"/>
-        </svg>
-        <span class="num"><b>${(r.stats.distance_m / 1000).toFixed(2)} km</b><small>↑ ${fmt(r.stats.gain_m)} m</small></span>
-      </a>
-      <span class="acts">${r.cloud
-        ? `<button class="dl share" data-id="${r.id}" data-vis="${r.visibility}"
-             title="Choose who can see this route">${
-             r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
-           }<span> ${r.visibility === 'link' ? 'shared' : r.visibility}</span></button>`
-        : ''}${r.local
-        ? `<button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓<span> gpx</span></button>
-           <button class="rm" data-slug="${r.slug}" title="Remove from this browser" aria-label="Remove ${escapeHtml(r.name)} from this browser">✕</button>`
-        : `<a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓<span> single file</span></a>`}</span>
-    </div>`;
-}
-
-const escapeHtml = s => String(s).replace(/[&<>"']/g, c =>
-  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-/* ---------- upload ---------- */
+/* ---------- toast ---------- */
 const toastEl = document.getElementById('toast');
 let toastTimer;
 function toast(msg) {
@@ -481,45 +380,11 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3600);
 }
 
-async function ingest(files) {
-  const gpx = [...files].filter(f => /\.gpx$/i.test(f.name));
-  if (!gpx.length) return toast('That is not a .gpx file.');
-  let last = null, added = 0;
-  for (const file of gpx) {
-    try {
-      const track = analyze(parseGPX(await file.text()));
-      last = addLocalRoute(file.name, track, profileSamples(track, 96));
-      added++;
-    } catch (err) {
-      toast(`${file.name}: ${err.message}`);
-    }
-  }
-  if (!added) return;
-  render();
-  toast(added === 1
-    ? `Added ${last.name} — opening it…`
-    : `Added ${added} routes to this browser.`);
-  if (added === 1) setTimeout(() => { location.href = `./view.html?local=${encodeURIComponent(last.slug)}`; }, 700);
-}
-
-document.getElementById('add').addEventListener('click', () => document.getElementById('file').click());
-document.getElementById('file').addEventListener('change', e => { ingest(e.target.files); e.target.value = ''; });
-
-const dropEl = document.getElementById('drop');
-let dragDepth = 0;
-addEventListener('dragenter', e => { e.preventDefault(); if (++dragDepth === 1) dropEl.classList.add('on'); });
-addEventListener('dragover', e => e.preventDefault());
-addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropEl.classList.remove('on'); } });
-addEventListener('drop', e => {
-  e.preventDefault(); dragDepth = 0; dropEl.classList.remove('on');
-  ingest(e.dataTransfer.files);
-});
-
 /* ---------- record ---------- */
 /**
  * The record screen. The recorder does the thinking; this just starts a source
  * of fixes, paints numbers twice a second, and hands the finished track to the
- * same local-route store that drag-and-drop already uses.
+ * same local-route store the rest of the app reads.
  *
  * `?replay=<slug>` plays an existing route back through the real pipeline at
  * 20x, which is the only way to exercise this from a desk.
@@ -527,9 +392,9 @@ addEventListener('drop', e => {
 const recEl = document.getElementById('rec');
 let rec = null, source = null, ticker = null, activity = 'run', awake = null;
 
-// Start warming the receiver the moment the library is open, so the first
-// minute of a route is not the usual scatter of a cold GPS finding itself.
-// Silent: it never prompts, and does nothing until permission already exists.
+// Start warming the receiver the moment the page is open, so the first minute
+// of a route is not the usual scatter of a cold GPS finding itself. Silent: it
+// never prompts, and does nothing until permission already exists.
 const warm = warmUp({ onAccuracy: (acc) => { warm.last = acc; } });
 
 const mmss = s => {
@@ -635,8 +500,6 @@ function startRecording(replaySlug) {
     });
     source.start();
   }
-  // hold the screen on, and say which of the two situations we are in rather
-  // than promising something the platform may have refused
   // Say which kind of recording is actually running. On the native build the
   // foreground service carries on with the screen off and the phone pocketed;
   // in a browser it stops the moment you look away, and pretending otherwise
@@ -699,6 +562,11 @@ function countdown(seconds = 3) {
     const over = document.createElement('div');
     over.className = 'rec-count';
     over.innerHTML = '<div class="rec-n">3</div><div class="rec-acc">finding satellites…</div>';
+    if (!account.user()) {
+      over.insertAdjacentHTML('beforeend',
+        '<div class="rec-acc" style="max-width:30ch">This route will be stored in your web browser '
+        + 'until you make an account.</div>');
+    }
     card.appendChild(over);
     recEl.classList.add('on');
     let left = seconds;
@@ -719,11 +587,25 @@ function countdown(seconds = 3) {
   });
 }
 
-document.getElementById('recbtn').addEventListener('click', async () => {
+/**
+ * Press Record.
+ *
+ * Signed out, the first thing it says is where the route is about to be kept.
+ * Everything does work without an account — that is deliberate — but a route
+ * that lives in one browser's storage is one cleared cache away from gone, and
+ * finding that out afterwards is not a reasonable way to learn it.
+ */
+async function pressRecord() {
+  const signedOut = !account.user();
+  document.getElementById('recwarn').hidden = !signedOut;
+  if (signedOut) toast('Stored in your web browser until you make an account — you could lose these routes.');
   const replay = new URLSearchParams(location.search).get('replay');
   if (!replay) await countdown(3);
   startRecording(replay);
-});
+}
+document.getElementById('recbtn').addEventListener('click', pressRecord);
+document.getElementById('hero-rec').addEventListener('click', pressRecord);
+
 document.getElementById('recacts').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   activity = b.dataset.a;
@@ -771,7 +653,6 @@ document.getElementById('recstop').addEventListener('click', async () => {
   // in a request that did not arrive is a route somebody just lost.
   const entry = addLocalRoute(name + '.gpx', track, profile);
   paint();
-  render();
 
   let href = `./view.html?local=${encodeURIComponent(entry.slug)}`;
   if (account.enabled() && account.user()) {
@@ -780,14 +661,13 @@ document.getElementById('recstop').addEventListener('click', async () => {
       // safely in the account now, so the local copy is no longer a second
       // entry in the list pretending to be a different route
       removeLocalRoute(entry.slug);
-      await refreshCloud();
       href = `./view.html?cloud=${encodeURIComponent(saved.id)}`;
-      toast(`Saved to your account — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
+      toast(`Saved to your account — ${fmtKm(track.stats.distance_m)} km`);
     } catch {
       toast('Saved on this device. It will upload when you are back online.');
     }
   } else {
-    toast(`Saved ${name} — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
+    toast(`Saved ${name} — ${fmtKm(track.stats.distance_m)} km`);
   }
   setTimeout(() => { closeRecorder(); location.href = href; }, 1100);
 });
@@ -808,10 +688,13 @@ const say = (text, ok = false) => {
 };
 
 function paintAccount(user) {
-  // the hero is for people who have not signed in; once they have, the page is
-  // their library and a pitch would just be in the way
-  const hero = document.getElementById('hero');
-  if (hero) hero.hidden = !account.enabled() || !!user;
+  // Signed in, the pitch has done its job: the two buttons become the way back
+  // into your own routes rather than an invitation to sign up again.
+  document.getElementById('hero-cta').hidden = !!user || !account.enabled();
+  document.getElementById('hero-back').hidden = !user;
+  document.getElementById('hero-note').textContent = user
+    ? 'Your routes are kept in your account, so they survive this browser.'
+    : 'You can look around without an account. Signing in is what keeps your routes when this browser forgets them.';
   const btn = document.getElementById('acctbtn');
   btn.hidden = !account.enabled();
   btn.textContent = user ? (user.email?.split('@')[0] ?? 'Account') : 'Sign in';
@@ -819,6 +702,7 @@ function paintAccount(user) {
   document.getElementById('acct-in').hidden = !user;
   document.getElementById('acct-title').textContent = user ? 'Your account'
     : mode === 'in' ? 'Sign in' : 'Create an account';
+  document.getElementById('recwarn').hidden = !!user;
   if (user) {
     document.getElementById('acct-email-out').textContent = user.email ?? '';
     const local = listLocalRoutes().length;
@@ -899,96 +783,19 @@ document.getElementById('acct-upload').addEventListener('click', async e => {
   finally { e.target.disabled = false; }
 });
 
-/* ---------- sharing ---------- */
-/**
- * Who can see a route.
- *
- * Three states rather than a switch, because "anyone with the link" is a real
- * third thing and collapsing it into public or private misrepresents what
- * happens. The link is shown only when it can actually be used, and replacing
- * it is offered next to it with a warning, since revoking access is the whole
- * reason the token can be rotated.
- */
-const shareEl = document.getElementById('share');
-const shareMsg = document.getElementById('share-msg');
-let sharing = null;                       // the route being configured
-
-const shareUrlFor = token => `${location.origin}/r/${token}`;
-
-function paintShare() {
-  const linked = sharing && sharing.visibility !== 'private' && sharing.shareToken;
-  document.getElementById('share-link').hidden = !linked;
-  if (linked) document.getElementById('share-url').value = shareUrlFor(sharing.shareToken);
-  for (const i of document.querySelectorAll('#share-opts input')) i.checked = i.value === sharing?.visibility;
-}
-
-function openShare(id) {
-  sharing = cloudRoutes.find(r => r.id === id);
-  if (!sharing) return;
-  shareMsg.textContent = '';
-  paintShare();
-  shareEl.classList.add('on');
-}
-
-document.getElementById('share-opts').addEventListener('change', async e => {
-  if (!sharing) return;
-  const visibility = e.target.value;
-  shareMsg.textContent = 'Saving…';
-  shareMsg.classList.add('ok');
-  try {
-    const updated = await account.routes().setVisibility(sharing.id, visibility);
-    sharing = { ...sharing, ...updated, cloud: true };
-    cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
-    shareMsg.textContent = visibility === 'private'
-      ? 'Private. Any link you sent before no longer opens it.'
-      : 'Saved.';
-    paintShare();
-    render();
-  } catch (err) {
-    shareMsg.classList.remove('ok');
-    shareMsg.textContent = account.explain(err);
-  }
-});
-
-document.getElementById('share-copy').addEventListener('click', async e => {
-  const url = document.getElementById('share-url').value;
-  try {
-    await navigator.clipboard.writeText(url);
-    shareMsg.classList.add('ok');
-    shareMsg.textContent = 'Link copied.';
-  } catch {
-    // clipboard refused: select it so it can be copied by hand
-    const f = document.getElementById('share-url');
-    f.focus(); f.select();
-    shareMsg.classList.add('ok');
-    shareMsg.textContent = 'Press copy on your keyboard — the link is selected.';
-  }
-});
-
-document.getElementById('share-rotate').addEventListener('click', async () => {
-  if (!sharing) return;
-  shareMsg.classList.add('ok');
-  shareMsg.textContent = 'Replacing…';
-  try {
-    const fresh = await account.routes().rotateShareToken(sharing.id);
-    sharing = { ...sharing, shareToken: fresh };
-    cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
-    paintShare();
-    shareMsg.textContent = 'New link ready. The old one has stopped working.';
-  } catch (err) {
-    shareMsg.classList.remove('ok');
-    shareMsg.textContent = account.explain(err);
-  }
-});
-
-document.getElementById('share-close').addEventListener('click', () => shareEl.classList.remove('on'));
-shareEl.addEventListener('click', e => { if (e.target === shareEl) shareEl.classList.remove('on'); });
-
 await account.ready();
-account.onChange(user => { paintAccount(user); refreshCloud(); });
+account.onChange(paintAccount);
 setMode('in');
 
-render();
+// The other pages send people here for the two things that only live here: the
+// recorder, and the sign-in form. One copy of each, reached by a link.
+const q = new URLSearchParams(location.search);
+if (q.get('record')) pressRecord();
+if (q.get('signin') && !account.user()) {
+  setMode(q.get('signin') === 'up' ? 'up' : 'in');
+  acctEl.classList.add('on');
+  document.getElementById('acct-email').focus();
+}
 </script>
 </body>
 </html>

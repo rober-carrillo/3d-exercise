@@ -20,6 +20,17 @@ function readSky() {
   const n = parseInt(m[1], 16);
   return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
 }
+/**
+ * How far behind the figure the chase camera rides, as a fraction of the
+ * scene's extent.
+ *
+ * It was 0.13, which framed her nicely and showed almost none of the ground
+ * she was crossing — so every replay started with the same reflex, a scroll
+ * back to see where the route was going. 0.221 is that distance plus 70%: far
+ * enough back that the next bend is on screen before she reaches it.
+ */
+const CHASE_DIST = 0.221;
+
 /** shortest signed angular difference, so the camera never spins the long way */
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** frame-rate independent easing */
@@ -70,7 +81,12 @@ export class Renderer {
     if (!gl) throw new Error('WebGL is not available in this browser');
     this.gl = gl;
     this.sky = readSky();
-    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => { this.sky = readSky(); });
+    // The haze and the clear colour are the page's --sky token, so they have to
+    // follow it whichever way it changes: the system setting, or the switch in
+    // the header (src/theme.js), which the OS knows nothing about.
+    const reread = () => { this.sky = readSky(); };
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', reread);
+    window.addEventListener('salpicon:theme', reread);
     const gl2 = !!(window.WebGL2RenderingContext && gl instanceof WebGL2RenderingContext);
     this.caps = { gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint') };
 
@@ -181,7 +197,7 @@ void main(){vec4 c=vCol;
     this.home.bearing = g.track.bearing;
     this.home.az = g.track.bearing + Math.PI;
     this.cam.dist = g.ext * this.home.distScale;
-    this.chase.dist = g.ext * 0.13;
+    this.chase.dist = g.ext * CHASE_DIST;
     this.chase.height = g.hSpan * 0.02;
     this.cam.tz = (this.g.track.tz[0] || 0);
     this.resetView();
@@ -483,7 +499,7 @@ void main(){vec4 c=vCol;
     this.state.chase = true;
     this.chase.azOffset = 0;
     this.chase.pol = 1.10;
-    if (this.g) this.chase.dist = this.g.ext * 0.13;
+    if (this.g) this.chase.dist = this.g.ext * CHASE_DIST;
   }
 
   resetView() {
@@ -496,7 +512,7 @@ void main(){vec4 c=vCol;
     this.chase.azOffset = 0; this.chase.pol = 1.10;
     if (this.g) {
       this.cam.dist = this.g.ext * this.home.distScale;
-      this.chase.dist = this.g.ext * 0.13;
+      this.chase.dist = this.g.ext * CHASE_DIST;
       this.cam.tz = this.g.hSpan * 0.5;
     }
   }

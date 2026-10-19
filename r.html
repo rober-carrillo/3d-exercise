@@ -11,6 +11,8 @@
 <base href="/">
 <title>A shared route · Salpicón!</title>
 <meta name="description" content="Somebody shared a route with you.">
+<meta name="theme-color" content="#fcf1ee">
+<script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/src/ui.css">
 <style>
@@ -35,6 +37,9 @@
 import { RouteViewer } from './src/viewer.js';
 import { createClient } from './src/supabase.js';
 import { createCloud } from './src/cloud.js';
+import { initTheme } from './src/theme.js';
+
+initTheme();
 
 /**
  * A route somebody shared.
