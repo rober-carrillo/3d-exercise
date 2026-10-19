@@ -153,6 +153,42 @@ window.viewer = new __m_viewer.RouteViewer({
 `;
 }
 
+/**
+ * Syntax-check the module scripts written inline in the pages.
+ *
+ * A SyntaxError in one of these does not break a line, it breaks the page:
+ * the browser refuses the whole module, so nothing runs and the result is a
+ * blank list with no error anyone would see without opening a console. That
+ * shipped once — an await inside a handler that was not async — and only the
+ * deployed site showed it, which is far too late for something a parser can
+ * answer in milliseconds.
+ */
+async function checkInlineModules(files) {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const run = promisify(execFile);
+  const { writeFile: write, mkdtemp, rm: remove } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  for (const file of files) {
+    if (!existsSync(join(root, file))) continue;
+    const html = await readFile(join(root, file), 'utf8');
+    const blocks = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)];
+    for (const [i, m] of blocks.entries()) {
+      const dir = await mkdtemp(join(tmpdir(), 'salpicon-'));
+      const tmp = join(dir, 'check.mjs');
+      await write(tmp, m[1]);
+      try {
+        await run(process.execPath, ['--check', tmp]);
+      } catch (err) {
+        const why = String(err.stderr || err.message).split('\n').slice(0, 4).join('\n');
+        throw new Error(`${file}: the inline module (block ${i + 1}) will not parse, so the page would do nothing:\n${why}`);
+      } finally { await remove(dir, { recursive: true, force: true }); }
+    }
+  }
+}
+
+await checkInlineModules(['index.html', 'view.html', 'dash.html', 'r.html']);
+
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 for (const item of STATIC) {
