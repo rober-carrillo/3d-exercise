@@ -79,73 +79,56 @@ export function rowToRoute(row) {
 
 /* ---------- the client ---------- */
 
-export function createCloud(supabase) {
-  const must = () => { if (!supabase) throw new Error('No database client configured'); return supabase; };
+export function createCloud(db) {
+  const must = () => { if (!db) throw new Error('No database client configured'); return db; };
 
   return {
     /* -- who is here -- */
-    async session() {
-      const { data } = await must().auth.getSession();
-      return data?.session ?? null;
-    },
-    async user() {
-      const { data } = await must().auth.getUser();
-      return data?.user ?? null;
-    },
-    onAuthChange(fn) { return must().auth.onAuthStateChange((_e, s) => fn(s?.user ?? null)); },
-    signUp(email, password) { return must().auth.signUp({ email, password }); },
-    signIn(email, password) { return must().auth.signInWithPassword({ email, password }); },
-    signOut() { return must().auth.signOut(); },
+    session: () => must().auth.session(),
+    user: () => must().auth.user(),
+    onAuthChange(fn) { return must().auth.onChange(fn); },
+    signUp: (email, password) => must().auth.signUp(email, password),
+    signIn: (email, password) => must().auth.signIn(email, password),
+    signOut: () => must().auth.signOut(),
 
     /* -- routes -- */
 
     /**
-     * The caller's own routes, newest first. RLS means this needs no `where
-     * owner = me`: the database will not return anybody else's rows, and
-     * adding the filter here would only create the impression that removing it
-     * would.
+     * The caller's own routes, newest first.
+     *
+     * No `where owner = me`: row-level security will not return anybody
+     * else's rows, and adding the filter here would only suggest that
+     * removing it might.
      */
     async myRoutes() {
-      const { data, error } = await must()
-        .from('routes')
-        .select('id,name,activity,source,recorded_at,created_at,stats,bbox,centre,profile,visibility,share_token')
-        .order('recorded_at', { ascending: false, nullsFirst: false });
-      if (error) throw error;
-      return (data ?? []).map(rowToRoute);
+      const rows = await must().from('routes').select(
+        'id,name,activity,source,recorded_at,created_at,stats,bbox,centre,profile,visibility,share_token',
+        { order: 'recorded_at.desc.nullslast' },
+      );
+      return (rows ?? []).map(rowToRoute);
     },
 
     /** One route including its track, for the viewer. */
     async route(id) {
-      const { data, error } = await must().from('routes').select('*').eq('id', id).single();
-      if (error) throw error;
-      return rowToRoute(data);
+      const rows = await must().from('routes').select('*', { filter: { id: `eq.${id}` }, limit: 1 });
+      if (!rows?.length) throw new Error('That route is not here');
+      return rowToRoute(rows[0]);
     },
 
     async save(track, meta) {
-      const row = routeToRow(track, meta);
-      const { data, error } = await must().from('routes').insert(row).select().single();
-      if (error) throw error;
-      return rowToRoute(data);
+      const owner = must().auth.user()?.id;
+      if (!owner) throw new Error('Sign in before saving a route');
+      return rowToRoute(await must().from('routes').insert({ ...routeToRow(track, meta), owner }));
     },
 
     async setVisibility(id, visibility) {
-      const { data, error } = await must().from('routes')
-        .update({ visibility }).eq('id', id).select().single();
-      if (error) throw error;
-      return rowToRoute(data);
+      return rowToRoute(await must().from('routes').update({ visibility }, { id: `eq.${id}` }));
     },
 
     /** Invalidate every link already handed out for a route. */
-    async rotateShareToken(id) {
-      const { data, error } = await must().rpc('rotate_share_token', { route_id: id });
-      if (error) throw error;
-      return data;
-    },
+    rotateShareToken(id) { return must().rpc('rotate_share_token', { route_id: id }); },
 
-    async remove(id) {
-      const { error } = await must().from('routes').delete().eq('id', id);
-      if (error) throw error;
-    },
+    remove(id) { return must().from('routes').remove({ id: `eq.${id}` }); },
 
     /**
      * Open a shared route from its token, with or without an account. This is
@@ -153,34 +136,32 @@ export function createCloud(supabase) {
      * ordinary select, so the function is the door and the token is the key.
      */
     async byToken(token) {
-      const { data, error } = await must().rpc('route_by_token', { tok: token });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : data;
+      const rows = await must().rpc('route_by_token', { tok: token });
+      const row = Array.isArray(rows) ? rows[0] : rows;
       return row ? rowToRoute(row) : null;
     },
 
     /**
      * Move routes held in this browser into the account that just signed in.
      *
-     * Everything recorded or imported before signing up lives in localStorage,
-     * and losing it at the moment someone finally makes an account would be
-     * the worst possible first impression. Uploads are attempted one at a
-     * time and the local copy is left alone: a duplicate is recoverable, a
-     * route that existed in neither place is not.
+     * Everything recorded before signing up lives in localStorage, and losing
+     * it at the moment somebody finally makes an account would be the worst
+     * possible introduction. Uploads are attempted one at a time and the local
+     * copy is left alone: a duplicate is recoverable, a route that exists in
+     * neither place is not.
      */
     async importLocal(entries, { onProgress } = {}) {
       const done = [], failed = [];
       for (const [i, e] of entries.entries()) {
         try {
-          const saved = await this.save(e.track, {
+          done.push(await this.save(e.track, {
             name: e.name,
-            activity: e.track?.activity ?? 'run',
+            activity: e.activity ?? e.track?.activity ?? 'run',
             source: e.source ?? 'import',
             profile: e.profile ?? null,
-          });
-          done.push(saved);
-        } catch (err) {
-          failed.push({ entry: e, error: err });
+          }));
+        } catch (error) {
+          failed.push({ entry: e, error });
         }
         onProgress?.(i + 1, entries.length);
       }

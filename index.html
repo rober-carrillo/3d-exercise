@@ -29,6 +29,22 @@
     padding:9px 15px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;gap:7px}
   .rec-btn:hover{background:var(--route-2)}
   .rec-btn i{width:9px;height:9px;border-radius:50%;background:var(--on-accent);display:block}
+  #acct{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+    background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
+  #acct.on{display:flex}
+  .acct-card{width:min(420px,100%);padding:26px;display:flex;flex-direction:column;gap:14px}
+  .acct-card h2{margin:0;font-size:19px;font-weight:650;letter-spacing:-.02em}
+  .acct-why{margin:0;font-size:12.5px;line-height:1.6;color:var(--ink-2)}
+  .acct-who{margin:0;font-size:14px}
+  #acct-form{display:flex;flex-direction:column;gap:7px}
+  #acct-form label{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-top:6px}
+  #acct-form input{font:inherit;font-size:15px;padding:10px 12px;border-radius:9px;
+    border:1px solid var(--line-2);background:var(--bg-hi);color:var(--ink)}
+  #acct-form input:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .acct-msg{margin:4px 0 0;font-size:12.5px;line-height:1.5;min-height:1.2em;color:var(--hot)}
+  .acct-msg.ok{color:var(--accent)}
+  .acct-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .acct-btns button{flex:1 1 auto}
   #rec{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
   #rec.on{display:flex}
@@ -119,6 +135,7 @@
       <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the walker in chase view.</p>
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <button class="add quiet" id="acctbtn" hidden>Sign in</button>
       <a class="add quiet" href="./dash.html" style="text-decoration:none;display:inline-flex;align-items:center">Your figures</a>
       <button class="rec-btn" id="recbtn"><i></i>Record</button>
       <button class="add quiet" id="add">＋ Add a GPX</button>
@@ -134,6 +151,35 @@
 </div>
 
 <input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
+<div id="acct">
+  <div class="acct-card rv-panel">
+    <h2 id="acct-title">Sign in</h2>
+    <p class="acct-why">Routes kept in this browser disappear with it. An account keeps them, and lets you
+      hand one to somebody else with a link.</p>
+    <form id="acct-form" autocomplete="on">
+      <label for="acct-email">Email</label>
+      <input id="acct-email" name="email" type="email" required autocomplete="email" inputmode="email">
+      <label for="acct-pass">Password</label>
+      <input id="acct-pass" name="password" type="password" required autocomplete="current-password" minlength="6">
+      <p class="acct-msg" id="acct-msg" role="status"></p>
+      <div class="acct-btns">
+        <button type="submit" class="add" id="acct-go">Sign in</button>
+        <button type="button" class="add quiet" id="acct-swap">Create an account</button>
+        <button type="button" class="add quiet" id="acct-close">Not now</button>
+      </div>
+    </form>
+    <div id="acct-in" hidden>
+      <p class="acct-who">Signed in as <b id="acct-email-out"></b></p>
+      <p class="acct-why" id="acct-sync"></p>
+      <div class="acct-btns">
+        <button type="button" class="add quiet" id="acct-upload">Upload this browser's routes</button>
+        <button type="button" class="add quiet" id="acct-out">Sign out</button>
+        <button type="button" class="add quiet" id="acct-close2">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="rec">
   <div class="rec-card rv-panel">
     <div class="signal-box"><div id="recmark"></div></div>
@@ -168,6 +214,7 @@
 import { rampCss } from './src/terrain.js';
 import { parseGPX, analyze, profileSamples, formatDate, trackToGPX } from './src/gpx.js';
 import { saveGPX, safeName, canShareFiles } from './src/export.js';
+import * as account from './src/account.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
 import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp } from './src/geo.js';
@@ -607,6 +654,105 @@ document.getElementById('recstop').addEventListener('click', () => {
   toast(`Saved ${name} — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
   setTimeout(() => { closeRecorder(); location.href = `./view.html?local=${encodeURIComponent(entry.slug)}`; }, 1100);
 });
+
+/* ---------- accounts ---------- */
+/**
+ * Signing in is optional and stays optional. The button only appears once the
+ * build is known to have a project behind it, so a checkout with no config —
+ * or a standalone file — never offers something it cannot do.
+ */
+const acctEl = document.getElementById('acct');
+const acctMsg = document.getElementById('acct-msg');
+let mode = 'in';                               // 'in' to sign in, 'up' to register
+
+const say = (text, ok = false) => {
+  acctMsg.textContent = text;
+  acctMsg.classList.toggle('ok', ok);
+};
+
+function paintAccount(user) {
+  const btn = document.getElementById('acctbtn');
+  btn.hidden = !account.enabled();
+  btn.textContent = user ? (user.email?.split('@')[0] ?? 'Account') : 'Sign in';
+  document.getElementById('acct-form').hidden = !!user;
+  document.getElementById('acct-in').hidden = !user;
+  document.getElementById('acct-title').textContent = user ? 'Your account'
+    : mode === 'in' ? 'Sign in' : 'Create an account';
+  if (user) {
+    document.getElementById('acct-email-out').textContent = user.email ?? '';
+    const local = listLocalRoutes().length;
+    document.getElementById('acct-sync').textContent = local
+      ? `${local} route${local > 1 ? 's' : ''} in this browser ${local > 1 ? 'are' : 'is'} not in your account yet.`
+      : 'Nothing in this browser is waiting to be uploaded.';
+  }
+}
+
+function setMode(next) {
+  mode = next;
+  document.getElementById('acct-go').textContent = mode === 'in' ? 'Sign in' : 'Create account';
+  document.getElementById('acct-swap').textContent = mode === 'in' ? 'Create an account' : 'I already have one';
+  document.getElementById('acct-pass').autocomplete = mode === 'in' ? 'current-password' : 'new-password';
+  document.getElementById('acct-title').textContent = mode === 'in' ? 'Sign in' : 'Create an account';
+  say('');
+}
+
+document.getElementById('acctbtn').addEventListener('click', () => {
+  say(''); acctEl.classList.add('on');
+  if (!account.user()) document.getElementById('acct-email').focus();
+});
+for (const id of ['acct-close', 'acct-close2']) {
+  document.getElementById(id).addEventListener('click', () => acctEl.classList.remove('on'));
+}
+acctEl.addEventListener('click', e => { if (e.target === acctEl) acctEl.classList.remove('on'); });
+document.getElementById('acct-swap').addEventListener('click', () => setMode(mode === 'in' ? 'up' : 'in'));
+
+document.getElementById('acct-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const go = document.getElementById('acct-go');
+  const email = document.getElementById('acct-email').value;
+  const password = document.getElementById('acct-pass').value;
+  go.disabled = true;
+  say(mode === 'in' ? 'Signing in…' : 'Creating your account…');
+  try {
+    if (mode === 'in') {
+      await account.signIn(email, password);
+      say('');
+      acctEl.classList.remove('on');
+      toast('Signed in.');
+    } else {
+      const { needsConfirmation } = await account.signUp(email, password);
+      // the two outcomes look nothing alike to the person in front of the
+      // screen, so they are never reported the same way
+      if (needsConfirmation) say('Account created. Check your email for a confirmation link, then sign in.', true);
+      else { acctEl.classList.remove('on'); toast('Account created — you are signed in.'); }
+    }
+  } catch (err) {
+    say(account.explain(err));
+  } finally { go.disabled = false; }
+});
+
+document.getElementById('acct-out').addEventListener('click', async () => {
+  await account.signOut();
+  acctEl.classList.remove('on');
+  toast('Signed out. Routes in this browser are still here.');
+});
+
+document.getElementById('acct-upload').addEventListener('click', async e => {
+  const local = listLocalRoutes();
+  if (!local.length) return say('Nothing to upload.', true);
+  e.target.disabled = true;
+  try {
+    const { done, failed } = await account.uploadLocal(local,
+      (i, n) => say(`Uploading ${i} of ${n}…`, true));
+    say(failed.length ? `${done.length} uploaded, ${failed.length} failed.`
+                      : `${done.length} uploaded. Local copies are kept.`, !failed.length);
+  } catch (err) { say(account.explain(err)); }
+  finally { e.target.disabled = false; }
+});
+
+await account.ready();
+account.onChange(paintAccount);
+setMode('in');
 
 render();
 </script>
