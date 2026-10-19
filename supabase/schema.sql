@@ -1,4 +1,4 @@
--- Route3D — database schema.
+-- Salpicón! — database schema.
 --
 -- Runs as-is in the Supabase SQL editor. Supabase provides `auth.users` and
 -- `auth.uid()`; schema-local.sql stubs both so this file can be tested against

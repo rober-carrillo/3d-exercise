@@ -17,8 +17,8 @@ other:
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 "$JAVA_HOME/bin/keytool" -genkeypair -v \
-  -keystore route3d-release.jks \
-  -alias route3d \
+  -keystore salpicon-release.jks \
+  -alias salpicon \
   -keyalg RSA -keysize 4096 \
   -validity 10000 \
   -storetype JKS
@@ -48,9 +48,9 @@ Actions**:
 
 | Secret | Value |
 |---|---|
-| `KEYSTORE_B64` | `base64 -i route3d-release.jks \| pbcopy` |
+| `KEYSTORE_B64` | `base64 -i salpicon-release.jks \| pbcopy` |
 | `KEYSTORE_PASSWORD` | the store password |
-| `KEY_ALIAS` | `route3d` |
+| `KEY_ALIAS` | `salpicon` |
 | `KEY_PASSWORD` | the key password |
 
 With those set, pushing a tag builds a signed `.apk` and `.aab`:
@@ -70,12 +70,12 @@ Gradle needs telling where the key is. In `android/app/build.gradle`, inside
 ```groovy
 signingConfigs {
     release {
-        def ks = System.getenv("ROUTE3D_KEYSTORE")
+        def ks = System.getenv("SALPICON_KEYSTORE")
         if (ks) {
             storeFile file(ks)
-            storePassword System.getenv("ROUTE3D_KEYSTORE_PASSWORD")
-            keyAlias System.getenv("ROUTE3D_KEY_ALIAS")
-            keyPassword System.getenv("ROUTE3D_KEY_PASSWORD")
+            storePassword System.getenv("SALPICON_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("SALPICON_KEY_ALIAS")
+            keyPassword System.getenv("SALPICON_KEY_PASSWORD")
         }
     }
 }

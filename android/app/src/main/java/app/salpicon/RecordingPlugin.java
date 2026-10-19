@@ -150,7 +150,7 @@ public class RecordingPlugin extends Plugin {
         // A granted permission is not the end of it: a channel the user turned
         // off swallows everything posted to it without complaint.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            android.app.NotificationChannel ch = nm.getNotificationChannel("route3d.recording.v2");
+            android.app.NotificationChannel ch = nm.getNotificationChannel("salpicon.recording.v1");
             if (ch != null && ch.getImportance() == android.app.NotificationManager.IMPORTANCE_NONE) {
                 res.put("state", "blocked");
                 res.put("reason", "the recording notification channel is switched off");

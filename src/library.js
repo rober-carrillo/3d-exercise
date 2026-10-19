@@ -8,7 +8,28 @@
  * such in the library. To publish a route for real, commit the .gpx.
  */
 
-const KEY = 'route3d.local.v1';
+const KEY = 'salpicon.local.v1';
+const LEGACY_KEYS = ['route3d.local.v1'];
+
+/**
+ * Carry routes over from a key an earlier name used.
+ *
+ * The browser's storage is the only copy of anything recorded before there was
+ * a database: changing the key without moving the contents would leave every
+ * one of those routes sitting in storage, invisible, with no way back. The old
+ * key is read once and left in place rather than deleted — if this goes wrong,
+ * the data should still be there to try again with.
+ */
+function migrate() {
+  try {
+    if (localStorage.getItem(KEY)) return;
+    for (const old of LEGACY_KEYS) {
+      const found = localStorage.getItem(old);
+      if (found) { localStorage.setItem(KEY, found); return; }
+    }
+  } catch {}                                 // blocked storage: nothing to move
+}
+migrate();
 
 const slugify = name => name.replace(/\.gpx$/i, '')
   .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')

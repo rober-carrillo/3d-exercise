@@ -31,17 +31,17 @@ import androidx.core.app.NotificationCompat;
  * that same plugin, so the two live and die together.
  */
 public class RecordingService extends Service implements LocationListener {
-    public static final String ACTION_START  = "app.route3d.START";
-    public static final String ACTION_UPDATE = "app.route3d.UPDATE";
-    public static final String ACTION_PAUSE  = "app.route3d.PAUSE";
-    public static final String ACTION_RESUME = "app.route3d.RESUME";
-    public static final String ACTION_FINISH = "app.route3d.FINISH";
+    public static final String ACTION_START  = "app.salpicon.START";
+    public static final String ACTION_UPDATE = "app.salpicon.UPDATE";
+    public static final String ACTION_PAUSE  = "app.salpicon.PAUSE";
+    public static final String ACTION_RESUME = "app.salpicon.RESUME";
+    public static final String ACTION_FINISH = "app.salpicon.FINISH";
 
     // Version the channel id. A channel's importance belongs to the user the
     // moment it is created: later changes to it are ignored, for ever, on every
     // device that already has the old one. Correcting a channel therefore means
     // making a new one.
-    private static final String CHANNEL = "route3d.recording.v2";
+    private static final String CHANNEL = "salpicon.recording.v1";
     private static final int NOTIFICATION_ID = 7301;
 
     private LocationManager locations;
