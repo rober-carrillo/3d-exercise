@@ -1,9 +1,9 @@
 {
-  "name": "relieve",
+  "name": "salpicon",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Relieve! — GPX routes as interactive 3D terrain, in the browser and on Android",
+  "description": "Salpicón! — GPX routes as interactive 3D terrain, in the browser and on Android",
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs && npx --yes serve dist -l 5173",

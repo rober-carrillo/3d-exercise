@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon: the glass, its straw and its dot, as a white silhouette (from src/mark.js). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <group android:scaleX="0.235" android:scaleY="0.235" android:translateX="-10.3" android:translateY="1.2">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M80,12 L110,12 L105.2,58 Q104.6,62 100.6,62 L89.4,62 Q85.4,62 84.8,58 Z"/>
+        <path android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M99,12 L99,6.5 L105.5,1.5"/>
+        <path android:fillColor="#FFFFFFFF" android:pathData="M87.4,84.5 A7.6,7.6 0 1,0 102.6,84.5 A7.6,7.6 0 1,0 87.4,84.5 Z"/>
+    </group>
+</vector>

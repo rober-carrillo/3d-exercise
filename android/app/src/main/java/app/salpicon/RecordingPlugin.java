@@ -1,4 +1,4 @@
-package app.relieve;
+package app.salpicon;
 
 import android.content.Intent;
 import android.location.Location;
@@ -23,7 +23,7 @@ import android.Manifest;
  * here would mean a second implementation of the subtlest code in the project.
  */
 @CapacitorPlugin(
-        name = "RelieveRecorder",
+        name = "SalpiconRecorder",
         permissions = {
                 @Permission(
                         alias = "location",

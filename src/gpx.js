@@ -244,7 +244,7 @@ export function trackToGPX(track, { name = track.name, activity = 'other' } = {}
     `   </trkpt>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx creator="Relieve!" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx creator="Salpicón!" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
 ${t0 !== null ? ` <metadata>\n  <time>${iso(t0)}</time>\n </metadata>\n` : ''} <trk>
   <name>${esc(name || 'Route')}</name>
   <type>${esc(activity)}</type>

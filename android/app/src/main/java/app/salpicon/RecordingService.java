@@ -1,4 +1,4 @@
-package app.relieve;
+package app.salpicon;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -135,14 +135,14 @@ public class RecordingService extends Service implements LocationListener {
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL)
                 .setContentTitle(line1)
                 .setContentText(line2)
-                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                // tints the icon and app name in the shade with the trail crimson
-                .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.route_crimson))
+                .setSmallIcon(R.drawable.ic_stat_glass)
+                // tints the icon and app name in the shade with the walk-light green
+                .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.brand_green))
                 .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | immutable))
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 // show the distance and the time on the lock screen itself,
-                // rather than "Relieve: contents hidden"
+                // rather than "Salpicón!: contents hidden"
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setShowWhen(false)

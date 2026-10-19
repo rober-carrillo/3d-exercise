@@ -1,28 +1,36 @@
 /* Design tokens + RouteViewer chrome. Loaded by both the library page and the viewer. */
+/* Salpicón!: leche rosada. A pastel pink-white ground, green for every action
+   (the walk light), mango for wait states, and red only as juice in the glass,
+   the straw and the finish point, so red reads as the reward, never an alarm. */
 :root{
-  /* Survey sheet: a printed relief map. Pale green sheet, brown ink, forest-green controls,
-     crimson for the trail and anything that records, gold for the second runner and warnings. */
-  --bg:#e6ead6; --panel:rgba(241,243,231,.86); --panel-brd:rgba(74,53,32,.16);
-  --line:rgba(39,38,29,.12); --fill:rgba(39,38,29,.06); --fill-2:rgba(39,38,29,.12);
-  --ink:#27261d; --ink-2:#55533f; --ink-3:#86836b;
-  --accent:#4f7a45; --accent-2:#41663a; --route:#c8102e; --route-2:#a50d26; --warm:#d4a514; --hot:#c8102e;
-  --brown:#8c6b43; --ring-3:#4a3520; --tag-brown:#6e4f2c; --tag-green:#3f6337;
-  --bg-hi:#f1f3e6; --scrim:rgba(230,234,214,.93); --line-2:rgba(39,38,29,.22);
-  --load-1:#eef1e2; --load-2:#dde3cb; --sky:#dfe5d3;   /* --sky is read by the WebGL renderer for haze and clear colour */
-  --shadow:0 12px 34px rgba(58,48,24,.18); --shadow-lift:0 18px 40px rgba(58,48,24,.22);
+  --bg:#fcf1ee; --panel:rgba(255,250,248,.92); --panel-brd:rgba(23,32,27,.10);
+  --line:rgba(23,32,27,.10); --fill:rgba(23,32,27,.05); --fill-2:rgba(23,32,27,.10);
+  --ink:#17201b; --ink-2:#4b5a52; --ink-3:#7d8a83;
+  --accent:#138a4a; --accent-2:#0f6e3b; --on-accent:#ffffff;
+  --route:#138a4a; --route-2:#0f6e3b; --warm:#a87400; --hot:#a87400; --juice:#e4233f;
+  --brown:#7a2e6b; --tag-brown:#7a2e6b; --tag-green:#0f6e3b;
+  --bg-hi:#fef7f5; --scrim:rgba(252,241,238,.93); --line-2:rgba(23,32,27,.2);
+  --load-1:#fef7f5; --load-2:#f7e4df; --sky:#f6e8e4;   /* --sky is read by the WebGL renderer for haze and clear colour */
+  --shadow:0 12px 34px rgba(60,30,30,.12); --shadow-lift:0 18px 40px rgba(60,30,30,.18);
+  /* the LED mark (src/mark.js): figure, glass, empty glass, juice, straw, unlit LEDs, wait */
+  --mk-fig:#138a4a; --mk-glass:#138a4a; --mk-empty:#cfe5d7; --mk-juice:#e4233f; --mk-straw:#e4233f;
+  --mk-off:#f1dcd6; --mk-wait:#d99a00;
   --font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   color-scheme:light;
 }
-/* The sheet at night: same hues, lifted for contrast on a dark olive ground. */
+/* The same at night: a dark plum-black ground, the green lifted for contrast. */
 @media (prefers-color-scheme: dark){:root{
-  --bg:#15180f; --panel:rgba(30,34,24,.86); --panel-brd:rgba(236,232,210,.12);
-  --line:rgba(236,232,210,.12); --fill:rgba(236,232,210,.07); --fill-2:rgba(236,232,210,.15);
-  --ink:#eeecdc; --ink-2:#bdbaa0; --ink-3:#8c896f;
-  --accent:#6f9f5f; --accent-2:#5e8b50; --route:#d42240; --route-2:#b81a35; --warm:#e0b42a; --hot:#e0314c;
-  --brown:#a8835a; --ring-3:#c9a77a; --tag-brown:#d2b48a; --tag-green:#a9cf98;
-  --bg-hi:#1f2417; --scrim:rgba(21,24,15,.93); --line-2:rgba(236,232,210,.26);
-  --load-1:#20251a; --load-2:#11140c; --sky:#1b1f16;
+  --bg:#171214; --panel:rgba(34,27,30,.88); --panel-brd:rgba(252,236,232,.12);
+  --line:rgba(252,236,232,.12); --fill:rgba(252,236,232,.07); --fill-2:rgba(252,236,232,.15);
+  --ink:#f6ece9; --ink-2:#cdb9b5; --ink-3:#95817e;
+  --accent:#3ccf7f; --accent-2:#2fb56c; --on-accent:#0b2a18;
+  --route:#3ccf7f; --route-2:#2fb56c; --warm:#ffc23d; --hot:#ffc23d; --juice:#ff3b56;
+  --brown:#d79cc8; --tag-brown:#e3a6d6; --tag-green:#8fd9a9;
+  --bg-hi:#211a1d; --scrim:rgba(23,18,20,.93); --line-2:rgba(252,236,232,.26);
+  --load-1:#241c1f; --load-2:#120e0f; --sky:#1f191b;
   --shadow:0 12px 34px rgba(0,0,0,.45); --shadow-lift:0 18px 40px rgba(0,0,0,.55);
+  --mk-fig:#3ccf7f; --mk-glass:#3ccf7f; --mk-empty:#1f4a33; --mk-juice:#ff3b56; --mk-straw:#ff3b56;
+  --mk-off:#2a2124; --mk-wait:#ffc23d;
   color-scheme:dark;
 }}
 *{box-sizing:border-box}
@@ -77,13 +85,13 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-seg button{font:inherit;font-size:10.5px;font-weight:560;letter-spacing:.01em;color:var(--ink-3);
   background:none;border:0;border-radius:7px;padding:3px 9px;cursor:pointer;transition:background .15s,color .15s}
 .rv-seg button:hover{color:var(--ink)}
-.rv-seg button.on{color:#fff;background:var(--accent)}
+.rv-seg button.on{color:var(--on-accent);background:var(--accent)}
 .rv-btns{display:flex;gap:8px;margin-top:13px;padding-top:13px;border-top:1px solid var(--line)}
 .rv-btns button{flex:1;font:inherit;font-size:11px;white-space:nowrap;font-weight:550;color:var(--ink);background:var(--fill);
   border:1px solid var(--line);border-radius:9px;padding:7px 4px;cursor:pointer;transition:background .15s,border-color .15s}
 .rv-btns button:hover{background:var(--fill-2);border-color:var(--line-2)}
 .rv-speed{flex:0 0 42px!important;font-variant-numeric:tabular-nums}
-.rv-pri{background:var(--route)!important;border-color:var(--route)!important;color:#fff!important}
+.rv-pri{background:var(--route)!important;border-color:var(--route)!important;color:var(--on-accent)!important}
 .rv-pri:hover{background:var(--route-2)!important}
 
 .rv-profile{position:fixed;left:16px;right:16px;bottom:16px;height:126px;padding:30px 14px 10px;z-index:5}
@@ -93,7 +101,7 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-readout b{color:var(--ink);font-weight:600}
 
 .rv-legend{position:fixed;left:16px;bottom:154px;padding:9px 12px;z-index:5;font-size:10.5px;color:var(--ink-2)}
-.rv-ramp{width:132px;height:6px;border-radius:4px;margin:6px 0 4px;background:linear-gradient(90deg,#4f8a3c,#d4a514,#9a6a3a,#c8102e)}
+.rv-ramp{width:132px;height:6px;border-radius:4px;margin:6px 0 4px;background:linear-gradient(90deg,#2e8a50 0 20%,#7cc06a 20% 40%,#f5b700 40% 60%,#e4233f 60% 80%,#7a2e6b 80%)}
 .rv-lgrow{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:10px;color:var(--ink-3)}
 .rv-status{position:fixed;right:16px;bottom:154px;padding:8px 12px;z-index:5;font-size:10.5px;color:var(--ink-3);max-width:272px;white-space:nowrap}
 .rv-ver{margin-left:8px;padding-left:8px;border-left:1px solid var(--line);color:var(--ink-3);font-variant-numeric:tabular-nums}
@@ -108,7 +116,7 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
   background:var(--panel);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
   border:1px solid var(--panel-brd);box-shadow:var(--shadow);transition:background .15s,border-color .15s}
 .rv-fab:active{background:var(--fill-2)}
-.rv-fab-play{color:#fff;background:var(--route);border-color:var(--route)}
+.rv-fab-play{color:var(--on-accent);background:var(--route);border-color:var(--route)}
 .rv-fab-play:active{background:var(--route-2)}
 .rv-fab-set[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
 
@@ -142,3 +150,16 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
   .rv-ctrl{bottom:82px}
   .rv-profile{display:none}
 }
+
+/* ---- the LED mark (src/mark.js) ---- */
+.mk{display:block}
+.mk .o{fill:var(--mk-off)} .mk .f{fill:var(--mk-fig)} .mk .g{fill:var(--mk-glass)}
+.mk .g.empty{fill:var(--mk-empty)} .mk .j{fill:var(--mk-juice)} .mk .s{fill:var(--mk-straw)}
+.mk.wait{--mk-fig:var(--mk-wait)}
+.mk.blink .f{animation:mk-blink 1.2s steps(1) infinite}
+@keyframes mk-blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.mk.blink .f{animation:none}}
+/* the crossing-light housing: the mark lit on a dark panel, whatever the theme */
+.signal-box{background:#0f1412;border-radius:14px;padding:12px 16px;
+  --mk-fig:#22c86f; --mk-glass:#22c86f; --mk-empty:#14532f; --mk-juice:#ff3b56; --mk-straw:#ff3b56;
+  --mk-off:#1b2420; --mk-wait:#ffc23d}

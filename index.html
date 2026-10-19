@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Relieve!</title>
-<meta name="description" content="Relieve! — your routes as interactive 3D terrain flyovers.">
-<meta name="theme-color" content="#e6ead6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#15180f" media="(prefers-color-scheme: dark)">
+<title>Salpicón!</title>
+<meta name="description" content="Salpicón! — your routes as interactive 3D terrain flyovers.">
+<meta name="theme-color" content="#fcf1ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171214" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
@@ -16,45 +16,27 @@
   .wrap{max-width:1080px;margin:0 auto;padding:72px 24px 96px}
   header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap}
   header h1{margin:0;font-size:30px;font-weight:660;letter-spacing:-.025em}
-  /* the mark: the name is Spanish for the shape of the ground, which is the
-     whole point of the app, and the exclamation is part of it */
-  header h1 .bang{color:var(--accent)}
-  .brand{display:flex;align-items:center;gap:12px}
-  .brand-mark{width:46px;height:46px;flex:0 0 auto;fill:none;stroke-linecap:round}
-  .bm-r1,.bm-r2,.bm-r3{stroke-width:3.4}.bm-r1{stroke:var(--brown)}.bm-r2{stroke:var(--accent)}.bm-r3{stroke:var(--ring-3)}
-  .bm-halo{stroke:var(--bg);stroke-width:9}.bm-gold{stroke:var(--warm);stroke-width:4.6}.bm-red{stroke:var(--route);stroke-width:4.6}
-  .bm-dot{fill:var(--route);stroke:var(--bg);stroke-width:2.5}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand .mk{width:76px;height:auto;flex:0 0 auto}
   header p{margin:10px 0 0;font-size:14px;line-height:1.6;color:var(--ink-2);max-width:56ch}
-  .add{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:#fff;background:var(--accent);
+  .add{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:var(--on-accent);background:var(--accent);
     border:1px solid var(--accent);border-radius:10px;padding:9px 15px;cursor:pointer;transition:background .15s}
   .add:hover{background:var(--accent-2)}
-  .qr{display:flex;align-items:center;gap:28px;margin-top:34px;padding:24px 28px;max-width:680px}
-  /* the code carries barely a module of quiet zone of its own, and scanners
-     want four — the white padding here is that margin, not decoration */
-  .qrimg{flex:0 0 auto;width:206px;height:206px;padding:13px;background:#fff;border-radius:14px;
-    display:block;object-fit:contain}
-  .qrsay h2{margin:0;font-size:16px;font-weight:620;letter-spacing:-.015em}
-  .qrsay p{margin:9px 0 0;font-size:13.5px;line-height:1.65;color:var(--ink-2);max-width:46ch}
-  .qrlink{display:inline-block;margin-top:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:12.5px;color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(79,122,69,.35);padding-bottom:2px}
-  .qrlink:hover{border-bottom-color:var(--accent)}
-  @media (max-width:640px){
-    .qr{flex-direction:column;align-items:flex-start;gap:20px;padding:20px}
-    .qrimg{width:168px;height:168px}
-  }
-  .rec-btn{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:#fff;
+  .add.quiet{color:var(--accent);background:var(--panel);border-color:var(--line-2)}
+  .add.quiet:hover{background:var(--bg-hi)}
+  .rec-btn{flex:0 0 auto;font:inherit;font-size:12.5px;font-weight:560;color:var(--on-accent);
     background:var(--route);border:1px solid var(--route);border-radius:10px;
     padding:9px 15px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;gap:7px}
   .rec-btn:hover{background:var(--route-2)}
-  .rec-btn i{width:9px;height:9px;border-radius:50%;background:#fff;display:block}
+  .rec-btn i{width:9px;height:9px;border-radius:50%;background:var(--on-accent);display:block}
   #rec{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
   #rec.on{display:flex}
   .rec-card{width:min(420px,100%);padding:26px 26px 22px;display:flex;flex-direction:column;gap:18px}
   .rec-live{display:flex;align-items:baseline;gap:10px}
-  .rec-dot{width:10px;height:10px;border-radius:50%;background:var(--hot);animation:rec-pulse 1.6s infinite}
-  @keyframes rec-pulse{0%,100%{opacity:1}50%{opacity:.25}}
-  @media (prefers-reduced-motion:reduce){.rec-dot{animation:none}}
+  /* the crossing light: the LED mark walks, waits and fills its glass with the recording */
+  .rec-card .signal-box{display:flex;justify-content:center}
+  #recmark .mk{width:132px;height:auto}
   .rec-state{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
   .rec-gps{margin-left:auto;font-size:11px;letter-spacing:.04em;color:var(--ink-3)}
   .rec-time{font-size:46px;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
@@ -67,47 +49,55 @@
   .rec-acts{display:flex;gap:6px;flex-wrap:wrap}
   .rec-acts button{font:inherit;font-size:11.5px;color:var(--ink-2);background:var(--fill);
     border:1px solid transparent;border-radius:8px;padding:5px 11px;cursor:pointer}
-  .rec-acts button.on{color:#fff;background:var(--accent);font-weight:560}
+  .rec-acts button.on{color:var(--on-accent);background:var(--accent);font-weight:560}
   .rec-btns{display:flex;gap:9px}
   .rec-btns button{flex:1;font:inherit;font-size:13px;font-weight:580;border-radius:10px;padding:11px;cursor:pointer;
     border:1px solid var(--line);background:var(--fill);color:var(--ink)}
-  .rec-btns .pri{background:var(--hot);border-color:var(--hot);color:#fff}
+  .rec-btns .pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
   .rec-btns button:disabled{opacity:.4;cursor:not-allowed}
   .rec-note{font-size:11.5px;line-height:1.6;color:var(--ink-3)}
   .rec-count{position:absolute;inset:0;border-radius:inherit;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:10px;background:#0b1016;z-index:3}
+    align-items:center;justify-content:center;gap:10px;background:var(--bg);z-index:3}
   .rec-n{font-size:72px;font-weight:680;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
   .rec-acc{font-size:12px;color:var(--ink-2);letter-spacing:.02em}
   .rec-card{position:relative}
-  .count{margin:34px 0 14px;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
-  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
-  .cardwrap{position:relative}
-  a.card{display:block;padding:18px 18px 14px;text-decoration:none;color:inherit;transition:transform .18s,border-color .18s,box-shadow .18s}
-  a.card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:var(--shadow-lift)}
-  .card h2{margin:0;font-size:16px;font-weight:620;letter-spacing:-.01em;padding-right:30px}
-  .card .meta{margin-top:3px;font-size:11px;color:var(--ink-3);letter-spacing:.05em;text-transform:uppercase}
-  .card .when{color:var(--ink-2)}
-  .spark{margin:14px 0 12px;width:100%;height:56px;display:block;overflow:visible}
-  .figs{display:flex;gap:18px;border-top:1px solid var(--line);padding-top:11px}
-  .figs div{display:flex;flex-direction:column}
-  .figs .k{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
-  .figs .v{font-size:14px;font-weight:620;font-variant-numeric:tabular-nums;margin-top:2px}
-  .figs .v small{font-size:9.5px;font-weight:500;color:var(--ink-2);margin-left:2px}
-  button.dl{background:none;font:inherit;cursor:pointer}
-  button.dl:disabled{opacity:.5;cursor:wait}
-  /* above the card link, which covers the whole wrap, and big enough to hit
-     with a thumb — at 10px with 3px of padding it was a 55x16 target sitting
-     under a full-card tap area, so every attempt opened the route instead */
-  a.dl,button.dl{z-index:2;position:absolute;right:12px;bottom:8px;font-size:11px;letter-spacing:.04em;color:var(--ink-3);
-    text-decoration:none;padding:8px 11px;border-radius:7px;border:1px solid transparent;transition:color .15s,border-color .15s,background .15s}
-  a.dl:active,button.dl:active{background:rgba(255,255,255,.08)}
-  a.dl:hover{color:var(--accent);border-color:rgba(79,122,69,.35)}
-  .tag{display:inline-block;margin-left:8px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
-    color:var(--tag-brown);background:rgba(140,107,67,.14);border:1px solid rgba(140,107,67,.4);border-radius:5px;padding:1px 6px}
-  .tag.pace{color:var(--tag-green);background:rgba(79,122,69,.13);border-color:rgba(79,122,69,.4)}
-  .rm{z-index:2;position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:6px;border:1px solid transparent;
-    background:none;color:var(--ink-3);font-size:14px;line-height:1;cursor:pointer;transition:color .15s,border-color .15s}
-  .rm:hover{color:var(--hot);border-color:rgba(200,16,46,.4)}
+  .count{margin:34px 0 0;font-size:10.5px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-3)}
+  /* the diary: one section per month, newest first, a row per route */
+  .month{margin-top:30px}
+  .month-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px 14px;flex-wrap:wrap;
+    padding-bottom:9px;border-bottom:2px solid var(--ink)}
+  .month-head h2{margin:0;font-size:22px;font-weight:680;letter-spacing:-.02em}
+  .month-head span{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .row{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
+  .row a.go{flex:1;min-width:0;display:grid;grid-template-columns:52px minmax(0,1fr) 150px 92px;align-items:center;
+    gap:16px;padding:12px 8px 12px 0;color:inherit;text-decoration:none;border-radius:10px;transition:background .15s}
+  .row a.go:hover{background:var(--fill)}
+  .row a.go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .day{display:flex;flex-direction:column;align-items:center}
+  .day b{font-size:20px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  .day small{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:4px}
+  .what{display:flex;flex-direction:column;min-width:0;gap:3px}
+  .what b{font-size:15.5px;font-weight:620;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .what small{font-size:12px;color:var(--ink-3)}
+  .spark{width:150px;height:30px;display:block;overflow:visible}
+  .num{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+  .num b{font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .num small{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .acts{display:flex;gap:2px}
+  .dl,.rm{font:inherit;font-size:11.5px;color:var(--ink-3);background:none;border:1px solid transparent;border-radius:8px;
+    min-height:40px;padding:0 10px;cursor:pointer;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;
+    transition:color .15s,border-color .15s}
+  .dl:hover{color:var(--accent);border-color:var(--line-2)}
+  .rm:hover{color:var(--hot);border-color:var(--line-2)}
+  .dl:disabled{opacity:.5;cursor:wait}
+  .tag{display:inline-block;margin-left:6px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;vertical-align:1px;
+    color:var(--tag-brown);border:1px solid currentColor;border-radius:5px;padding:0 5px}
+  .tag.pace{color:var(--tag-green)}
+  @media (max-width:640px){
+    .row a.go{grid-template-columns:40px minmax(0,1fr) auto;gap:12px}
+    .spark{display:none}
+    .dl span,.rm span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  }
   .empty{padding:26px;font-size:13.5px;color:var(--ink-2);line-height:1.7}
   code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--accent)}
   footer{margin-top:44px;font-size:11px;color:var(--ink-3);line-height:1.8}
@@ -115,7 +105,7 @@
   #drop{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
     background:var(--scrim);backdrop-filter:blur(6px)}
   #drop.on{display:flex}
-  #drop div{border:2px dashed rgba(79,122,69,.6);border-radius:18px;padding:44px 64px;font-size:15px;color:var(--ink)}
+  #drop div{border:2px dashed var(--accent);border-radius:18px;padding:44px 64px;font-size:15px;color:var(--ink)}
   #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);z-index:40;
     padding:11px 18px;font-size:12.5px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:80vw}
   #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -125,27 +115,17 @@
 <div class="wrap">
   <header>
     <div>
-      <h1 class="brand"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"><path class="bm-r1" d="M18,62 C14,40 34,20 56,22 C78,24 90,44 84,62 C78,80 54,86 38,82 C26,79 20,72 18,62Z"/><path class="bm-r2" d="M30,60 C28,45 42,32 57,34 C72,36 78,50 73,62 C68,72 52,75 42,72 C34,70 31,66 30,60Z"/><path class="bm-r3" d="M43,56 C42,48 50,43 57,45 C64,47 66,54 62,59 C58,64 49,64 45,61 C44,60 43,58 43,56Z"/><path class="bm-halo" d="M50,95 C49,88 38.77,81.83 28.77,77.83"/><path class="bm-gold" d="M50,95 C49,88 38.77,81.83 28.77,77.83"/><path class="bm-halo" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/><path class="bm-red" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/><circle class="bm-dot" cx="54" cy="53" r="6"/></svg>Relieve<span class="bang">!</span></h1>
+      <div class="brand"><span id="brandmark"></span><h1>Salpicón!</h1></div>
       <p>GPX tracks draped over real satellite imagery and elevation data, rendered in the browser. Pick one to orbit it, replay it, or ride behind the walker in chase view.</p>
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap">
-      <a class="add" href="./dash.html" style="text-decoration:none;display:inline-flex;align-items:center">Your figures</a>
+      <a class="add quiet" href="./dash.html" style="text-decoration:none;display:inline-flex;align-items:center">Your figures</a>
       <button class="rec-btn" id="recbtn"><i></i>Record</button>
-      <button class="add" id="add">＋ Add a GPX</button>
+      <button class="add quiet" id="add">＋ Add a GPX</button>
     </div>
   </header>
-  <section class="qr rv-panel">
-    <img class="qrimg" src="./exercise-QR-code.png" width="514" height="510" loading="lazy"
-         alt="QR code that opens https://3d-exercise.vercel.app">
-    <div class="qrsay">
-      <h2>Open it on your phone</h2>
-      <p>Scan the code to carry Relieve! across to a phone. Routes render in the mobile browser
-        exactly as they do here — satellite terrain, chase camera and all.</p>
-      <a class="qrlink" href="https://3d-exercise.vercel.app">3d-exercise.vercel.app</a>
-    </div>
-  </section>
   <div class="count" id="count"></div>
-  <div class="grid" id="grid"></div>
+  <div id="grid"></div>
   <footer>
     Imagery © Esri and its contributors · Elevation from
     <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) ·
@@ -156,8 +136,8 @@
 <input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
 <div id="rec">
   <div class="rec-card rv-panel">
+    <div class="signal-box"><div id="recmark"></div></div>
     <div class="rec-live">
-      <span class="rec-dot" id="recdot"></span>
       <span class="rec-state" id="recstate">recording</span>
       <span class="rec-gps" id="recgps">waiting for GPS…</span>
     </div>
@@ -191,8 +171,11 @@ import { saveGPX, safeName, canShareFiles } from './src/export.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
 import { browserGeo, replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp } from './src/geo.js';
+import { markSVG, signalFor } from './src/mark.js';
 
 const grid = document.getElementById('grid');
+// the main logo: the runner arriving at a full glass
+document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
 const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
 const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
@@ -212,7 +195,8 @@ function render() {
       page to build one right now, or commit it to <code>routes/</code> to publish it for everyone.</div>`;
     return;
   }
-  for (const r of routes) grid.insertAdjacentHTML('beforeend', card(r));
+  // a diary: one section per month, newest first, with the month's totals
+  for (const [key, list] of groupByMonth(routes)) grid.insertAdjacentHTML('beforeend', month(key, list));
   // Export a route this browser holds. The track is rebuilt into GPX rather
   // than a copy of the file being kept around: for anything this app recorded
   // that is the same points it captured, and it means an imported route can be
@@ -238,55 +222,84 @@ function render() {
   }));
 }
 
+const ACT = { walk: 'Walk', run: 'Run', ride: 'Ride', field: 'Field sport' };
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 /**
- * The date, leading the meta line: when the activity was recorded, or when the
- * route joined the library for the files that never carried a time. Entries
- * saved by an older version of the page only have `added`, so fall back to it.
+ * When the route happened: the recorded time, or the day it joined the library
+ * for files that never carried one. Entries saved by an older version of the
+ * page only have `added`, so fall back to it.
  */
-function when(r) {
-  const iso = r.date || r.added;
-  if (!iso) return '';
-  const label = r.dateSource === 'recorded' ? '' : 'added ';
-  return `<span class="when">${label}${formatDate(iso)}</span> · `;
+const whenOf = r => new Date(r.date || r.added || 0);
+
+function groupByMonth(routes) {
+  const groups = new Map();
+  for (const r of routes) {
+    const d = whenOf(r), key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  return groups;
 }
 
-function card(r) {
+/** Recorded routes are named "Run · 12 Oct", so a local route's sport comes from its name. */
+function activityOf(r) {
+  if (r.activity) return ACT[r.activity] || '';
+  const m = /^(run|walk|ride|field)\b/i.exec(r.name || '');
+  return m ? ACT[m[1].toLowerCase()] : '';
+}
+
+function month(key, list) {
+  const [y, m] = key.split('-').map(Number);
+  const km = list.reduce((s, r) => s + r.stats.distance_m, 0) / 1000;
+  const up = list.reduce((s, r) => s + r.stats.gain_m, 0);
+  return `
+    <section class="month">
+      <div class="month-head">
+        <h2>${MONTHS[m]} ${y}</h2>
+        <span>${list.length} route${list.length > 1 ? 's' : ''} · ${km.toFixed(1)} km · ↑ ${fmt(up)} m</span>
+      </div>
+      ${list.map(row).join('')}
+    </section>`;
+}
+
+function row(r) {
+  const d = whenOf(r);
   const lo = Math.min(...r.profile), hi = Math.max(...r.profile), span = Math.max(1, hi - lo);
-  const W = 300, H = 56;
-  const d = r.profile.map((e, i) =>
-    (i ? 'L' : 'M') + (i / (r.profile.length - 1) * W).toFixed(1) + ' ' + (H - 3 - (e - lo) / span * (H - 10)).toFixed(1)
+  const W = 150, H = 30;
+  const path = r.profile.map((e, i) =>
+    (i ? 'L' : 'M') + (i / (r.profile.length - 1) * W).toFixed(1) + ' ' + (H - 2 - (e - lo) / span * (H - 6)).toFixed(1)
   ).join('');
   let stops = '';
-  for (let s = 0; s <= 10; s++) {
-    const e = r.profile[Math.round(s / 10 * (r.profile.length - 1))];
-    stops += `<stop offset="${s * 10}%" stop-color="${rampCss((e - r.stats.ele_min) / Math.max(1, r.stats.ele_max - r.stats.ele_min))}"/>`;
+  for (let k = 0; k <= 10; k++) {
+    const e = r.profile[Math.round(k / 10 * (r.profile.length - 1))];
+    stops += `<stop offset="${k * 10}%" stop-color="${rampCss((e - r.stats.ele_min) / Math.max(1, r.stats.ele_max - r.stats.ele_min))}"/>`;
   }
   const id = 'g' + r.slug.replace(/[^a-z0-9]/gi, '');
   const href = r.local
     ? `./view.html?local=${encodeURIComponent(r.slug)}`
     : `./view.html?route=${encodeURIComponent(r.slug)}`;
+  const act = activityOf(r);
+  const added = r.dateSource === 'recorded' ? '' : 'added';
+  const meta = [act, added].filter(Boolean).join(' · ');
   return `
-    <div class="cardwrap">
-      <a class="card rv-panel" href="${href}">
-        <h2>${escapeHtml(r.name)}</h2>
-        <div class="meta">${when(r)}${r.stats.points.toLocaleString()} points · ${r.center[0].toFixed(2)}°, ${r.center[1].toFixed(2)}°${
+    <div class="row">
+      <a class="go" href="${href}">
+        <span class="day"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-US', { weekday: 'short' })}</small></span>
+        <span class="what"><b>${escapeHtml(r.name)}</b><small>${meta}${
           r.pace ? '<span class="tag pace" title="This track is timed, so the replay can follow the speed it was actually done at">recorded pace</span>' : ''}${
-          r.local ? '<span class="tag">this browser</span>' : ''}</div>
-        <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          r.local ? '<span class="tag">this browser</span>' : ''}</small></span>
+        <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
           <defs><linearGradient id="${id}" x1="0" x2="1">${stops}</linearGradient></defs>
-          <path d="${d}L${W} ${H}L0 ${H}Z" fill="rgba(79,122,69,.10)"/>
-          <path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2"/>
+          <path d="${path}L${W} ${H}L0 ${H}Z" fill="rgba(19,138,74,.10)"/>
+          <path d="${path}" fill="none" stroke="url(#${id})" stroke-width="2" vector-effect="non-scaling-stroke"/>
         </svg>
-        <div class="figs">
-          <div><span class="k">Distance</span><span class="v">${(r.stats.distance_m / 1000).toFixed(2)}<small>km</small></span></div>
-          <div><span class="k">Ascent</span><span class="v">${fmt(r.stats.gain_m)}<small>m</small></span></div>
-          <div><span class="k">High</span><span class="v">${fmt(r.stats.ele_max)}<small>m</small></span></div>
-        </div>
+        <span class="num"><b>${(r.stats.distance_m / 1000).toFixed(2)} km</b><small>↑ ${fmt(r.stats.gain_m)} m</small></span>
       </a>
-      ${r.local
-        ? `<button class="rm" data-slug="${r.slug}" title="Remove from this browser">✕</button>
-           <button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓ gpx</button>`
-        : `<a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓ single file</a>`}
+      <span class="acts">${r.local
+        ? `<button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓<span> gpx</span></button>
+           <button class="rm" data-slug="${r.slug}" title="Remove from this browser" aria-label="Remove ${escapeHtml(r.name)} from this browser">✕</button>`
+        : `<a class="dl" href="./standalone/${r.slug}.html" title="Single self-contained file — works offline">⤓<span> single file</span></a>`}</span>
     </div>`;
 }
 
@@ -383,8 +396,25 @@ function paint() {
   document.getElementById('recpts').textContent = s.points;
   const st = document.getElementById('recstate');
   st.textContent = rec.state === 'paused' ? 'paused' : 'recording';
-  document.getElementById('recdot').style.background =
-    rec.state === 'paused' ? 'var(--ink-3)' : 'var(--hot)';
+  signal.state = rec.state === 'stopped' ? 'arrived'
+    : rec.state === 'paused' ? 'paused'
+    : rec.points.length === 0 ? 'gps' : 'recording';
+  drawSignal();
+}
+
+/**
+ * The crossing light on the record screen. Waiting for the first fix it shows
+ * the amber "wait" figure; once moving it steps between two strides while the
+ * glass fills, one glass per kilometre; paused, it stands and blinks amber; on
+ * Finish the glass is full. Reduced motion holds the stride and the blink still.
+ */
+const signal = { state: 'gps', frame: 0, timer: null, last: '' };
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function drawSignal() {
+  const km = rec ? rec.stats.distance_m / 1000 : 0;
+  const s = signalFor(signal.state, signal.frame, km - Math.floor(km), still);
+  const html = markSVG(s.opts, { cls: s.cls, label: s.label });
+  if (html !== signal.last) document.getElementById('recmark').innerHTML = signal.last = html;
 }
 
 function startRecording(replaySlug) {
@@ -406,7 +436,7 @@ function startRecording(replaySlug) {
     // on Android the permission lives a few screens into Settings, so offer the
     // way back rather than leaving a dead end
     if (denied && source?.openSettings) {
-      note.textContent = 'Relieve needs location permission to record. Tap Discard, allow it in Settings, and start again.';
+      note.textContent = 'Salpicón! needs location permission to record. Tap Discard, allow it in Settings, and start again.';
       source.openSettings();
     }
   };
@@ -475,6 +505,8 @@ function startRecording(replaySlug) {
   }
 
   ticker = setInterval(paint, 500);
+  signal.state = 'gps'; signal.frame = 0;
+  signal.timer = setInterval(() => { signal.frame++; drawSignal(); }, 480);
   paint();
   recEl.classList.add('on');
 }
@@ -483,6 +515,7 @@ function closeRecorder() {
   awake?.release(); awake = null;
   source?.stop(); source = null;
   clearInterval(ticker); ticker = null;
+  clearInterval(signal.timer); signal.timer = null; signal.last = '';
   recEl.classList.remove('on');
   rec = null;
 }
@@ -568,10 +601,11 @@ document.getElementById('recstop').addEventListener('click', () => {
   const gpx = rec.toGPX(name, { activity });
   const track = analyze(parseGPX(gpx));
   const entry = addLocalRoute(name + '.gpx', track, profileSamples(track, 96));
-  closeRecorder();
+  // a moment on the full glass before the route opens
+  paint();
   render();
   toast(`Saved ${name} — ${(track.stats.distance_m / 1000).toFixed(2)} km`);
-  setTimeout(() => { location.href = `./view.html?local=${encodeURIComponent(entry.slug)}`; }, 700);
+  setTimeout(() => { closeRecorder(); location.href = `./view.html?local=${encodeURIComponent(entry.slug)}`; }, 1100);
 });
 
 render();

@@ -1,11 +1,19 @@
-# Relieve
+# Salpicón!
 
 GPX tracks rendered as interactive 3D terrain, entirely in the browser.
 
-The logo lives in `brand/relieve-mark.svg`: three contour rings with a red route climbing to the
-summit and a second, gold runner joining it. The favicon, the Android launcher icon (vector layers in
-`res/drawable/ic_launcher_*.xml`) and the splash screens are all drawn from it. The colours are the
-tokens at the top of `src/ui.css`, with a dark variant that follows the system setting.
+The logo is a crossing-signal runner sprinting for a glass of salpicón: a short,
+wide "!" whose bar is the glass, with a bent straw. It is drawn as LED beads by
+`src/mark.js`, and it doubles as a stoplight on the record screen. Waiting for
+GPS or paused, the figure stands and blinks amber. Moving, it steps between two
+strides while the glass fills, one glass per kilometre. On Finish, the glass is
+full. The full glass is the main logo.
+
+Colours are the tokens at the top of `src/ui.css`: a leche rosada ground, green
+for every action, mango for the wait states, and red only as juice, straw and the
+finish point. The dark variant follows the system setting. `brand/` holds the
+master SVG, the favicon and the touch icon; the Android launcher layers and splash
+screens are rendered from the same geometry.
 
 Each route is draped over real satellite imagery and elevation data fetched at
 view time, drawn with hand-written WebGL — no 3D library, no build-time asset
@@ -150,7 +158,7 @@ aims at the farthest point on the track instead.)
   bearing taken from a look-ahead point a few hundred metres up the track, so
   the camera follows where the route is *going* instead of yawing through every
   switchback.
-- The moving point is a **low-poly walking figure** — a gold restroom-sign
+- The moving point is a **low-poly walking figure** — a white restroom-sign
   woman with a faceted spherical head, about 160 triangles. Her legs and arms
   swing only while the route is replaying and freeze mid-stride when you pause.
   She is rebuilt on the CPU each frame, which is free at that triangle count and

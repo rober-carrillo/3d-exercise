@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Relieve!</string>
-    <string name="title_activity_main">Relieve!</string>
-    <string name="package_name">app.relieve</string>
-    <string name="custom_url_scheme">app.relieve</string>
+    <string name="app_name">Salpicón!</string>
+    <string name="title_activity_main">Salpicón!</string>
+    <string name="package_name">app.salpicon</string>
+    <string name="custom_url_scheme">app.salpicon</string>
 </resources>

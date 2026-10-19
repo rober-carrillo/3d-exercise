@@ -146,7 +146,7 @@ export function keepAwake({ onChange } = {}) {
  */
 const recorderPlugin = () =>
   (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.())
-    ? window.Capacitor.Plugins?.RelieveRecorder ?? null
+    ? window.Capacitor.Plugins?.SalpiconRecorder ?? null
     : null;
 
 export const nativeGeoAvailable = () => !!recorderPlugin();

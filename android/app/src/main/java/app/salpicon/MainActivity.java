@@ -1,4 +1,4 @@
-package app.relieve;
+package app.salpicon;
 
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;

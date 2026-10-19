@@ -57,7 +57,7 @@ const TEMPLATE = `
     <h1 class="rv-name">—</h1><span class="rv-caret">▾</span>
   </button>
   <div class="rv-fold">
-  <div class="rv-sub">Relieve</div>
+  <div class="rv-sub">Salpicón!</div>
   <div class="rv-stats">
     <div><span class="rv-k">Distance</span><span class="rv-v rv-s-dist">—</span></div>
     <div><span class="rv-k">Ascent</span><span class="rv-v rv-s-gain">—</span></div>
@@ -130,7 +130,7 @@ export class RouteViewer {
     this.mount.classList.add('rv-root');
     this.mount.innerHTML = TEMPLATE;
     this.mount.querySelector('.rv-ttl').textContent = `Building 3D terrain · v${VERSION}`;
-    console.info(`Relieve! v${VERSION}`);
+    console.info(`Salpicón! v${VERSION}`);
     this.$ = sel => this.mount.querySelector('.rv-' + sel);
     this.play = false;
     this.playT = 0;
@@ -265,7 +265,7 @@ export class RouteViewer {
     renderer.cam.tz = (s.ele_min + s.ele_max) / 2 - g.zRef;
     renderer.onFrame = dt => this.frame(dt);
 
-    this.$('status').title = `Relieve! v${VERSION}`;
+    this.$('status').title = `Salpicón! v${VERSION}`;
     const okTex = renderer.hasTexture;
     this.$('dot').className = 'rv-dot ' + (okTex && demReal ? 'ok' : 'warn');
     this.$('st-txt').textContent = okTex && demReal
@@ -499,7 +499,7 @@ export class RouteViewer {
     const defs = document.createElementNS(SVGNS, 'defs');
     defs.innerHTML = `<linearGradient id="rv-pg" x1="0" x2="1">${stops}</linearGradient>
       <linearGradient id="rv-pf" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(79,122,69,.30)"/><stop offset="100%" stop-color="rgba(79,122,69,0)"/></linearGradient>`;
+        <stop offset="0%" stop-color="rgba(19,138,74,.25)"/><stop offset="100%" stop-color="rgba(19,138,74,0)"/></linearGradient>`;
     svg.appendChild(defs);
     const mk = (tag, at) => {
       const n = document.createElementNS(SVGNS, tag);
@@ -509,7 +509,7 @@ export class RouteViewer {
     mk('path', { d: d + `L${W} ${H} L0 ${H} Z`, fill: 'url(#rv-pf)' });
     mk('path', { d, fill: 'none', stroke: 'url(#rv-pg)', 'stroke-width': 2, 'stroke-linejoin': 'round' });
     this._cursorLine = mk('line', { x1: 0, y1: 0, x2: 0, y2: H, style: 'stroke:var(--ink-3)', 'stroke-width': 1 });
-    this._cursorDot = mk('circle', { cx: 0, cy: 0, r: 3.6, fill: '#fff', stroke: '#c8102e', 'stroke-width': 2 });
+    this._cursorDot = mk('circle', { cx: 0, cy: 0, r: 3.6, fill: '#fff', stroke: '#138a4a', 'stroke-width': 2 });
     svg.style.cursor = 'crosshair';
     svg.addEventListener('pointermove', e => {
       const box = svg.getBoundingClientRect();

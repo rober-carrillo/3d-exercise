@@ -154,20 +154,16 @@ export function idwSampler(track, frame) {
   };
 }
 
-/** Elevation ramp shared by the ribbon, the profile and the legend. */
-// Relief-map tints: forest green low, gold, brown, crimson at the top. Keep in step with RAMP_GLSL and .rv-ramp.
-const STOPS = [[0, 79, 138, 60], [0.35, 212, 165, 20], [0.70, 154, 106, 58], [1, 200, 16, 46]];
+/**
+ * Elevation colours shared by the ribbon, the profile and the legend: five flat
+ * fruit bands, like the tints on a printed map. Bands, not a blend, because
+ * blending mango into watermelon passes through orange. Keep in step with
+ * RAMP_GLSL in renderer.js and .rv-ramp in ui.css.
+ */
+const BANDS = [[46, 138, 80], [124, 192, 106], [245, 183, 0], [228, 35, 63], [122, 46, 107]];
 export function ramp(t) {
-  t = clamp(t, 0, 1);
-  for (let i = 0; i < STOPS.length - 1; i++) {
-    const a = STOPS[i], b = STOPS[i + 1];
-    if (t <= b[0]) {
-      const u = (t - a[0]) / (b[0] - a[0]);
-      return [lerp(a[1], b[1], u) / 255, lerp(a[2], b[2], u) / 255, lerp(a[3], b[3], u) / 255];
-    }
-  }
-  const l = STOPS[STOPS.length - 1];
-  return [l[1] / 255, l[2] / 255, l[3] / 255];
+  const c = BANDS[Math.min(BANDS.length - 1, Math.floor(clamp(t, 0, 1) * BANDS.length))];
+  return [c[0] / 255, c[1] / 255, c[2] / 255];
 }
 export const rampCss = t => `rgb(${ramp(t).map(v => Math.round(v * 255)).join(',')})`;
 
@@ -222,7 +218,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
 
   // side walls, so the terrain reads as a solid block rather than paper
   const sp = [], sc = [], base = -fit(Math.max(120, hSpan * 0.35), 0.06);
-  const top = [0.43, 0.31, 0.17], bot = [0.22, 0.16, 0.09];      // soil brown, like the cut edge of a relief model
+  const top = [0.36, 0.20, 0.22], bot = [0.17, 0.10, 0.11];      // dark seed-brown, like the cut edge of a relief model
   const put = (x, y, z, c) => { sp.push(x, y, z); sc.push(c[0], c[1], c[2], 1); };
   const edge = (k1, k2) => {
     const x1 = pos[k1 * 3], y1 = pos[k1 * 3 + 1], z1 = pos[k1 * 3 + 2];
@@ -357,7 +353,7 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
     wp[i * 6 + 3] = tx[i]; wp[i * 6 + 4] = ty[i]; wp[i * 6 + 5] = 0;
     for (const k of [0, 4]) {
       rc[i * 8 + k] = c[0]; rc[i * 8 + k + 1] = c[1]; rc[i * 8 + k + 2] = c[2]; rc[i * 8 + k + 3] = 1;
-      oc[i * 8 + k] = 0.153; oc[i * 8 + k + 1] = 0.149; oc[i * 8 + k + 2] = 0.114; oc[i * 8 + k + 3] = 1;
+      oc[i * 8 + k] = 0.09; oc[i * 8 + k + 1] = 0.125; oc[i * 8 + k + 2] = 0.105; oc[i * 8 + k + 3] = 1;
     }
     wc[i * 8] = c[0]; wc[i * 8 + 1] = c[1]; wc[i * 8 + 2] = c[2]; wc[i * 8 + 3] = 0.42;
     wc[i * 8 + 4] = c[0]; wc[i * 8 + 5] = c[1]; wc[i * 8 + 6] = c[2]; wc[i * 8 + 7] = 0.02;

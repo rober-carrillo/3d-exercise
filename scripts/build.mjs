@@ -17,7 +17,7 @@ import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
-const STATIC = ['index.html', 'view.html', 'dash.html', 'src', 'routes', 'brand', 'exercise-QR-code.png'];
+const STATIC = ['index.html', 'view.html', 'dash.html', 'src', 'routes', 'brand'];
 
 const run = promisify(execFile);
 
@@ -131,7 +131,7 @@ async function writeStandalone(route, track) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>${route.name} · Relieve</title>
+<title>${route.name} · Salpicón!</title>
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(favicon.trim())}">
 <style>
 ${css}

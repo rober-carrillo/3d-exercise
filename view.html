@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Relieve</title>
-<meta name="theme-color" content="#e6ead6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#15180f" media="(prefers-color-scheme: dark)">
+<title>Salpicón!</title>
+<meta name="theme-color" content="#fcf1ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171214" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
@@ -30,7 +30,7 @@ if (localSlug) {
     fail(`That route isn’t in this browser any more. Routes you add are stored locally,
       so they don’t travel between browsers or devices. <a href="./">Back to the library</a>.`);
   } else {
-    document.title = entry.name + ' · Relieve';
+    document.title = entry.name + ' · Salpicón!';
     window.viewer = new RouteViewer({
       mount: document.body, track: entry.track, name: entry.name, backHref: './',
       date: entry.date || entry.added,
@@ -43,7 +43,7 @@ if (localSlug) {
     fail(`No routes found. Drop a .gpx file on the <a href="./">library page</a>, or commit one
       to <code>routes/</code> and rebuild.`);
   } else {
-    document.title = entry.name + ' · Relieve';
+    document.title = entry.name + ' · Salpicón!';
     window.viewer = new RouteViewer({
       mount: document.body, gpxUrl: './routes/' + entry.file, name: entry.name, backHref: './',
       date: entry.date,

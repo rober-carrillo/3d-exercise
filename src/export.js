@@ -46,7 +46,7 @@ export async function saveGPX(filename, text) {
     });
     await plugins.Share.share({
       title: filename,
-      text: 'Route recorded with Relieve!',
+      text: 'Route recorded with Salpicón!',
       url: uri,
       dialogTitle: 'Send this route',
     });

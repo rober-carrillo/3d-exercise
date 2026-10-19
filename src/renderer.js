@@ -16,7 +16,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 function readSky() {
   const v = getComputedStyle(document.documentElement).getPropertyValue('--sky').trim();
   const m = /^#([0-9a-f]{6})$/i.exec(v);
-  if (!m) return [0.875, 0.898, 0.827];   // #dfe5d3, the light sheet haze
+  if (!m) return [0.965, 0.910, 0.894];   // #f6e8e4, the leche rosada haze
   const n = parseInt(m[1], 16);
   return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
 }
@@ -55,10 +55,11 @@ function mul(o, a, b) {
 
 const RAMP_GLSL = `
 vec3 ramp(float t){t=clamp(t,0.0,1.0);
-  vec3 c0=vec3(0.310,0.541,0.235),c1=vec3(0.831,0.647,0.078),c2=vec3(0.604,0.416,0.227),c3=vec3(0.784,0.063,0.180);
-  if(t<0.35)return mix(c0,c1,t/0.35);
-  if(t<0.70)return mix(c1,c2,(t-0.35)/0.35);
-  return mix(c2,c3,(t-0.70)/0.30);}`;
+  if(t<0.2)return vec3(0.180,0.541,0.314);
+  if(t<0.4)return vec3(0.486,0.753,0.416);
+  if(t<0.6)return vec3(0.961,0.718,0.0);
+  if(t<0.8)return vec3(0.894,0.137,0.247);
+  return vec3(0.478,0.180,0.420);}`;
 const FOG_GLSL = `float fogf(float d){return smoothstep(uFogNear,uFogFar,d);}`;
 
 export class Renderer {
@@ -171,7 +172,7 @@ void main(){vec4 c=vCol;
     B.wall = { pos: this._buf(g.curtain.pos), col: this._buf(g.curtain.col), n: g.track.n * 2 };
     B.mk = {
       pos: gl.createBuffer(),
-      col: this._buf(new Float32Array([0.31, 0.54, 0.24, 1, 0.78, 0.06, 0.18, 1, 1, 1, 1, 1])),
+      col: this._buf(new Float32Array([0.07, 0.54, 0.29, 1, 0.89, 0.14, 0.25, 1, 1, 1, 1, 1])),
     };
     B.fig = { pos: gl.createBuffer(), col: gl.createBuffer(), n: 0 };
     this._figPos = new Float32Array(FIG_MAX * 3);
@@ -260,7 +261,7 @@ void main(){vec4 c=vCol;
    */
   poseWalker({ S, ph, quad, block, limb, frustum }) {
     const legA = Math.sin(ph) * 0.55, armA = Math.sin(ph + Math.PI) * 0.42;
-    const body = [0.83, 0.65, 0.08], skin = [0.93, 0.78, 0.30];   // gold, head a shade lighter
+    const body = [0.97, 0.97, 0.95], skin = [1.0, 1.0, 1.0];   // white, like the figure on a crossing light
 
     // legs, swinging from the hip
     const legW = 0.032 * S, hip = 0.36 * S;
@@ -307,8 +308,8 @@ void main(){vec4 c=vCol;
    */
   poseCyclist({ S, ph, quad, poly8, block }) {
     const B = S * 0.82;
-    const body = [0.83, 0.65, 0.08], skin = [0.93, 0.78, 0.30];
-    const frame = [0.78, 0.06, 0.18], rubber = [0.21, 0.20, 0.16];   // tyres light enough to read on dark ground
+    const body = [0.97, 0.97, 0.95], skin = [1.0, 1.0, 1.0];
+    const frame = [0.96, 0.72, 0.0], rubber = [0.21, 0.20, 0.16];   // tyres light enough to read on dark ground
 
     /** a box between two points in the x–z plane, `w` thick each way */
     const strut = (ax, az, bx, bz, y, w, col) => {

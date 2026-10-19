@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Your figures · Relieve!</title>
+<title>Your figures · Salpicón!</title>
 <meta name="description" content="Totals and best efforts across your routes.">
 <link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
@@ -15,6 +15,7 @@
   .brand{display:flex;align-items:center;gap:12px}
   .brand h1{margin:0;font-size:26px;font-weight:660;letter-spacing:-.025em}
   .brand h1 .bang{color:var(--accent)}
+  .brand .mk{width:52px;height:auto}
   .back{font-size:12.5px;font-weight:560;color:var(--accent);text-decoration:none;
     border:1px solid var(--panel-brd);border-radius:10px;padding:9px 15px;background:var(--panel)}
   .back:hover{background:var(--bg-hi)}
@@ -73,14 +74,7 @@
 <div class="wrap">
   <header>
     <div class="brand">
-      <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true" style="width:40px;height:40px;fill:none;stroke-linecap:round">
-        <path class="bm-r1" d="M18,62 C14,40 34,20 56,22 C78,24 90,44 84,62 C78,80 54,86 38,82 C26,79 20,72 18,62Z"/>
-        <path class="bm-r2" d="M30,60 C28,45 42,32 57,34 C72,36 78,50 73,62 C68,72 52,75 42,72 C34,70 31,66 30,60Z"/>
-        <path class="bm-r3" d="M43,56 C42,48 50,43 57,45 C64,47 66,54 62,59 C58,64 49,64 45,61 C44,60 43,58 43,56Z"/>
-        <path class="bm-halo" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/>
-        <path class="bm-red" d="M10,92 C22,86 28,78 36,71 C44,64 49,58 54,53"/>
-        <circle class="bm-dot" cx="54" cy="53" r="6"/>
-      </svg>
+<span id="brandmark"></span>
       <h1>Your figures</h1>
     </div>
     <a class="back" href="./">← All routes</a>
@@ -106,6 +100,8 @@
 import { parseGPX, analyze, formatDate } from './src/gpx.js';
 import { listLocalRoutes } from './src/library.js';
 import { EFFORTS, personalBests, totals, clock, pace } from './src/stats.js';
+import { markSVG } from './src/mark.js';
+document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
 
 const $ = id => document.getElementById(id);
 const km = m => (m / 1000).toFixed(m < 10000 ? 2 : 1);
