@@ -27,7 +27,7 @@
   "rewrites": [
     {
       "source": "/r/:token",
-      "destination": "/r.html"
+      "destination": "/r"
     }
   ]
 }
