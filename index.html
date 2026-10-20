@@ -376,12 +376,14 @@ if (!stageRoute) {
  * A run, a ride and a pitch sport, so three clicks show three different things
  * rather than three hillsides. Each thumbnail is the route's own shape.
  */
-const PREVIEWS = ['18k-march-1st', 'ciclismo-exterior', 'afternoon-soccer-rober-sept-20'];
-const picks = PREVIEWS.map(slug => built.find(r => r.slug === slug))
-  .filter(Boolean);
-// if the sample set ever changes, fall back to whatever is there
+const PREVIEWS = ['18k-march-1st', 'ciclismo-exterior', 'sprint'];
+const picks = PREVIEWS.map(slug => built.find(r => r.slug === slug)).filter(Boolean);
+// If the sample set ever changes, fill up from the best of what is left: a
+// timed route first, since the one thing these thumbnails are advertising is
+// a replay at the pace it was actually run.
 while (picks.length < 3) {
-  const next = built.find(r => !picks.includes(r) && r.slug !== STAGE_SLUG);
+  const rest = built.filter(r => !picks.includes(r) && r.slug !== STAGE_SLUG);
+  const next = rest.find(r => r.pace) ?? rest[0];
   if (!next) break;
   picks.push(next);
 }
