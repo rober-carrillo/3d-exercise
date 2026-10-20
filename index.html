@@ -826,6 +826,21 @@ await account.ready();
 account.onChange(paintAccount);
 setMode('in');
 
+/* ---------- arriving from a confirmation email ----------
+ * The session was in the URL and account.ready() has already taken it. All
+ * that is left is to say what happened, because landing silently on the home
+ * page is indistinguishable from the link not having worked.
+ */
+const arrived = account.arrivedFromEmail();
+if (arrived?.state === 'signed-in') {
+  toast(t('acct.welcome'));
+} else if (arrived?.state === 'error') {
+  const expired = /expired/i.test(arrived.message || '') || arrived.kind === 'otp_expired';
+  setMode('up');
+  acctEl.classList.add('on');
+  say(expired ? t('acct.linkexpired') : t('acct.linkbad', { why: arrived.message }));
+}
+
 /* ---------- uploading what is still on this device ---------- */
 const syncer = startSync();
 onSync(s => {

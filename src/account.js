@@ -16,7 +16,7 @@ import { createClient } from './supabase.js';
 import { createCloud } from './cloud.js';
 import { t } from './i18n.js';
 
-let client = null, cloud = null, config = null, loaded = null;
+let client = null, cloud = null, config = null, loaded = null, returned = null;
 
 /**
  * Read the build's config and set up if it carries a project.
@@ -34,6 +34,15 @@ export function ready() {
       try {
         client = createClient(config.supabaseUrl, config.supabaseKey);
         cloud = createCloud(client);
+        // Somebody arriving from a confirmation email has their session in the
+        // URL and nowhere else. Reading it here, before any page paints, is
+        // what makes them arrive signed in rather than apparently rejected.
+        returned = client.auth.fromUrl();
+        if (returned?.state === 'signed-in') {
+          // Confirm the tokens are real before telling anybody they are in.
+          const who = await client.auth.me().catch(() => null);
+          if (!who?.id) returned = { state: 'error', kind: 'rejected', message: 'the link could not be verified.' };
+        }
       } catch { client = null; cloud = null; }
     }
     return !!client;
@@ -42,6 +51,18 @@ export function ready() {
 }
 
 export const enabled = () => !!client;
+
+/**
+ * What the URL said, if this page was opened from an email link.
+ *
+ * `{ state: 'signed-in' }` after a confirmation, `{ state: 'error', message }`
+ * when the link had expired or been used already, and null — almost always —
+ * when the page was opened normally.
+ */
+export const arrivedFromEmail = () => returned;
+
+/** Where a confirmation email should send somebody back to. */
+export const returnUrl = () => `${location.origin}/`;
 export const user = () => client?.auth.user() ?? null;
 export const onChange = fn => (client ? client.auth.onChange(fn) : (fn(null), () => {}));
 export const routes = () => cloud;
@@ -81,7 +102,7 @@ export async function signIn(email, password) {
  */
 export async function signUp(email, password) {
   if (!client) throw new Error('Accounts are not configured in this build');
-  const res = await client.auth.signUp(email.trim(), password);
+  const res = await client.auth.signUp(email.trim(), password, { redirectTo: returnUrl() });
   return { needsConfirmation: res.needsConfirmation, user: res.user };
 }
 

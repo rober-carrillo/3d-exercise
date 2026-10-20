@@ -33,11 +33,20 @@ export function createClient(url, publishableKey) {
 
   const announce = () => { for (const fn of listeners) { try { fn(session?.user ?? null); } catch {} } };
 
-  const setSession = s => {
+  /**
+   * @param {object|null} s
+   * @param {object} [o]
+   * @param {boolean} [o.persist] write it to storage as well as holding it.
+   *   False for a session that has not been checked with the server yet —
+   *   anybody can put tokens in a URL fragment, and one written to storage
+   *   before it is verified outlives the tab that was about to verify it.
+   */
+  const setSession = (s, { persist = true } = {}) => {
     // the server sends a lifetime; store the moment it dies so a refresh can
     // be done before a request fails rather than after
     session = s ? { ...s, expires_at: Date.now() + (s.expires_in ?? 3600) * 1000 } : null;
-    writeStored(session);
+    if (persist) writeStored(session);
+    else if (!s) writeStored(null);        // clearing always reaches storage
     announce();
     return session;
   };
@@ -80,14 +89,100 @@ export function createClient(url, publishableKey) {
   }
 
   const auth = {
-    async signUp(email, password) {
-      const out = await request('/auth/v1/signup', { method: 'POST', body: { email, password } });
+    /**
+     * Create an account.
+     *
+     * `redirectTo` is where the confirmation email sends them afterwards. It
+     * has to be sent per request rather than left to the project's Site URL,
+     * because the same project serves the website, a preview deployment and
+     * an Android app, and only the request knows which one asked. Supabase
+     * will refuse any address not on the allow-list in the dashboard, which
+     * is what stops this being an open redirect.
+     */
+    async signUp(email, password, { redirectTo } = {}) {
+      const q = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+      const out = await request(`/auth/v1/signup${q}`, { method: 'POST', body: { email, password } });
       // With email confirmation switched on, Supabase returns a user and no
       // session — the caller has to say "check your email" rather than
       // pretending somebody is signed in.
       if (out?.access_token) setSession(out);
       return { user: out?.user ?? out, session: out?.access_token ? session : null,
                needsConfirmation: !out?.access_token };
+    },
+
+    /**
+     * Pick up a session handed back in the URL, and tidy the address bar.
+     *
+     * Confirming an email is a round trip out of the app and back: the link
+     * goes to Supabase, Supabase verifies the token and redirects here with
+     * the session in the fragment — `#access_token=…&refresh_token=…`. Without
+     * this, somebody who had just confirmed their address would land on the
+     * site still apparently signed out, which is the point at which people
+     * decide an app is broken and close it.
+     *
+     * The fragment is used rather than the query deliberately: it is never
+     * sent to the server and never written to an access log.
+     *
+     * Returns what happened, so the page can say something: 'signed-in',
+     * 'error' with a message, or null when there was nothing in the URL,
+     * which is almost every page load.
+     */
+    fromUrl({ clean = true } = {}) {
+      let result = null;
+      try {
+        const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+        const err = hash.get('error_description') || hash.get('error');
+        const access = hash.get('access_token');
+        if (err) {
+          result = { state: 'error', message: err.replace(/\+/g, ' '), kind: hash.get('error_code') };
+        } else if (access) {
+          // Held, not stored. `me()` is what turns it into a real session, so
+          // a forged fragment cannot leave anything behind if this tab closes
+          // before the server has been asked about it.
+          setSession({
+            access_token: access,
+            refresh_token: hash.get('refresh_token'),
+            token_type: hash.get('token_type') ?? 'bearer',
+            expires_in: Number(hash.get('expires_in')) || 3600,
+            user: null,                 // filled in by `me()`
+          }, { persist: false });
+          result = { state: 'signed-in', kind: hash.get('type') };
+        } else if (new URLSearchParams(location.search).get('code')) {
+          // A project set to the PKCE flow sends ?code= instead, and that code
+          // can only be exchanged with a verifier this client never created.
+          // Saying so is better than failing silently.
+          result = { state: 'error', kind: 'pkce',
+            message: 'This project is set to the PKCE flow, which this client cannot complete.' };
+        }
+        if (result && clean) {
+          history.replaceState(null, '', location.pathname + location.search.replace(/[?&]code=[^&]*/, ''));
+        }
+      } catch { return null; }
+      return result;
+    },
+
+    /**
+     * Who the current token belongs to.
+     *
+     * A session recovered from a URL fragment has no user object in it — the
+     * fragment carries tokens and nothing else — so it is fetched once and
+     * folded in, or every page would show somebody signed in as nobody.
+     */
+    async me() {
+      const tok = await token();
+      if (!tok) return null;
+      try {
+        const user = await request('/auth/v1/user', { token: tok });
+        if (user?.id) setSession({ ...session, expires_in: (session.expires_at - Date.now()) / 1000, user });
+        return user;
+      } catch (err) {
+        // A token the server will not accept is not a session. Anyone can put
+        // whatever they like in a URL fragment, and keeping it would leave the
+        // app looking signed in as nobody while every request it made failed.
+        // A network error is different and must not sign anybody out.
+        if (err?.status === 401 || err?.status === 403) { setSession(null); return null; }
+        return session?.user ?? null;
+      }
     },
     async signIn(email, password) {
       setSession(await request('/auth/v1/token?grant_type=password', {
