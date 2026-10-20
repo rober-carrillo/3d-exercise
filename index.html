@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Salpicón!</title>
+<!-- Spanish is what the markup says, so the page reads correctly before a
+     single module has loaded; src/i18n.js swaps it to English if that is
+     what this visitor has asked for. -->
 <meta name="description" content="Salpicón! — record a run, a ride or a walk and watch it played back across real terrain, at the pace you actually went.">
 <meta name="theme-color" content="#fcf1ee">
 <!-- The theme is set before the first paint. Left to the module below it would
@@ -17,20 +20,37 @@
   .wrap{padding-top:34px}
 
   /* the pitch: a short headline, then the thing itself, as big as it will go */
-  .pitch{margin:34px auto 0;max-width:60ch;text-align:center}
-  .pitch h2{margin:0;font-size:clamp(26px,3.8vw,38px);font-weight:680;letter-spacing:-.03em;line-height:1.14;text-wrap:balance}
-  .pitch p{margin:12px auto 0;font-size:14.5px;line-height:1.62;color:var(--ink-2);max-width:54ch}
+  .pitch{margin:34px auto 0;max-width:76ch;text-align:center}
+  .pitch h2{margin:0;font-size:clamp(26px,3.8vw,38px);font-weight:680;letter-spacing:-.03em;
+    line-height:1.14;text-wrap:balance}
+  /* one line once there is room for one — a phone is welcome to wrap it rather
+     than shrink it to something nobody can read */
+  @media (min-width:700px){ .pitch h2{white-space:nowrap} }
+  .pitch p{margin:12px auto 0;font-size:14.5px;line-height:1.62;color:var(--ink-2);max-width:68ch}
   .hero-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;justify-content:center}
-  .hero-note{font-size:12px;color:var(--ink-3);margin:12px 0 0}
+  .hero-note{color:var(--ink-3)}
 
   /* the stage: a real route, flying itself. Bigger than everything else on the
      page on purpose — it is the explanation. */
   
-  .stage{position:relative;margin-top:24px;height:min(62vh,580px);min-height:360px;
+  /* 4:3, centred, and about half the width it would take if it were allowed to
+     fill the page. Width is what drives the shape, so a phone gets something
+     that fits the screen rather than a letterbox slot; on a wide screen the
+     height ceiling pulls the width in, which is the only way to keep the ratio
+     and stay on the page at once. The floor keeps it usable on a phone, where
+     half of a narrow column would be a postage stamp. */
+  /* The height ceiling is what sets the size: the width follows from the 4:3,
+     and the percentage only steps in on a narrow screen, where the floor then
+     stops it becoming a postage stamp. A custom property so the caption
+     underneath lines up without the sum being written out twice. */
+  :root{--stage-w:max(300px, min(90%, calc(min(63vh,558px) * 4 / 3)))}
+  .stage{position:relative;margin:24px auto 0;aspect-ratio:4/3;
+    width:min(100%,var(--stage-w));
     border-radius:18px;overflow:hidden;border:1px solid var(--panel-brd);background:var(--panel);
     box-shadow:var(--shadow-lift)}
-  .stage-cap{margin:10px 2px 0;font-size:11.5px;color:var(--ink-3);display:flex;gap:10px;
-    justify-content:space-between;flex-wrap:wrap}
+  /* the caption lines up under the stage, not under the page */
+  .stage-cap{width:min(100%,var(--stage-w));margin:10px auto 0;font-size:11.5px;color:var(--ink-3);
+    display:flex;gap:4px 10px;justify-content:space-between;flex-wrap:wrap}
   .stage-cap a{color:var(--accent);text-decoration:none}
   .stage-cap a:hover{text-decoration:underline}
   .stage-art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px}
@@ -53,7 +73,6 @@
 
   @media (max-width:760px){
     .previews{grid-template-columns:1fr}
-    .stage{height:min(54vh,460px);min-height:300px}
   }
 
   /* dialogs, unchanged from the library page they came from */
@@ -120,71 +139,68 @@
   <header class="page-head">
     <div class="brand"><a href="./"><span id="brandmark"></span><h1>Salpicón!</h1></a></div>
     <div class="nav">
+      <button class="lang-btn" id="langbtn" type="button"></button>
       <button class="theme-btn" id="themebtn" type="button"></button>
-      <button class="add quiet" id="acctbtn" hidden>Sign in</button>
-      <a class="add quiet" href="./routes.html">Your routes</a>
-      <button class="rec-btn" id="recbtn"><i></i>Record</button>
+      <button class="add quiet" id="acctbtn" hidden data-i18n="nav.signin">Entrar</button>
+      <a class="add quiet" href="./routes.html" data-i18n="nav.yours">Tus rutas</a>
+      <button class="rec-btn" id="recbtn"><i></i><span data-i18n="nav.record">Grabar</span></button>
     </div>
   </header>
 
   <section class="pitch">
-    <h2>Your routes, as the ground actually is.</h2>
-    <p>Record a run, a ride or a walk — or bring one you already have — and watch it played back
-      across real terrain, at the pace you actually went. Keep it to yourself, or send somebody a
-      link that opens without an account.</p>
+    <h2 data-i18n="hero.title">Comparte y revive tus rutas</h2>
+    <p><span data-i18n="hero.lede">Graba una carrera, una salida en bici o una caminata — o trae una
+      que ya tengas — y mírala de nuevo sobre el terreno real, al ritmo que de verdad llevaste.
+      ¡Compártela con tus amigos y monta una salida el fin de semana!</span>
+      <span class="hero-note" id="hero-note"></span></p>
     <div class="hero-cta" id="hero-cta">
-      <button class="add" id="hero-up">Create an account</button>
-      <button class="add quiet" id="hero-in">I already have one</button>
+      <button class="add" id="hero-up" data-i18n="hero.signup">Crear una cuenta</button>
+      <button class="add quiet" id="hero-in" data-i18n="hero.havaccount">Ya tengo una</button>
     </div>
     <div class="hero-cta" id="hero-back" hidden>
-      <a class="add" href="./routes.html">Your routes</a>
-      <button class="rec-btn" id="hero-rec"><i></i>Record something new</button>
+      <a class="add" href="./routes.html" data-i18n="nav.yours">Tus rutas</a>
+      <button class="rec-btn" id="hero-rec"><i></i><span data-i18n="hero.recordnew">Grabar algo nuevo</span></button>
     </div>
-    <p class="hero-note" id="hero-note">You can look around without an account. Signing in is what keeps
-      your routes when this browser forgets them.</p>
+
   </section>
 
   <div class="stage" id="stage"></div>
   <div class="stage-cap">
-    <span id="stage-note">A real route, flying itself. Drag to look around.</span>
-    <a id="stage-open" href="./view.html">Open it full screen →</a>
+    <span id="stage-note" data-i18n="stage.hint">Una ruta real, volando sola. Arrastra para mirar alrededor.</span>
+    <a id="stage-open" href="./view.html" data-i18n="stage.open">Abrir a pantalla completa →</a>
   </div>
 
-  <h2 class="sect">Three to look at</h2>
+  <h2 class="sect" data-i18n="prev.heading">Tres para mirar</h2>
   <div class="previews" id="previews"></div>
-  <div class="more"><a class="add quiet" href="./library.html">See the public library of routes →</a></div>
+  <div class="more"><a class="add quiet" href="./library.html" data-i18n="prev.more">Ver la biblioteca pública de rutas →</a></div>
 
-  <footer>
-    Imagery © Esri and its contributors · Elevation from
-    <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) ·
-    Map fallback © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
-  </footer>
+  <footer data-i18n-html="foot.all"></footer>
 </div>
 
 <div id="acct">
   <div class="acct-card rv-panel">
-    <h2 id="acct-title">Sign in</h2>
-    <p class="acct-why">Routes kept in this browser disappear with it. An account keeps them, and lets you
-      hand one to somebody else with a link.</p>
+    <h2 id="acct-title" data-i18n="acct.title.in">Entrar</h2>
+    <p class="acct-why" data-i18n="acct.why">Las rutas guardadas en este navegador desaparecen con él. Una
+      cuenta las conserva, y te deja pasarle una a otra persona con un enlace.</p>
     <form id="acct-form" autocomplete="on">
-      <label for="acct-email">Email</label>
+      <label for="acct-email" data-i18n="acct.email">Correo</label>
       <input id="acct-email" name="email" type="email" required autocomplete="email" inputmode="email">
-      <label for="acct-pass">Password</label>
+      <label for="acct-pass" data-i18n="acct.pass">Contraseña</label>
       <input id="acct-pass" name="password" type="password" required autocomplete="current-password" minlength="6">
       <p class="acct-msg" id="acct-msg" role="status"></p>
       <div class="acct-btns">
-        <button type="submit" class="add" id="acct-go">Sign in</button>
-        <button type="button" class="add quiet" id="acct-swap">Create an account</button>
-        <button type="button" class="add quiet" id="acct-close">Not now</button>
+        <button type="submit" class="add" id="acct-go" data-i18n="acct.go.in">Entrar</button>
+        <button type="button" class="add quiet" id="acct-swap" data-i18n="acct.title.up">Crear una cuenta</button>
+        <button type="button" class="add quiet" id="acct-close" data-i18n="acct.notnow">Ahora no</button>
       </div>
     </form>
     <div id="acct-in" hidden>
-      <p class="acct-who">Signed in as <b id="acct-email-out"></b></p>
+      <p class="acct-who"><span data-i18n="acct.signedas">Has entrado como</span> <b id="acct-email-out"></b></p>
       <p class="acct-why" id="acct-sync"></p>
       <div class="acct-btns">
-        <button type="button" class="add quiet" id="acct-upload">Upload this browser's routes</button>
-        <button type="button" class="add quiet" id="acct-out">Sign out</button>
-        <button type="button" class="add quiet" id="acct-close2">Close</button>
+        <button type="button" class="add quiet" id="acct-upload" data-i18n="acct.upload">Subir las rutas de este navegador</button>
+        <button type="button" class="add quiet" id="acct-out" data-i18n="acct.signout">Salir</button>
+        <button type="button" class="add quiet" id="acct-close2" data-i18n="acct.close">Cerrar</button>
       </div>
     </div>
   </div>
@@ -194,28 +210,29 @@
   <div class="rec-card rv-panel">
     <div class="signal-box"><div id="recmark"></div></div>
     <div class="rec-live">
-      <span class="rec-state" id="recstate">recording</span>
-      <span class="rec-gps" id="recgps">waiting for GPS…</span>
+      <span class="rec-state" id="recstate" data-i18n="rec.recording">grabando</span>
+      <span class="rec-gps" id="recgps" data-i18n="rec.gps">esperando al GPS…</span>
     </div>
     <div class="rec-time" id="rectime">0:00</div>
     <div class="rec-grid">
-      <div><span class="rec-k">Distance</span><span class="rec-v" id="recdist">0.00<small>km</small></span></div>
-      <div><span class="rec-k">Pace</span><span class="rec-v" id="recpace">—</span></div>
-      <div><span class="rec-k">Points</span><span class="rec-v" id="recpts">0</span></div>
+      <div><span class="rec-k" data-i18n="rec.distance">Distancia</span><span class="rec-v" id="recdist">0.00<small>km</small></span></div>
+      <div><span class="rec-k" data-i18n="rec.pace">Ritmo</span><span class="rec-v" id="recpace">—</span></div>
+      <div><span class="rec-k" data-i18n="rec.points">Puntos</span><span class="rec-v" id="recpts">0</span></div>
     </div>
-    <p class="rec-warn" id="recwarn" hidden><b>Stored in your web browser until you make an account.</b>
-      Clear your browsing data, switch device or use a different browser and you could lose these routes.</p>
+    <p class="rec-warn" id="recwarn" hidden><b data-i18n="rec.warn.title">Guardado en tu navegador hasta que
+      crees una cuenta.</b> <span data-i18n="rec.warn.body">Si borras los datos de navegación, cambias de aparato
+      o usas otro navegador, podrías perder estas rutas.</span></p>
     <div class="rec-acts" id="recacts">
-      <button data-a="run" class="on">Run</button><button data-a="walk">Walk</button>
-      <button data-a="ride">Ride</button><button data-a="field">Field sport</button>
+      <button data-a="run" class="on" data-i18n="act.run">Carrera</button><button data-a="walk" data-i18n="act.walk">Caminata</button>
+      <button data-a="ride" data-i18n="act.ride">Bici</button><button data-a="field" data-i18n="act.field">Deporte de cancha</button>
     </div>
     <div class="rec-btns">
-      <button id="recpause">Pause</button>
-      <button id="recstop" class="pri">Finish</button>
-      <button id="reccancel">Discard</button>
+      <button id="recpause" data-i18n="rec.pause">Pausa</button>
+      <button id="recstop" class="pri" data-i18n="rec.finish">Terminar</button>
+      <button id="reccancel" data-i18n="rec.discard">Descartar</button>
     </div>
-    <p class="rec-note" id="recnote">Keep this screen open — position reporting stops when the app goes to
-      the background.</p>
+    <p class="rec-note" id="recnote" data-i18n="rec.note.screen">Mantén esta pantalla abierta — las posiciones
+      dejan de llegar cuando la app pasa a segundo plano.</p>
   </div>
 </div>
 
@@ -229,11 +246,16 @@ import { TrackRecorder } from './src/recorder.js';
 import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp } from './src/geo.js';
 import { markSVG, signalFor } from './src/mark.js';
 import { initTheme, themeToggle } from './src/theme.js';
+import { initLang, langToggle, t } from './src/i18n.js';
 import { startAmbient } from './src/ambient.js';
 
 initTheme();
+initLang();
 themeToggle(document.getElementById('themebtn'));
+langToggle(document.getElementById('langbtn'));
 startAmbient();
+// The static text repaints itself; everything built by script has to be told.
+addEventListener('salpicon:lang', () => { paintStageNote(); paintPreviews(); paintAccount(account.user()); });
 
 /* ---------- the mark, walking ----------
  * The logo is the app's own stoplight figure, and standing still it is just a
@@ -251,7 +273,7 @@ if (stillMark) {
     const i = step % LOOP;
     // the last three frames hold the full glass, so the reward is legible
     const juice = i >= LOOP - 3 ? 1 : i / (LOOP - 3);
-    brandmark.innerHTML = markSVG({ pose: i % 2 ? 'pass' : 'run', juice });
+    brandmark.innerHTML = markSVG({ pose: i % 2 ? 'pass' : 'run', juice, unlit: false });
     step++;
   };
   paintMark();
@@ -294,19 +316,25 @@ const webglOK = (() => {
 // imagery to read a landing page, and the browser will tell us if they said so.
 const saveData = !!navigator.connection?.saveData;
 
+/** The line under the stage: which route this is, or why it is only a drawing. */
+function paintStageNote() {
+  const note = document.getElementById('stage-note');
+  if (!stageRoute) return;
+  note.removeAttribute('data-i18n');
+  note.textContent = !webglOK ? t('stage.nowebgl', { name: stageRoute.name })
+    : saveData ? t('stage.savedata', { name: stageRoute.name })
+    : `${stageRoute.name} · ${fmtKm(stageRoute.stats.distance_m)} km · ↑ ${Math.round(stageRoute.stats.gain_m)} m`;
+}
+
 if (stageRoute) {
   document.getElementById('stage-open').href = `./view.html?route=${encodeURIComponent(stageRoute.slug)}`;
-  document.getElementById('stage-note').textContent =
-    `${stageRoute.name} · ${fmtKm(stageRoute.stats.distance_m)} km · ↑ ${Math.round(stageRoute.stats.gain_m)} m`;
+  paintStageNote();
 }
 
 if (!stageRoute) {
-  stage.innerHTML = `<div class="stage-art"><p class="rec-note">No routes are published yet.</p></div>`;
+  stage.innerHTML = `<div class="stage-art"><p class="rec-note">${t('stage.none')}</p></div>`;
 } else if (!webglOK || saveData) {
   stage.innerHTML = shapeArt(stageRoute);
-  document.getElementById('stage-note').textContent = !webglOK
-    ? `${stageRoute.name} — this browser has no WebGL, so the 3D replay cannot run here.`
-    : `${stageRoute.name} — the 3D replay is held back while your connection is set to save data.`;
 } else {
   // Mounted when it is actually on screen: on a phone in portrait the stage can
   // start below the fold, and loading terrain nobody has looked at yet is the
@@ -321,6 +349,11 @@ if (!stageRoute) {
         date: stageRoute.date,
         showcase: true,
         loop: true,
+        // A route page picks its own length, five to forty-five seconds, so a
+        // flight is over about when you want it to be. This one is not a
+        // flight anybody asked for — it is the page's own scenery, running
+        // while somebody reads — so it takes its time.
+        flyDuration: 120,
         satMaxTiles: 6,
       });
     } catch (err) {
@@ -351,19 +384,22 @@ while (picks.length < 3) {
   if (!next) break;
   picks.push(next);
 }
-const ACT = { walk: 'Walk', run: 'Run', ride: 'Ride', field: 'Field sport' };
-document.getElementById('previews').innerHTML = picks.map(r => {
-  const d = r.shape.map(([x, y], i) => `${i ? 'L' : 'M'}${(x * 100).toFixed(2)} ${(y * 100).toFixed(2)}`).join('');
-  return `<a class="pv" href="./view.html?route=${encodeURIComponent(r.slug)}">
-    <svg class="pv-art" viewBox="-8 -8 116 116" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
-      <path d="${d}" fill="none" stroke="var(--route)" stroke-width="3"
-        stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="${(r.shape[0][0] * 100).toFixed(2)}" cy="${(r.shape[0][1] * 100).toFixed(2)}" r="4" fill="var(--juice)"/>
-    </svg>
-    <span class="pv-txt"><b>${esc(r.name)}</b>
-      <small>${ACT[r.activity] || 'Route'} · ${fmtKm(r.stats.distance_m)} km · ↑ ${Math.round(r.stats.gain_m)} m</small></span>
-  </a>`;
-}).join('');
+function paintPreviews() {
+  document.getElementById('previews').innerHTML = picks.map(r => {
+    const d = r.shape.map(([x, y], i) => `${i ? 'L' : 'M'}${(x * 100).toFixed(2)} ${(y * 100).toFixed(2)}`).join('');
+    const act = r.activity ? t('act.' + r.activity) : t('act.route');
+    return `<a class="pv" href="./view.html?route=${encodeURIComponent(r.slug)}">
+      <svg class="pv-art" viewBox="-8 -8 116 116" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+        <path d="${d}" fill="none" stroke="var(--route)" stroke-width="3"
+          stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${(r.shape[0][0] * 100).toFixed(2)}" cy="${(r.shape[0][1] * 100).toFixed(2)}" r="4" fill="var(--juice)"/>
+      </svg>
+      <span class="pv-txt"><b>${esc(r.name)}</b>
+        <small>${act} · ${fmtKm(r.stats.distance_m)} km · ↑ ${Math.round(r.stats.gain_m)} m</small></span>
+    </a>`;
+  }).join('');
+}
+paintPreviews();
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c =>
@@ -425,7 +461,7 @@ function paint() {
   document.getElementById('recpace').innerHTML = paceText(s.pace_s_per_km);
   document.getElementById('recpts').textContent = s.points;
   const st = document.getElementById('recstate');
-  st.textContent = rec.state === 'paused' ? 'paused' : 'recording';
+  st.textContent = rec.state === 'paused' ? t('rec.paused') : t('rec.recording');
   signal.state = rec.state === 'stopped' ? 'arrived'
     : rec.state === 'paused' ? 'paused'
     : rec.points.length === 0 ? 'gps' : 'recording';
@@ -455,18 +491,18 @@ function startRecording(replaySlug) {
   const onFix = fix => {
     const why = rec.addFix(fix);
     gps.textContent = fix.accuracy > 35
-      ? `weak signal · ±${Math.round(fix.accuracy)} m`
-      : `±${Math.round(fix.accuracy)} m` + (why === 'still' ? ' · holding still' : '');
+      ? t('rec.weak', { m: Math.round(fix.accuracy) })
+      : `±${Math.round(fix.accuracy)} m` + (why === 'still' ? t('rec.still') : '');
     gps.style.color = fix.accuracy > 35 ? 'var(--warm)' : 'var(--ink-3)';
   };
   const onError = err => {
     const denied = err?.code === 1 || err?.code === 'NOT_AUTHORIZED';
-    gps.textContent = denied ? 'location permission denied' : (err?.message || 'no position');
+    gps.textContent = denied ? t('rec.denied') : (err?.message || t('rec.nopos'));
     gps.style.color = 'var(--hot)';
     // on Android the permission lives a few screens into Settings, so offer the
     // way back rather than leaving a dead end
     if (denied && source?.openSettings) {
-      note.textContent = 'Salpicón! needs location permission to record. Tap Discard, allow it in Settings, and start again.';
+      note.textContent = t('rec.denied.help');
       source.openSettings();
     }
   };
@@ -484,7 +520,7 @@ function startRecording(replaySlug) {
       source.start();
     }).catch(e => onError(e));
   } else if (!nativeGeoAvailable() && !geoAvailable()) {
-    onError(new Error('This device cannot report its position'));
+    onError(new Error(t('rec.nogps')));
   } else {
     source = pickGeo({
       onFix, onError,
@@ -505,31 +541,26 @@ function startRecording(replaySlug) {
   // in a browser it stops the moment you look away, and pretending otherwise
   // is how someone loses an hour's run.
   if (nativeGeoAvailable()) {
-    note.textContent = 'Recording in the background. You can lock the screen and put the phone away.';
+    note.textContent = t('rec.note.bg');
     notificationState().then(state => {
       if (state !== 'blocked') {
-        note.textContent = 'Recording in the background. Lock the screen and put the phone away — '
-          + 'distance and time keep updating in your notification shade.';
+        note.textContent = t('rec.note.bgshade');
         return;
       }
       // Android will not ask a second time once a prompt has been refused, so
       // offer the only route left rather than describing the problem.
-      note.innerHTML = 'Recording works, but notifications are off for this app, so nothing will show '
-        + 'in your shade while the screen is locked. <button type="button" id="recfix" '
+      note.innerHTML = t('rec.note.blocked') + ' <button type="button" id="recfix" '
         + 'style="font:inherit;color:var(--accent);background:none;border:0;padding:0;'
-        + 'text-decoration:underline;cursor:pointer">Turn them on</button>';
+        + `text-decoration:underline;cursor:pointer">${t('rec.note.turnon')}</button>`;
       document.getElementById('recfix')?.addEventListener('click', () => source?.openSettings?.());
     });
   } else {
     awake = keepAwake({
       onChange: ok => {
-        note.textContent = ok
-          ? 'Keeping the screen on while recording. Leaving the app stops the fixes, so stay on this screen.'
-          : 'This device would not keep the screen on. If it sleeps, recording stops — check back now and then.';
+        note.textContent = ok ? t('rec.note.awake') : t('rec.note.nowake');
       },
     });
-    if (!awake.held()) note.textContent =
-      'If the screen sleeps or you leave the app, recording stops. Install the Android app to record with the screen off.';
+    if (!awake.held()) note.textContent = t('rec.note.willstop');
   }
 
   ticker = setInterval(paint, 500);
@@ -561,22 +592,21 @@ function countdown(seconds = 3) {
     const card = recEl.querySelector('.rec-card');
     const over = document.createElement('div');
     over.className = 'rec-count';
-    over.innerHTML = '<div class="rec-n">3</div><div class="rec-acc">finding satellites…</div>';
+    over.innerHTML = `<div class="rec-n">3</div><div class="rec-acc">${t('rec.count.sats')}</div>`;
     if (!account.user()) {
       over.insertAdjacentHTML('beforeend',
-        '<div class="rec-acc" style="max-width:30ch">This route will be stored in your web browser '
-        + 'until you make an account.</div>');
+        `<div class="rec-acc" style="max-width:30ch">${t('rec.count.warn')}</div>`);
     }
     card.appendChild(over);
     recEl.classList.add('on');
     let left = seconds;
     const n = over.querySelector('.rec-n'), acc = over.querySelector('.rec-acc');
     const show = () => {
-      n.textContent = left > 0 ? String(left) : 'Go';
+      n.textContent = left > 0 ? String(left) : t('rec.go');
       const a = warm.last;
-      acc.textContent = a == null ? 'finding satellites…'
-        : a <= 10 ? `GPS ready · ±${Math.round(a)} m`
-        : `still settling · ±${Math.round(a)} m`;
+      acc.textContent = a == null ? t('rec.count.sats')
+        : a <= 10 ? t('rec.count.ready', { m: Math.round(a) })
+        : t('rec.count.settling', { m: Math.round(a) });
     };
     show();
     const iv = setInterval(() => {
@@ -598,7 +628,7 @@ function countdown(seconds = 3) {
 async function pressRecord() {
   const signedOut = !account.user();
   document.getElementById('recwarn').hidden = !signedOut;
-  if (signedOut) toast('Stored in your web browser until you make an account — you could lose these routes.');
+  if (signedOut) toast(t('rec.warn.toast'));
   const replay = new URLSearchParams(location.search).get('replay');
   if (!replay) await countdown(3);
   startRecording(replay);
@@ -615,8 +645,8 @@ document.getElementById('recacts').addEventListener('click', e => {
 });
 document.getElementById('recpause').addEventListener('click', () => {
   if (!rec) return;
-  if (rec.state === 'paused') { rec.resume(); document.getElementById('recpause').textContent = 'Pause'; }
-  else { rec.pause(); document.getElementById('recpause').textContent = 'Resume'; }
+  if (rec.state === 'paused') { rec.resume(); document.getElementById('recpause').textContent = t('rec.pause'); }
+  else { rec.pause(); document.getElementById('recpause').textContent = t('rec.resume'); }
   paint();
 });
 // Discard asks twice rather than opening a dialog: confirm() does nothing in
@@ -625,12 +655,12 @@ let armed = false;
 document.getElementById('reccancel').addEventListener('click', e => {
   if (rec && rec.points.length > 2 && !armed) {
     armed = true;
-    e.target.textContent = 'Tap to confirm';
-    setTimeout(() => { armed = false; e.target.textContent = 'Discard'; }, 4000);
+    e.target.textContent = t('rec.discard.confirm');
+    setTimeout(() => { armed = false; e.target.textContent = t('rec.discard'); }, 4000);
     return;
   }
   armed = false;
-  document.getElementById('reccancel').textContent = 'Discard';
+  document.getElementById('reccancel').textContent = t('rec.discard');
   closeRecorder();
 });
 document.getElementById('recstop').addEventListener('click', async () => {
@@ -638,7 +668,7 @@ document.getElementById('recstop').addEventListener('click', async () => {
   const finished = rec.stop();
   source?.stop();
   if (!finished || finished.points.length < 2) {
-    toast('Nothing recorded — no usable position fixes.');
+    toast(t('rec.nothing'));
     closeRecorder();
     return;
   }
@@ -662,12 +692,12 @@ document.getElementById('recstop').addEventListener('click', async () => {
       // entry in the list pretending to be a different route
       removeLocalRoute(entry.slug);
       href = `./view.html?cloud=${encodeURIComponent(saved.id)}`;
-      toast(`Saved to your account — ${fmtKm(track.stats.distance_m)} km`);
+      toast(t('rec.saved.cloud', { km: fmtKm(track.stats.distance_m) }));
     } catch {
-      toast('Saved on this device. It will upload when you are back online.');
+      toast(t('rec.saved.offline'));
     }
   } else {
-    toast(`Saved ${name} — ${fmtKm(track.stats.distance_m)} km`);
+    toast(t('rec.saved.local', { name, km: fmtKm(track.stats.distance_m) }));
   }
   setTimeout(() => { closeRecorder(); location.href = href; }, 1100);
 });
@@ -692,34 +722,38 @@ function paintAccount(user) {
   // into your own routes rather than an invitation to sign up again.
   document.getElementById('hero-cta').hidden = !!user || !account.enabled();
   document.getElementById('hero-back').hidden = !user;
-  document.getElementById('hero-note').textContent = user
-    ? 'Your routes are kept in your account, so they survive this browser.'
-    : 'You can look around without an account. Signing in is what keeps your routes when this browser forgets them.';
+  document.getElementById('hero-note').textContent = t(user ? 'hero.note.in' : 'hero.note.out');
   const btn = document.getElementById('acctbtn');
   btn.hidden = !account.enabled();
-  btn.textContent = user ? (user.email?.split('@')[0] ?? 'Account') : 'Sign in';
+  btn.removeAttribute('data-i18n');
+  btn.textContent = user ? (user.email?.split('@')[0] ?? t('nav.account')) : t('nav.signin');
   document.getElementById('acct-form').hidden = !!user;
   document.getElementById('acct-in').hidden = !user;
-  document.getElementById('acct-title').textContent = user ? 'Your account'
-    : mode === 'in' ? 'Sign in' : 'Create an account';
+  document.getElementById('acct-title').textContent =
+    t(user ? 'acct.title.me' : mode === 'in' ? 'acct.title.in' : 'acct.title.up');
   document.getElementById('recwarn').hidden = !!user;
   if (user) {
     document.getElementById('acct-email-out').textContent = user.email ?? '';
     const local = listLocalRoutes().length;
-    document.getElementById('acct-sync').textContent = local
-      ? `${local} route${local > 1 ? 's' : ''} in this browser ${local > 1 ? 'are' : 'is'} not in your account yet.`
-      : 'Nothing in this browser is waiting to be uploaded.';
+    document.getElementById('acct-sync').textContent = !local ? t('acct.pending.none')
+      : local === 1 ? t('acct.pending.one') : t('acct.pending.many', { n: local });
   }
 }
 
 function setMode(next) {
   mode = next;
-  document.getElementById('acct-go').textContent = mode === 'in' ? 'Sign in' : 'Create account';
-  document.getElementById('acct-swap').textContent = mode === 'in' ? 'Create an account' : 'I already have one';
+  // These four carry data-i18n for their first paint and are driven by hand
+  // after that, since what they say depends on which way the form is pointing.
+  for (const id of ['acct-go', 'acct-swap', 'acct-title']) {
+    document.getElementById(id).removeAttribute('data-i18n');
+  }
+  document.getElementById('acct-go').textContent = t(mode === 'in' ? 'acct.go.in' : 'acct.go.up');
+  document.getElementById('acct-swap').textContent = t(mode === 'in' ? 'acct.title.up' : 'hero.havaccount');
   document.getElementById('acct-pass').autocomplete = mode === 'in' ? 'current-password' : 'new-password';
-  document.getElementById('acct-title').textContent = mode === 'in' ? 'Sign in' : 'Create an account';
+  document.getElementById('acct-title').textContent = t(mode === 'in' ? 'acct.title.in' : 'acct.title.up');
   say('');
 }
+addEventListener('salpicon:lang', () => setMode(mode));
 
 for (const [id, want] of [['hero-up', 'up'], ['hero-in', 'in']]) {
   document.getElementById(id)?.addEventListener('click', () => {
@@ -745,19 +779,19 @@ document.getElementById('acct-form').addEventListener('submit', async e => {
   const email = document.getElementById('acct-email').value;
   const password = document.getElementById('acct-pass').value;
   go.disabled = true;
-  say(mode === 'in' ? 'Signing in…' : 'Creating your account…');
+  say(t(mode === 'in' ? 'acct.working.in' : 'acct.working.up'));
   try {
     if (mode === 'in') {
       await account.signIn(email, password);
       say('');
       acctEl.classList.remove('on');
-      toast('Signed in.');
+      toast(t('acct.done.in'));
     } else {
       const { needsConfirmation } = await account.signUp(email, password);
       // the two outcomes look nothing alike to the person in front of the
       // screen, so they are never reported the same way
-      if (needsConfirmation) say('Account created. Check your email for a confirmation link, then sign in.', true);
-      else { acctEl.classList.remove('on'); toast('Account created — you are signed in.'); }
+      if (needsConfirmation) say(t('acct.confirm'), true);
+      else { acctEl.classList.remove('on'); toast(t('acct.done.up')); }
     }
   } catch (err) {
     say(account.explain(err));
@@ -767,18 +801,18 @@ document.getElementById('acct-form').addEventListener('submit', async e => {
 document.getElementById('acct-out').addEventListener('click', async () => {
   await account.signOut();
   acctEl.classList.remove('on');
-  toast('Signed out. Routes in this browser are still here.');
+  toast(t('acct.signedout'));
 });
 
 document.getElementById('acct-upload').addEventListener('click', async e => {
   const local = listLocalRoutes();
-  if (!local.length) return say('Nothing to upload.', true);
+  if (!local.length) return say(t('acct.nothing'), true);
   e.target.disabled = true;
   try {
     const { done, failed } = await account.uploadLocal(local,
-      (i, n) => say(`Uploading ${i} of ${n}…`, true));
-    say(failed.length ? `${done.length} uploaded, ${failed.length} failed.`
-                      : `${done.length} uploaded. Local copies are kept.`, !failed.length);
+      (i, n) => say(t('acct.uploading', { i, n }), true));
+    say(failed.length ? t('acct.uploadfail', { done: done.length, failed: failed.length })
+                      : t('acct.uploaded', { n: done.length }), !failed.length);
   } catch (err) { say(account.explain(err)); }
   finally { e.target.disabled = false; }
 });

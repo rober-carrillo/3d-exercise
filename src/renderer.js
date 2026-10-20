@@ -90,7 +90,11 @@ export class Renderer {
     const gl2 = !!(window.WebGL2RenderingContext && gl instanceof WebGL2RenderingContext);
     this.caps = { gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint') };
 
-    this.state = { vex: 1, texture: true, curtain: true, chase: false, bike: false };
+    // Fog is off. It was there to melt the far edge of the mesh into the sky,
+    // and what it mostly did was drain the colour out of everything past the
+    // middle distance — the satellite imagery people came to look at, greyed
+    // out in the name of a horizon that is only ever a few kilometres away.
+    this.state = { vex: 1, texture: true, curtain: true, chase: false, bike: false, fog: false };
     this.cam = { az: -2.24, pol: 0.97, dist: 1, tx: 0, ty: 0, tz: 0 };
     this.home = { az: -2.24, pol: 0.97, distScale: 1.45, bearing: 0, lift: 0.09 };
     this.chase = { dist: 0, pol: 1.10, azOffset: 0, height: 0 };
@@ -633,8 +637,12 @@ void main(){vec4 c=vCol;
       perspective(this._P, 45 * D2R, W / H, this.g.ext / 500, this.g.ext * 16);
       lookAt(this._V, eye, tgt, [0, 0, 1]);
       mul(this._MVP, this._P, this._V);
-      // haze follows the camera distance, so zooming out never dims the scene
-      const fogN = this.cam.dist * 0.95, fogF = this.cam.dist * 3.0;
+      // Haze would follow the camera distance, so that zooming out never dims
+      // the scene. With it off, both edges go beyond anything the depth buffer
+      // will hold, so smoothstep returns 0 everywhere and the shaders need no
+      // branch of their own.
+      const fogN = this.state.fog ? this.cam.dist * 0.95 : 1e9;
+      const fogF = this.state.fog ? this.cam.dist * 3.0 : 1e9 + 1;
       const useTex = this.hasTexture && this.state.texture ? 1 : 0;
       const B = this._buffers, pT = this.pTer, pC = this.pCol;
 

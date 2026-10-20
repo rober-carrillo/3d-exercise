@@ -59,7 +59,11 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
    viewer positions is fixed to the viewport, so `inline` re-anchors the lot to
    the container; `showcase` then takes away the controls, leaving the route
    itself — which is all the landing page is trying to show. */
-.rv-root.rv-inline{position:relative;inset:auto;width:100%;height:100%;border-radius:inherit}
+/* An inline viewer takes its size from whatever it was mounted into, and must
+   not state one of its own: `width:100%` here outranks the host's own class
+   and silently stretched the landing page's stage back to full width however
+   the stage was sized. */
+.rv-root.rv-inline{position:relative;inset:auto;border-radius:inherit}
 .rv-inline .rv-gl,.rv-inline .rv-load{position:absolute}
 .rv-inline .rv-title,.rv-inline .rv-ctrl,.rv-inline .rv-profile,
 .rv-inline .rv-legend,.rv-inline .rv-status,.rv-inline .rv-fabs,.rv-inline .rv-hint{position:absolute}
@@ -223,6 +227,15 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
   padding:9px 15px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;gap:7px}
 .rec-btn:hover{background:var(--route-2)}
 .rec-btn i{width:9px;height:9px;border-radius:50%;background:var(--on-accent);display:block}
+
+/* the language switch, left of the theme one. It names the language you would
+   get by pressing it, not the one you are reading, which is the same rule the
+   theme button follows. */
+.lang-btn{flex:0 0 auto;height:36px;min-width:38px;padding:0 9px;border-radius:10px;cursor:pointer;
+  font:inherit;font-size:11.5px;font-weight:620;letter-spacing:.06em;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--ink-2);background:var(--panel);border:1px solid var(--line-2);transition:color .15s,background .15s}
+.lang-btn:hover{color:var(--accent);background:var(--bg-hi)}
 
 /* the theme switch: it shows what it will do, not what is on — a moon to go
    dark, a sun to come back */

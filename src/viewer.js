@@ -10,6 +10,7 @@
 
 import { loadTrack, parseGPX, analyze, formatDate } from './gpx.js';
 import { Renderer } from './renderer.js';
+import { t, lang, applyI18n } from './i18n.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp, setEsriToken,
 } from './terrain.js';
@@ -52,7 +53,7 @@ const TEMPLATE = `
 <canvas class="rv-gl"></canvas>
 
 <div class="rv-panel rv-title" data-open="1">
-  <a class="rv-back" hidden>← All routes</a>
+  <a class="rv-back" hidden data-i18n="nav.back">← Volver</a>
   <button class="rv-titlebtn" aria-expanded="true">
     <h1 class="rv-name">—</h1><span class="rv-caret">▾</span>
   </button>
@@ -86,7 +87,7 @@ const TEMPLATE = `
     <button class="rv-reset">Reset</button>
   </div>
   <div class="rv-sharerow" hidden>
-    <button type="button" class="rv-share">Copy link to this route</button>
+    <button type="button" class="rv-share" data-i18n="share.viewer">Copiar enlace a esta ruta</button>
   </div>
 </div>
 
@@ -141,6 +142,7 @@ export class RouteViewer {
     this.mount.classList.toggle('rv-inline', !!this.opts.inline);
     this.mount.classList.toggle('rv-showcase', !!this.opts.showcase);
     this.mount.innerHTML = TEMPLATE;
+    applyI18n(this.mount);        // the chrome arrives after the page was painted
     this.mount.querySelector('.rv-ttl').textContent = `Building 3D terrain · v${VERSION}`;
     console.info(`Salpicón! v${VERSION}`);
     this.$ = sel => this.mount.querySelector('.rv-' + sel);
@@ -193,10 +195,23 @@ export class RouteViewer {
     this.$('name').textContent = o.name || track.name;
     // the track's own timestamp if it has one, otherwise whatever date the
     // caller knows the route by (the manifest carries the day it was added)
-    const stamp = track.time ? formatDate(track.time)
-      : o.date ? `added ${formatDate(o.date)}` : '';
-    this.$('sub').textContent =
-      `${stamp ? stamp + ' · ' : ''}${s.points.toLocaleString()} GPS points · ${((track.bbox.minLat + track.bbox.maxLat) / 2).toFixed(3)}°, ${((track.bbox.minLon + track.bbox.maxLon) / 2).toFixed(3)}°`;
+    // The line under the route name. It is the one piece of viewer chrome
+    // assembled from a date and a count rather than from a key, so applyI18n
+    // cannot put it right on its own and it repaints itself instead.
+    //
+    // A showcase gets the date and nothing else: the sample count and the
+    // centre coordinate are worth having on a route you opened on purpose, and
+    // are pure noise on a panel somebody is seeing for the first time with no
+    // idea yet what any of it is.
+    const paintSub = () => {
+      const loc = lang() === 'es' ? 'es-ES' : 'en-US';
+      const stamp = track.time ? formatDate(track.time, loc)
+        : o.date ? `${t('row.added')} ${formatDate(o.date, loc)}` : '';
+      this.$('sub').textContent = o.showcase ? stamp
+        : `${stamp ? stamp + ' · ' : ''}${s.points.toLocaleString(loc)} GPS points · ${((track.bbox.minLat + track.bbox.maxLat) / 2).toFixed(3)}°, ${((track.bbox.minLon + track.bbox.maxLon) / 2).toFixed(3)}°`;
+    };
+    paintSub();
+    window.addEventListener('salpicon:lang', () => { paintSub(); applyI18n(this.mount); });
     this.$('s-dist').innerHTML = (s.distance_m / 1000).toFixed(2) + '<small>km</small>';
     this.$('s-gain').innerHTML = fmt(s.gain_m) + '<small>m</small>';
     this.$('s-loss').innerHTML = fmt(s.loss_m) + '<small>m</small>';
@@ -370,7 +385,11 @@ export class RouteViewer {
       titleBtn.setAttribute('aria-expanded', String(open));
     };
     titleBtn.addEventListener('click', () => setTitle(title.dataset.open !== '1'));
-    setTitle(!this.narrow());
+    // A showcase starts folded to the route's name. The four statistics are
+    // worth reading on a route you went looking for, and on a landing page
+    // they are a panel covering the thing the panel is describing — which is
+    // the terrain, which is the entire argument. One tap still opens them.
+    setTitle(!this.narrow() && !this.opts.showcase);
 
     const panel = this.mount.querySelector('.rv-ctrl');
     const setBtn = this.$('fab-set');
@@ -413,7 +432,7 @@ export class RouteViewer {
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       const label = btn.textContent;
-      btn.textContent = 'Copying…';
+      btn.textContent = t('share.copying');
       let res;
       try { res = await this.opts.onShare(); }
       catch (err) { res = { ok: false, why: err?.message || 'Could not copy that link.' }; }

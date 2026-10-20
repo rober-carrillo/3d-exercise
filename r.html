@@ -9,8 +9,8 @@
      its loading message for ever. Anchoring to the root fixes all of them at
      once, and costs nothing anywhere else since the app is served from one. -->
 <base href="/">
-<title>A shared route · Salpicón!</title>
-<meta name="description" content="Somebody shared a route with you.">
+<title>Una ruta compartida · Salpicón!</title>
+<meta name="description" content="Alguien ha compartido una ruta contigo.">
 <meta name="theme-color" content="#fcf1ee">
 <script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml">
@@ -28,8 +28,8 @@
 <body>
 <div class="msg" id="msg">
   <div class="card rv-panel">
-    <h1>Opening a shared route…</h1>
-    <p>Fetching it from the link you followed.</p>
+    <h1 data-i18n="r.loading">Abriendo una ruta compartida…</h1>
+    <p data-i18n="r.loading.why">Buscándola a partir del enlace que has seguido.</p>
   </div>
 </div>
 
@@ -38,8 +38,10 @@ import { RouteViewer } from './src/viewer.js';
 import { createClient } from './src/supabase.js';
 import { createCloud } from './src/cloud.js';
 import { initTheme } from './src/theme.js';
+import { initLang, t } from './src/i18n.js';
 
 initTheme();
+initLang();
 
 /**
  * A route somebody shared.
@@ -64,14 +66,13 @@ const fromPath = location.pathname.match(/\/r\/([0-9a-f-]{36})/i);
 const token = params.get('t') || (fromPath ? fromPath[1] : null);
 
 if (!token) {
-  card('That link is incomplete', 'It is missing the part that identifies the route. Ask for the link again.', 'Open Salpicón!');
+  card(t('r.incomplete'), t('r.incomplete.why'), t('r.open'));
 } else {
   let config = null;
   try { config = await fetch('./config.json').then(r => (r.ok ? r.json() : null)); } catch {}
 
   if (!config?.supabaseUrl || !config?.supabaseKey) {
-    card('Shared routes are not set up here',
-      'This copy of the app has no database behind it, so it cannot open a shared link.', 'Open Salpicón!');
+    card(t('r.nodb'), t('r.nodb.why'), t('r.open'));
   } else {
     try {
       const cloud = createCloud(createClient(config.supabaseUrl, config.supabaseKey));
@@ -80,9 +81,7 @@ if (!token) {
         // One message for both cases on purpose: saying "that route exists but
         // is private" would confirm the existence of something to anybody who
         // guessed, and a withdrawn link should look the same as a wrong one.
-        card('That link does not open anything',
-          'It may have been withdrawn by the person who shared it, or the address may be wrong.',
-          'Open Salpicón!');
+        card(t('r.nothing'), t('r.nothing.why'), t('r.open'));
       } else {
         document.title = `${shared.name} · Salpicón!`;
         document.getElementById('msg').remove();
@@ -96,11 +95,9 @@ if (!token) {
         });
       }
     } catch (err) {
-      card('Could not open that route',
-        /failed to fetch|networkerror/i.test(String(err?.message))
-          ? 'No connection to the server. Try again when you are back online.'
-          : 'Something went wrong fetching it. Try the link again in a moment.',
-        'Open Salpicón!');
+      card(t('r.failed'),
+        t(/failed to fetch|networkerror/i.test(String(err?.message)) ? 'r.failed.offline' : 'r.failed.why'),
+        t('r.open'));
     }
   }
 }

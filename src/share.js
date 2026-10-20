@@ -13,6 +13,8 @@
  * quietly fails somewhere else.
  */
 
+import { t } from './i18n.js';
+
 /** Is there a link to be had at all? */
 export const canLink = r => !!(r?.cloud || (r && !r.cloud && !r.local));
 
@@ -67,17 +69,13 @@ export async function copyText(text) {
  * @returns {Promise<{ok:boolean, url:string|null, opened:boolean, why:string}>}
  */
 export async function shareRoute(r, { cloud = null } = {}) {
-  if (!r) return { ok: false, url: null, opened: false, why: 'That route is gone.' };
-  if (r.local) {
-    return { ok: false, url: null, opened: false,
-      why: 'This route is only in this browser, so there is no link to it yet. Sign in and upload it first.' };
-  }
+  if (!r) return { ok: false, url: null, opened: false, why: t('share.gone') };
+  if (r.local) return { ok: false, url: null, opened: false, why: t('share.local') };
 
   let url = routeLink(r), opened = false;
   if (!url && r.cloud) {
     if (!cloud) {
-      return { ok: false, url: null, opened: false,
-        why: 'This route is private. Open it up first and the link will work.' };
+      return { ok: false, url: null, opened: false, why: t('share.private') };
     }
     try {
       const updated = await cloud.setVisibility(r.id, 'link');
@@ -86,16 +84,14 @@ export async function shareRoute(r, { cloud = null } = {}) {
       opened = true;
     } catch (err) {
       return { ok: false, url: null, opened: false,
-        why: `Could not make that route shareable: ${err?.message || err}` };
+        why: t('share.failed', { why: err?.message || err }) };
     }
   }
-  if (!url) return { ok: false, url: null, opened: false, why: 'No link could be made for that route.' };
+  if (!url) return { ok: false, url: null, opened: false, why: t('share.nolink') };
 
   const ok = await copyText(url);
   return {
     ok, url, opened,
-    why: !ok ? `Copying was blocked. The link is ${url}`
-      : opened ? 'Link copied. Anyone with it can now open this route.'
-      : 'Link copied.',
+    why: !ok ? t('share.blocked', { url }) : t(opened ? 'share.opened' : 'share.copied'),
   };
 }

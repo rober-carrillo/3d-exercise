@@ -21,14 +21,25 @@ const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-/** Read a colour token once, so the figures sit in whichever theme is on. */
-function ink(el) {
+/**
+ * Read the colour tokens once, so the figures sit in whichever theme is on.
+ *
+ * Four of them rather than one: a crowd in a single grey reads as a smudge,
+ * and these were too faint against the pale ground to be seen at all. Each
+ * figure keeps one for its life, which is what makes it look like several
+ * people out rather than one sprite drawn five times.
+ */
+function ink() {
   const cs = getComputedStyle(document.documentElement);
   const grab = (name, fallback) => cs.getPropertyValue(name).trim() || fallback;
   return {
-    body: grab('--ink-3', '#7d8a83'),
-    step: grab('--ink-3', '#7d8a83'),
-    bike: grab('--accent', '#138a4a'),
+    palette: [
+      grab('--accent', '#138a4a'),
+      grab('--tag-brown', '#7a2e6b'),
+      grab('--ink-2', '#4b5a52'),
+      grab('--juice', '#e4233f'),
+    ],
+    step: grab('--ink-2', '#4b5a52'),
   };
 }
 
@@ -38,9 +49,9 @@ function ink(el) {
  * Headings drift slowly rather than holding a perfect line, which is the
  * difference between somebody out for a walk and a sprite on a rail.
  */
-function spawn(w, h, { edge = true } = {}) {
-  const kind = Math.random() < 0.22 ? 'ride' : 'walk';
-  const scale = kind === 'ride' ? rand(0.9, 1.25) : rand(0.75, 1.15);
+function spawn(w, h, { edge = true, palette = ['#138a4a'] } = {}) {
+  const kind = Math.random() < 0.28 ? 'ride' : 'walk';
+  const scale = kind === 'ride' ? rand(1.5, 2.0) : rand(1.3, 1.85);
   let x, y, dir;
   if (edge) {
     // come in from off-screen, aimed roughly across the page
@@ -55,9 +66,14 @@ function spawn(w, h, { edge = true } = {}) {
   }
   return {
     kind, scale, x, y, dir,
-    speed: kind === 'ride' ? rand(52, 78) : rand(15, 27),   // px per second
+    speed: kind === 'ride' ? rand(62, 92) : rand(26, 42),   // px per second
     drift: rand(-0.12, 0.12),
     phase: rand(0, TAU),
+    colour: pick(palette),
+    // A ponytail and a slighter build, or not. It is the whole difference at
+    // this size — anything more detailed is four pixels of guesswork — and a
+    // crowd of one silhouette repeated is the thing worth avoiding.
+    ponytail: Math.random() < 0.5,
     steps: [],
     sinceStep: 0,
     fade: 0,                                 // eases in so nobody pops into view
@@ -65,11 +81,12 @@ function spawn(w, h, { edge = true } = {}) {
   };
 }
 
-const STEP_LIFE = 3.4;                       // seconds a footprint stays visible
+const STEP_LIFE = 9;                         // seconds a footprint stays visible
+const STEP_MAX = 46;                         // and how many of them trail behind one figure
 
 export function startAmbient({
   mount = document.body,
-  max = 6,
+  max = 11,
 } = {}) {
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return { stop() {} };
 
@@ -90,10 +107,11 @@ export function startAmbient({
   };
   resize();
 
-  // A phone does not want six of these; the count follows the area so a wide
-  // desktop looks populated and a small screen stays calm.
-  const want = () => Math.max(2, Math.min(max, Math.round(w * h / 230000)));
-  const agents = Array.from({ length: want() }, () => spawn(w, h, { edge: false }));
+  // A phone does not want eleven of these; the count follows the area so a
+  // wide desktop looks populated and a small screen stays calm.
+  const want = () => Math.max(3, Math.min(max, Math.round(w * h / 115000)));
+  const agents = Array.from({ length: want() },
+    () => spawn(w, h, { edge: false, palette: colours.palette }));
   for (const a of agents) a.fade = 1;
 
   const onResize = () => { resize(); };
@@ -121,7 +139,17 @@ export function startAmbient({
       const d = dx * dx + dy * dy;
       if (d < bestD) { best = a; bestD = d; }
     }
-    if (best) { best.dir += Math.PI; best.steps.length = 0; best.turned = 0.5; }
+    // Somewhere else, not simply back the way they came: turning each figure
+    // exactly 180° makes a tap feel like flipping a switch, and the crowd ends
+    // up retracing its own lines. A new heading at least a quarter turn away
+    // reads as somebody changing their mind.
+    if (best) {
+      const away = rand(Math.PI / 4, TAU - Math.PI / 4);
+      best.dir += away;
+      best.drift = rand(-0.12, 0.12);
+      best.steps.length = 0;
+      best.turned = 0.5;
+    }
   };
   document.addEventListener('click', onClick);
 
@@ -135,7 +163,7 @@ export function startAmbient({
 
     ctx.clearRect(0, 0, w, h);
 
-    while (agents.length < want()) agents.push(spawn(w, h));
+    while (agents.length < want()) agents.push(spawn(w, h, { palette: colours.palette }));
     while (agents.length > want()) agents.pop();
 
     for (const [i, a] of agents.entries()) {
@@ -149,10 +177,13 @@ export function startAmbient({
 
       // footprints, every so many pixels rather than every so many frames
       a.sinceStep += a.speed * dt;
-      const gap = a.kind === 'ride' ? 26 : 15;
+      const gap = a.kind === 'ride' ? 9 : 15;
       if (a.sinceStep > gap) {
         a.sinceStep = 0;
-        const side = (a.steps.length % 2 ? 1 : -1) * 3.2 * a.scale;
+        // On foot the marks step left and right of the line walked. A bicycle
+        // does not: it leaves one continuous tyre track, so its points sit on
+        // the path itself and are joined up rather than dotted.
+        const side = a.kind === 'ride' ? 0 : (a.steps.length % 2 ? 1 : -1) * 3.2 * a.scale;
         a.steps.push({
           x: a.x + Math.cos(a.dir + Math.PI / 2) * side,
           y: a.y + Math.sin(a.dir + Math.PI / 2) * side * 0.55,
@@ -160,12 +191,15 @@ export function startAmbient({
         });
       }
       for (const s of a.steps) s.t += dt;
-      while (a.steps.length && a.steps[0].t > STEP_LIFE) a.steps.shift();
+      while (a.steps.length && (a.steps[0].t > STEP_LIFE || a.steps.length > STEP_MAX)) a.steps.shift();
 
       const m = 110;
-      if (a.x < -m || a.x > w + m || a.y < -m || a.y > h + m) { agents[i] = spawn(w, h); continue; }
+      if (a.x < -m || a.x > w + m || a.y < -m || a.y > h + m) {
+        agents[i] = spawn(w, h, { palette: colours.palette });
+        continue;
+      }
 
-      drawSteps(ctx, a, colours);
+      drawSteps(ctx, a);
       if (a.kind === 'ride') drawBike(ctx, a, colours);
       else drawWalker(ctx, a, colours);
     }
@@ -183,29 +217,61 @@ export function startAmbient({
   };
 }
 
-function drawSteps(ctx, a, c) {
+/**
+ * What somebody leaves behind them.
+ *
+ * Footprints for anyone on foot, and for a cyclist one tyre line instead —
+ * drawn a segment at a time because a single stroke can only have one alpha,
+ * and the whole point of the trail is that the far end of it has nearly faded.
+ */
+function drawSteps(ctx, a) {
   ctx.save();
-  ctx.fillStyle = c.step;
-  for (const s of a.steps) {
-    const life = 1 - s.t / STEP_LIFE;
-    ctx.globalAlpha = 0.2 * life * life * a.fade;
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(s.dir);
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 2.6 * a.scale, 1.3 * a.scale, 0, 0, TAU);
-    ctx.fill();
-    ctx.restore();
+  if (a.kind === 'ride') {
+    ctx.strokeStyle = a.colour;
+    ctx.lineWidth = 1.6 * a.scale;
+    ctx.lineCap = 'round';
+    for (let i = 1; i < a.steps.length; i++) {
+      const p = a.steps[i - 1], q = a.steps[i];
+      const life = 1 - q.t / STEP_LIFE;
+      ctx.globalAlpha = 0.26 * life * life * a.fade;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+      ctx.stroke();
+    }
+    // and the last stretch, from the newest mark up to the wheels themselves
+    const last = a.steps[a.steps.length - 1];
+    if (last) {
+      ctx.globalAlpha = 0.26 * a.fade;
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y); ctx.lineTo(a.x, a.y);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = a.colour;
+    for (const s of a.steps) {
+      const life = 1 - s.t / STEP_LIFE;
+      ctx.globalAlpha = 0.3 * life * life * a.fade;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.dir);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3.1 * a.scale, 1.5 * a.scale, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
   }
   ctx.restore();
 }
 
+/** How solid a figure is right now: a tap brightens the one you tapped. */
+const strength = a => (0.52 + a.turned * 0.5) * a.fade;
+
 /**
- * A walker, about 26px tall at scale 1.
+ * Somebody on foot, about 34px tall at scale 1.
  *
- * Facing is the sign of the heading only — a stick figure seen from the side
- * reads as walking; the same figure rotated to a true bearing reads as falling
- * over.
+ * Facing is the sign of the heading and nothing more — a stick figure seen
+ * from the side reads as walking, and the same figure rotated to a true
+ * bearing reads as falling over.
  */
 function drawWalker(ctx, a, c) {
   const s = a.scale, swing = Math.sin(a.phase), lift = Math.abs(Math.cos(a.phase));
@@ -213,16 +279,26 @@ function drawWalker(ctx, a, c) {
   ctx.save();
   ctx.translate(a.x, a.y);
   ctx.scale(face * s, s);
-  ctx.globalAlpha = (0.36 + a.turned * 0.5) * a.fade;
-  ctx.strokeStyle = c.body;
-  ctx.fillStyle = c.body;
-  ctx.lineWidth = 1.9;
+  ctx.globalAlpha = strength(a);
+  ctx.strokeStyle = a.colour;
+  ctx.fillStyle = a.colour;
+  ctx.lineWidth = 2.1;
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
   const hip = -11, shoulder = -20, head = -24.5;
   ctx.beginPath();                                    // head
-  ctx.arc(0, head, 3.1, 0, TAU);
+  ctx.arc(0, head, 3.2, 0, TAU);
   ctx.fill();
+  if (a.ponytail) {                                   // and the hair that goes with it
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-2.7, head - 0.7);
+    ctx.quadraticCurveTo(-5.1, head + 0.9, -4.2 - swing * 0.7, head + 4.1);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.beginPath();                                    // torso
   ctx.moveTo(0, shoulder + 1); ctx.lineTo(0, hip);
   ctx.stroke();
@@ -237,42 +313,79 @@ function drawWalker(ctx, a, c) {
   ctx.restore();
 }
 
-/** The same rider, on a bike. Wheels turn with the phase so it is not sliding. */
+/**
+ * The same rider, on a bike.
+ *
+ * The saddle sits high and the cranks sit low, because that is what a leg on a
+ * bicycle looks like: the first version had the two almost level and the rider
+ * appeared to be pedalling with its shins. Wheels carry one spoke each so the
+ * bike is turning rather than sliding.
+ */
 function drawBike(ctx, a, c) {
   const s = a.scale, face = Math.cos(a.dir) >= 0 ? 1 : -1;
   ctx.save();
   ctx.translate(a.x, a.y);
   ctx.scale(face * s, s);
-  ctx.globalAlpha = (0.36 + a.turned * 0.5) * a.fade;
-  ctx.lineWidth = 1.7;
+  ctx.globalAlpha = strength(a);
+  ctx.lineWidth = 1.9;
   ctx.lineCap = 'round';
-  ctx.strokeStyle = c.bike;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = a.colour;
 
-  const R = 5.2, back = -7.5, front = 7.5, axle = -R;
-  for (const cx of [back, front]) {                   // wheels, with one spoke to show the spin
+  const R = 6.2, back = -8.5, front = 8.5, axle = -R;
+  const crank = [-1.4, axle - 1.2], CR = 3.1;         // bottom bracket and crank length
+  const saddle = [-5.6, axle - 13.5];                 // hip height: a leg's worth above the cranks
+  const bars = [6.4, axle - 11];
+
+  for (const cx of [back, front]) {
     ctx.beginPath(); ctx.arc(cx, axle, R, 0, TAU); ctx.stroke();
+    ctx.save();
+    ctx.globalAlpha = strength(a) * 0.45;
     ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a.phase) * R * 0.85, axle + Math.sin(a.phase) * R * 0.85);
-    ctx.lineTo(cx - Math.cos(a.phase) * R * 0.85, axle - Math.sin(a.phase) * R * 0.85);
-    ctx.globalAlpha = 0.15 * a.fade; ctx.stroke(); ctx.globalAlpha = (0.36 + a.turned * 0.5) * a.fade;
+    ctx.moveTo(cx + Math.cos(a.phase) * R * 0.86, axle + Math.sin(a.phase) * R * 0.86);
+    ctx.lineTo(cx - Math.cos(a.phase) * R * 0.86, axle - Math.sin(a.phase) * R * 0.86);
+    ctx.stroke();
+    ctx.restore();
   }
-  ctx.beginPath();                                    // frame and bars
-  ctx.moveTo(back, axle); ctx.lineTo(-1, axle - 1); ctx.lineTo(1.5, axle - 7);
-  ctx.lineTo(front, axle); ctx.moveTo(1.5, axle - 7); ctx.lineTo(4.5, axle - 7.5);
-  ctx.moveTo(-1, axle - 1); ctx.lineTo(-4, axle - 7);
+  ctx.beginPath();                                    // frame
+  ctx.moveTo(back, axle); ctx.lineTo(crank[0], crank[1]); ctx.lineTo(front, axle);
+  ctx.moveTo(crank[0], crank[1]); ctx.lineTo(saddle[0], saddle[1]); ctx.lineTo(bars[0] - 1.4, bars[1] + 1);
+  ctx.lineTo(front, axle);
+  ctx.moveTo(saddle[0], saddle[1]); ctx.lineTo(bars[0] - 1.4, bars[1] + 1);
+  ctx.stroke();
+  ctx.beginPath();                                    // bars
+  ctx.moveTo(bars[0] - 2.6, bars[1] + 0.4); ctx.lineTo(bars[0], bars[1]);
   ctx.stroke();
 
-  ctx.strokeStyle = c.body;                           // the rider, folded over the bars
-  ctx.fillStyle = c.body;
-  ctx.beginPath(); ctx.arc(0.5, axle - 16.5, 2.9, 0, TAU); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(-3.5, axle - 8.5); ctx.lineTo(1, axle - 14);
-  ctx.lineTo(4.6, axle - 8);                          // arm to the bars
+  const hip = [saddle[0] + 0.6, saddle[1] - 0.8];
+  const shoulder = [hip[0] + 4.6, hip[1] - 7.4];
+  ctx.beginPath();                                    // back, from saddle to shoulders
+  ctx.moveTo(hip[0], hip[1]); ctx.lineTo(shoulder[0], shoulder[1]);
   ctx.stroke();
-  const ped = a.phase;                                // legs on the cranks
-  ctx.beginPath();
-  ctx.moveTo(-3.5, axle - 8.5); ctx.lineTo(-1.5 + Math.cos(ped) * 2.2, axle - 4 + Math.sin(ped) * 2.2);
-  ctx.moveTo(-3.5, axle - 8.5); ctx.lineTo(-1.5 - Math.cos(ped) * 2.2, axle - 4 - Math.sin(ped) * 2.2);
+  ctx.fillStyle = a.colour;
+  ctx.beginPath();                                    // head, up and forward of the shoulders
+  ctx.arc(shoulder[0] + 2.4, shoulder[1] - 2.6, 3.1, 0, TAU);
+  ctx.fill();
+  if (a.ponytail) {
+    ctx.beginPath();
+    ctx.moveTo(shoulder[0] + 0.4, shoulder[1] - 3.4);
+    ctx.quadraticCurveTo(shoulder[0] - 3.4, shoulder[1] - 3.2, shoulder[0] - 4.6, shoulder[1] + 0.4);
+    ctx.lineWidth = 1.6; ctx.stroke(); ctx.lineWidth = 1.9;
+  }
+  ctx.beginPath();                                    // arm, shoulder to bars
+  ctx.moveTo(shoulder[0], shoulder[1]); ctx.lineTo(bars[0], bars[1]);
   ctx.stroke();
+
+  // legs: hip to pedal, with a knee where the two bones meet
+  for (const side of [0, Math.PI]) {
+    const ped = [crank[0] + Math.cos(a.phase + side) * CR, crank[1] + Math.sin(a.phase + side) * CR];
+    const knee = [(hip[0] + ped[0]) / 2 + 3.2, (hip[1] + ped[1]) / 2];
+    ctx.save();
+    if (side) ctx.globalAlpha = strength(a) * 0.6;    // the far leg, behind the frame
+    ctx.beginPath();
+    ctx.moveTo(hip[0], hip[1]); ctx.lineTo(knee[0], knee[1]); ctx.lineTo(ped[0], ped[1]);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.restore();
 }

@@ -13,12 +13,21 @@
  */
 
 import { rampCss } from './terrain.js';
+import { t, lang } from './i18n.js';
 
-export const ACT = { walk: 'Walk', run: 'Run', ride: 'Ride', field: 'Field sport' };
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-  'August', 'September', 'October', 'November', 'December'];
+/**
+ * Month and weekday names come from the platform rather than a list here.
+ * Every browser already carries them in every language, correctly capitalised
+ * and correctly abbreviated, and a hand-written table is a second place for
+ * Spanish to be slightly wrong.
+ */
+const locale = () => (lang() === 'es' ? 'es-ES' : 'en-US');
+const monthName = (y, m) => {
+  const s = new Date(Date.UTC(y, m, 1)).toLocaleDateString(locale(), { month: 'long', timeZone: 'UTC' });
+  return s.charAt(0).toUpperCase() + s.slice(1);          // Spanish lowercases them
+};
 
-const fmt = n => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+const fmt = n => n.toLocaleString(locale(), { maximumFractionDigits: 0 });
 
 export const escapeHtml = s => String(s).replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,9 +44,9 @@ export const byDate = (a, b) => String(b.date || b.added || '').localeCompare(St
 
 /** Recorded routes are named "Run · 12 Oct", so a local route's sport comes from its name. */
 export function activityOf(r) {
-  if (r.activity) return ACT[r.activity] || '';
+  if (r.activity) return t('act.' + r.activity);
   const m = /^(run|walk|ride|field)\b/i.exec(r.name || '');
-  return m ? ACT[m[1].toLowerCase()] : '';
+  return m ? t('act.' + m[1].toLowerCase()) : '';
 }
 
 /** Where the row goes: the account's copy, this browser's copy, or the build's. */
@@ -88,15 +97,15 @@ function spark(r) {
  */
 export function routeRow(r, { actions = () => '', tagOrigin = true } = {}) {
   const d = whenOf(r);
-  const meta = [activityOf(r), r.dateSource === 'recorded' ? '' : 'added'].filter(Boolean).join(' · ');
+  const meta = [activityOf(r), r.dateSource === 'recorded' ? '' : t('row.added')].filter(Boolean).join(' · ');
   return `
     <div class="row">
       <a class="go" href="${routeHref(r)}">
-        <span class="day"><b>${d.getDate()}</b><small>${d.toLocaleDateString('en-US', { weekday: 'short' })}</small></span>
+        <span class="day"><b>${d.getDate()}</b><small>${d.toLocaleDateString(locale(), { weekday: 'short' })}</small></span>
         <span class="what"><b>${escapeHtml(r.name)}</b><small>${meta}${
-          r.pace ? '<span class="tag pace" title="This track is timed, so the replay can follow the speed it was actually done at">recorded pace</span>' : ''}${
-          tagOrigin && r.local ? '<span class="tag">this browser</span>' : ''}${
-          tagOrigin && !r.cloud && !r.local ? '<span class="tag" title="A sample route that ships with the app, not one of yours">example</span>' : ''
+          r.pace ? `<span class="tag pace">${t('row.pace')}</span>` : ''}${
+          tagOrigin && r.local ? `<span class="tag">${t('row.local')}</span>` : ''}${
+          tagOrigin && !r.cloud && !r.local ? `<span class="tag">${t('row.example')}</span>` : ''
         }</small></span>
         ${spark(r)}
         <span class="num"><b>${(r.stats.distance_m / 1000).toFixed(2)} km</b><small>↑ ${fmt(r.stats.gain_m)} m</small></span>
@@ -110,11 +119,13 @@ export function monthSection(key, list, opts) {
   const [y, m] = key.split('-').map(Number);
   const km = list.reduce((s, r) => s + r.stats.distance_m, 0) / 1000;
   const up = list.reduce((s, r) => s + r.stats.gain_m, 0);
+  const sum = t(list.length === 1 ? 'row.month.one' : 'row.month.sum',
+    { n: list.length, km: km.toFixed(1), up: fmt(up) });
   return `
     <section class="month">
       <div class="month-head">
-        <h2>${MONTHS[m]} ${y}</h2>
-        <span>${list.length} route${list.length > 1 ? 's' : ''} · ${km.toFixed(1)} km · ↑ ${fmt(up)} m</span>
+        <h2>${monthName(y, m)} ${y}</h2>
+        <span>${sum}</span>
       </div>
       ${list.map(r => routeRow(r, opts)).join('')}
     </section>`;

@@ -58,10 +58,17 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  * UTC rather than the reader's zone: the same route should not appear to have
  * happened on different days depending on who opens the page.
  */
-export function formatDate(iso) {
+export function formatDate(iso, locale) {
   if (!iso) return '';
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? '' : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  if (isNaN(d.getTime())) return '';
+  // The platform knows the month names in every language and this file does
+  // not, so ask it whenever a locale is offered. Without one — Node, during
+  // the build — the English table below keeps the old behaviour exactly.
+  if (locale) {
+    return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 /**

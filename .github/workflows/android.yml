@@ -71,10 +71,28 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "building $name (versionCode $code)"
 
+      # The APK bundles whatever dist/ contains, config.json included — so an
+      # app built with none of these set has no account database behind it and
+      # falls back to the open tile endpoint. That is a perfectly good offline
+      # build and a confusing thing to hand a tester, who presses Sign in and
+      # finds nothing there. All three are public values (the publishable key
+      # names the project and row-level security does the rest; the Esri key is
+      # already served to every browser that opens the site), but they are
+      # values that cost money or identify a project, so they live in repository
+      # secrets rather than in this file.
       - name: Build the web app
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          ESRI_API_KEY: ${{ secrets.ESRI_API_KEY }}
         run: |
           npm ci
           npm run build
+          node -e "
+            const c = require('./dist/config.json');
+            console.log('accounts:', c.supabaseUrl ? 'configured' : 'OFF — set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY');
+            console.log('imagery :', c.esriKey ? 'licensed Esri key' : 'open endpoint — set ESRI_API_KEY');
+          "
 
       - name: Copy it into the native project
         run: npx cap sync android

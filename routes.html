@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Your routes · Salpicón!</title>
+<title>Tus rutas · Salpicón!</title>
 <meta name="description" content="Every route in your account and in this browser.">
 <meta name="theme-color" content="#fcf1ee">
 <script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
@@ -70,23 +70,24 @@
 <body>
 <div class="wrap">
   <header class="page-head">
-    <div class="brand"><a href="./"><span id="brandmark"></span><h1>Your routes</h1></a></div>
+    <div class="brand"><a href="./"><span id="brandmark"></span><h1 data-i18n="routes.title">Tus rutas</h1></a></div>
     <div class="nav">
+      <a class="add quiet" href="./" data-i18n="nav.home" data-i18n-aria="nav.home">← Inicio</a>
+      <button class="lang-btn" id="langbtn" type="button"></button>
       <button class="theme-btn" id="themebtn" type="button"></button>
-      <button class="add quiet" id="acctbtn" hidden>Sign in</button>
-      <a class="add quiet" href="./library.html">Public library</a>
-      <a class="rec-btn" href="./?record=1"><i></i>Record</a>
-      <button class="add quiet" id="add">＋ Add a GPX</button>
+      <button class="add quiet" id="acctbtn" hidden data-i18n="nav.signin">Entrar</button>
+      <a class="add quiet" href="./library.html" data-i18n="nav.library">Rutas públicas</a>
+      <a class="rec-btn" href="./?record=1"><i></i><span data-i18n="nav.record">Grabar</span></a>
+      <button class="add quiet" id="add" data-i18n="nav.add">＋ Añadir un GPX</button>
     </div>
   </header>
 
   <div class="rv-panel nowt" id="nowt" hidden>
-    <h2>Nothing here yet</h2>
-    <p id="nowt-why">Record a route or add a <code>.gpx</code> file and it will appear here. You can also
-      drop a file anywhere on this page.</p>
+    <h2 data-i18n="routes.empty.title">Todavía no hay nada aquí</h2>
+    <p id="nowt-why"></p>
     <div class="acct-btns" id="nowt-cta" hidden>
-      <button class="add" id="nowt-up">Create an account</button>
-      <button class="add quiet" id="nowt-in">I already have one</button>
+      <button class="add" id="nowt-up" data-i18n="hero.signup">Crear una cuenta</button>
+      <button class="add quiet" id="nowt-in" data-i18n="hero.havaccount">Ya tengo una</button>
     </div>
   </div>
 
@@ -98,42 +99,39 @@
   <div class="count" id="count"></div>
   <div id="grid"></div>
 
-  <footer>
-    Imagery © Esri and its contributors · Elevation from
-    <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others)
-  </footer>
+  <footer data-i18n-html="foot.short"></footer>
 </div>
 
 <input type="file" id="file" accept=".gpx,application/gpx+xml" multiple hidden>
 
 <div id="share">
   <div class="acct-card rv-panel">
-    <h2>Who can see this route?</h2>
+    <h2 data-i18n="share.title">¿Quién puede ver esta ruta?</h2>
     <div class="share-opts" id="share-opts">
-      <label><input type="radio" name="vis" value="private"><span><b>Only me</b>
-        Nobody else can open it, even with the address.</span></label>
-      <label><input type="radio" name="vis" value="link"><span><b>Anyone with the link</b>
-        It will not appear anywhere public. Only people you send the link to.</span></label>
-      <label><input type="radio" name="vis" value="public"><span><b>Public</b>
-        Anyone can find and open it.</span></label>
+      <label><input type="radio" name="vis" value="private"><span><b data-i18n="share.only">Solo yo</b>
+        <span data-i18n="share.only.why">Nadie más puede abrirla, ni con la dirección.</span></span></label>
+      <label><input type="radio" name="vis" value="link"><span><b data-i18n="share.link">Cualquiera con el enlace</b>
+        <span data-i18n="share.link.why">No aparecerá en ningún sitio público. Solo las personas a quienes mandes el enlace.</span></span></label>
+      <label><input type="radio" name="vis" value="public"><span><b data-i18n="share.pub">Pública</b>
+        <span data-i18n="share.pub.why">Cualquiera puede encontrarla y abrirla.</span></span></label>
     </div>
     <div id="share-link" hidden>
-      <label class="share-lbl" for="share-url">Link</label>
+      <label class="share-lbl" for="share-url" data-i18n="share.label">Enlace</label>
       <input id="share-url" readonly>
       <div class="acct-btns">
-        <button type="button" class="add" id="share-copy">Copy link</button>
+        <button type="button" class="add" id="share-copy" data-i18n="share.copy">Copiar enlace</button>
         <button type="button" class="add quiet" id="share-rotate"
-          title="Everyone you already sent the old link to will lose access">Replace link</button>
+          data-i18n="share.replace" data-i18n-title="share.replace.hint">Reemplazar enlace</button>
       </div>
     </div>
     <p class="acct-msg" id="share-msg" role="status"></p>
     <div class="acct-btns">
-      <button type="button" class="add quiet" id="share-close">Done</button>
+      <button type="button" class="add quiet" id="share-close" data-i18n="share.done">Listo</button>
     </div>
   </div>
 </div>
 
-<div id="drop"><div>Drop GPX files to build them</div></div>
+<div id="drop"><div data-i18n="routes.drop">Suelta archivos GPX para construirlos</div></div>
 <div id="toast" class="rv-panel"></div>
 
 <script type="module">
@@ -146,9 +144,13 @@ import { EFFORTS, ON_FOOT, personalBests, totals, clock, pace } from './src/stat
 import { shareRoute, routeLink, canLink } from './src/share.js';
 import { markSVG } from './src/mark.js';
 import { initTheme, themeToggle } from './src/theme.js';
+import { initLang, langToggle, t } from './src/i18n.js';
 
 initTheme();
+initLang();
 themeToggle(document.getElementById('themebtn'));
+langToggle(document.getElementById('langbtn'));
+addEventListener('salpicon:lang', () => render());
 document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
 
 const grid = document.getElementById('grid');
@@ -176,7 +178,7 @@ async function refreshCloud() {
     cloudRoutes = (await account.routes().myRoutes()).map(r => ({ ...r, cloud: true }));
   } catch {
     cloudRoutes = [];
-    toast('Could not reach your account. Showing what is on this device.');
+    toast(t('toast.noaccount'));
   }
   render();
   fetchEffortTracks();
@@ -198,17 +200,15 @@ function actions(r) {
   // teaches that in the moment somebody wants it — which is a better place to
   // learn it than a paragraph nobody read on the way in.
   out.push(`<button class="dl copy" data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"
-    title="${canLink(r) ? 'Copy a link to this route'
-      : 'This route is only in this browser — an account is what gives it a link'}">🔗<span> copy link</span></button>`);
+    title="${canLink(r) ? t('share.viewer') : t('share.local')}">🔗<span> ${t('row.copy')}</span></button>`);
   if (r.cloud) {
-    out.push(`<button class="dl share" data-id="${r.id}" title="Choose who can see this route">${
+    out.push(`<button class="dl share" data-id="${r.id}" title="${t('share.title')}">${
       r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
-    }<span> ${r.visibility === 'link' ? 'shared' : r.visibility}</span></button>`);
+    }<span> ${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}</span></button>`);
   }
   if (r.local) {
-    out.push(`<button class="dl gpx" data-slug="${r.slug}" title="Save this route as a .gpx file">⤓<span> gpx</span></button>
-      <button class="rm" data-slug="${r.slug}" title="Remove from this browser"
-        aria-label="Remove ${escapeHtml(r.name)} from this browser">✕</button>`);
+    out.push(`<button class="dl gpx" data-slug="${r.slug}">⤓<span> ${t('row.gpx')}</span></button>
+      <button class="rm" data-slug="${r.slug}" aria-label="${escapeHtml(r.name)}">✕</button>`);
   }
   return out.join('');
 }
@@ -233,27 +233,26 @@ function paintFigures() {
   fig.hidden = !routes.length;
   if (!routes.length) return;
 
-  const t = totals(routes);
+  const tot = totals(routes);
   document.getElementById('totals').innerHTML = [
-    ['Routes', t.routes, ''],
-    ['Distance', km(t.distance_m), 'km'],
-    ['Moving time', clock(t.moving_s), ''],
-    ['Climbed', Math.round(t.gain_m).toLocaleString(), 'm'],
+    [t('routes.total'), tot.routes, ''],
+    [t('routes.distance'), km(tot.distance_m), 'km'],
+    [t('routes.moving'), clock(tot.moving_s), ''],
+    [t('routes.climbed'), Math.round(tot.gain_m).toLocaleString(), 'm'],
   ].map(([k, v, u]) => `<div><dt>${k}</dt><dd>${v}${u ? `<small>${u}</small>` : ''}</dd></div>`).join('');
 
   const pb = personalBests(routes);
   const got = EFFORTS.filter(e => pb[e.key]);
   const busy = effortsPending
-    ? `<span class="busy">checking ${effortsPending} more…</span>` : '';
+    ? `<span class="busy">${t('routes.best.busy', { n: effortsPending })}</span>` : '';
   document.getElementById('bests').innerHTML = got.length
-    ? `<span class="lbl">Best on foot</span>` + got.map(e => {
+    ? `<span class="lbl">${t('routes.best')}</span>` + got.map(e => {
         const b = pb[e.key];
         const r = routes.find(x => x.slug === b.slug);
         const label = `${e.label} <b>${clock(b.seconds)}</b> <span style="color:var(--ink-3)">${pace(b.seconds, e.metres)}/km</span>`;
         return r ? `<a href="${routeHref(r)}" title="${escapeHtml(b.route)}">${label}</a>` : `<span>${label}</span>`;
       }).join('') + busy
-    : `<span class="lbl">Best on foot</span><span class="none">nothing timed and long enough yet —
-       anything you record in the app will count</span>${busy}`;
+    : `<span class="lbl">${t('routes.best')}</span><span class="none">${t('routes.best.none')}</span>${busy}`;
 }
 
 let effortsPending = 0;
@@ -281,7 +280,7 @@ function render() {
   const routes = all();
   const cloud = routes.filter(r => r.cloud).length, local = routes.length - cloud;
   document.getElementById('count').textContent = !routes.length ? ''
-    : [cloud ? `${cloud} in your account` : '', local ? `${local} in this browser` : '']
+    : [cloud ? t('routes.count.cloud', { n: cloud }) : '', local ? t('routes.count.local', { n: local }) : '']
         .filter(Boolean).join(' · ');
 
   const nowt = document.getElementById('nowt');
@@ -289,12 +288,7 @@ function render() {
   if (!routes.length) {
     const signedOut = account.enabled() && !account.user();
     document.getElementById('nowt-cta').hidden = !signedOut;
-    document.getElementById('nowt-why').innerHTML = signedOut
-      ? `Record a route or add a <code>.gpx</code> file and it will appear here. Routes kept in this
-         browser disappear with it — an account is what makes them survive, and lets you hand one to
-         somebody else with a link.`
-      : `Record a route or add a <code>.gpx</code> file and it will appear here. You can also drop a
-         file anywhere on this page.`;
+    document.getElementById('nowt-why').innerHTML = t(signedOut ? 'routes.empty.out' : 'routes.empty.in');
   }
 
   paintFigures();
@@ -335,14 +329,14 @@ function render() {
   grid.querySelectorAll('.dl.gpx').forEach(b => b.addEventListener('click', async e => {
     e.preventDefault();
     const entry = listLocalRoutes().find(r => r.slug === b.dataset.slug);
-    if (!entry) return toast('That route is no longer in this browser.');
+    if (!entry) return toast(t('toast.gone'));
     b.disabled = true;
     try {
       const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.track?.activity ?? 'other' });
       const how = await saveGPX(safeName(entry.name), gpx);
-      toast(how === 'shared' ? 'Choose where to send it.' : `Saved ${safeName(entry.name)}`);
+      toast(how === 'shared' ? t('toast.sendto') : t('toast.saved', { name: safeName(entry.name) }));
     } catch (err) {
-      toast(`Could not save the file: ${err.message}`);
+      toast(t('toast.savefail', { why: err.message }));
     } finally { b.disabled = false; }
   }));
 
@@ -356,7 +350,7 @@ function render() {
 /* ---------- adding files ---------- */
 async function ingest(files) {
   const gpx = [...files].filter(f => /\.gpx$/i.test(f.name));
-  if (!gpx.length) return toast('That is not a .gpx file.');
+  if (!gpx.length) return toast(t('toast.notgpx'));
   let last = null, added = 0;
   for (const file of gpx) {
     try {
@@ -369,9 +363,8 @@ async function ingest(files) {
   }
   if (!added) return;
   render();
-  toast(added === 1
-    ? `Added ${last.name} — opening it…`
-    : `Added ${added} routes to this browser.`);
+  toast(added === 1 ? t('toast.added.one', { name: last.name })
+                    : t('toast.added.many', { n: added }));
   if (added === 1) setTimeout(() => { location.href = `./view.html?local=${encodeURIComponent(last.slug)}`; }, 700);
 }
 
@@ -418,15 +411,13 @@ function openShare(id) {
 document.getElementById('share-opts').addEventListener('change', async e => {
   if (!sharing) return;
   const visibility = e.target.value;
-  shareMsg.textContent = 'Saving…';
+  shareMsg.textContent = t('share.saving');
   shareMsg.classList.add('ok');
   try {
     const updated = await account.routes().setVisibility(sharing.id, visibility);
     sharing = { ...sharing, ...updated, cloud: true };
     cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
-    shareMsg.textContent = visibility === 'private'
-      ? 'Private. Any link you sent before no longer opens it.'
-      : 'Saved.';
+    shareMsg.textContent = t(visibility === 'private' ? 'share.nowprivate' : 'share.saved');
     paintShare();
     render();
   } catch (err) {
@@ -445,13 +436,13 @@ document.getElementById('share-copy').addEventListener('click', async () => {
 document.getElementById('share-rotate').addEventListener('click', async () => {
   if (!sharing) return;
   shareMsg.classList.add('ok');
-  shareMsg.textContent = 'Replacing…';
+  shareMsg.textContent = t('share.replacing');
   try {
     const fresh = await account.routes().rotateShareToken(sharing.id);
     sharing = { ...sharing, shareToken: fresh };
     cloudRoutes = cloudRoutes.map(r => (r.id === sharing.id ? sharing : r));
     paintShare();
-    shareMsg.textContent = 'New link ready. The old one has stopped working.';
+    shareMsg.textContent = t('share.replaced');
   } catch (err) {
     shareMsg.classList.remove('ok');
     shareMsg.textContent = account.explain(err);
@@ -475,7 +466,8 @@ document.getElementById('acctbtn').addEventListener('click', () => { location.hr
 account.onChange(user => {
   const btn = document.getElementById('acctbtn');
   btn.hidden = !account.enabled();
-  btn.textContent = user ? (user.email?.split('@')[0] ?? 'Account') : 'Sign in';
+  btn.removeAttribute('data-i18n');
+  btn.textContent = user ? (user.email?.split('@')[0] ?? t('nav.account')) : t('nav.signin');
   refreshCloud();
 });
 

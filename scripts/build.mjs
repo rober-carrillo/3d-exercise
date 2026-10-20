@@ -147,7 +147,7 @@ async function bundleModules(names) {
 const esc = s => JSON.stringify(s).replace(/</g, '\\u003c');
 
 async function writeStandalone(route, track) {
-  const bundle = await bundleModules(['gpx', 'terrain', 'renderer', 'viewer']);   // library.js is browser-storage only
+  const bundle = await bundleModules(['i18n', 'gpx', 'terrain', 'renderer', 'viewer']);   // library.js is browser-storage only
   const css = await readFile(join(root, 'src', 'ui.css'), 'utf8');
   const favicon = await readFile(join(root, 'brand', 'favicon.svg'), 'utf8');   // inlined: a single file can't load it
   const data = {

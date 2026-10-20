@@ -14,6 +14,7 @@
 
 import { createClient } from './supabase.js';
 import { createCloud } from './cloud.js';
+import { t } from './i18n.js';
 
 let client = null, cloud = null, config = null, loaded = null;
 
@@ -54,14 +55,14 @@ export const routes = () => cloud;
  */
 export function explain(err) {
   const m = String(err?.message || err || '').toLowerCase();
-  if (m.includes('invalid login')) return 'That email and password do not match an account.';
-  if (m.includes('already registered')) return 'There is already an account with that email. Try signing in.';
-  if (m.includes('password')) return 'Passwords need at least six characters.';
-  if (m.includes('email') && m.includes('invalid')) return 'That does not look like an email address.';
-  if (m.includes('rate limit')) return 'Too many attempts just now. Wait a minute and try again.';
-  if (m.includes('confirm')) return 'Check your email for a confirmation link, then sign in.';
-  if (m.includes('failed to fetch') || m.includes('networkerror')) return 'No connection to the server.';
-  return err?.message || 'Something went wrong. Try again.';
+  if (m.includes('invalid login')) return t('err.badlogin');
+  if (m.includes('already registered')) return t('err.exists');
+  if (m.includes('password')) return t('err.password');
+  if (m.includes('email') && m.includes('invalid')) return t('err.email');
+  if (m.includes('rate limit')) return t('err.rate');
+  if (m.includes('confirm')) return t('err.confirm');
+  if (m.includes('failed to fetch') || m.includes('networkerror')) return t('err.offline');
+  return err?.message || t('err.generic');
 }
 
 export async function signIn(email, password) {

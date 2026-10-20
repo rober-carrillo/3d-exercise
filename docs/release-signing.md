@@ -53,6 +53,19 @@ Actions**:
 | `KEY_ALIAS` | `salpicon` |
 | `KEY_PASSWORD` | the key password |
 
+Three more decide what the app inside the package can do. They are the same
+values the website is built with, and without them the APK has no account
+database behind it — a tester presses *Entrar* and finds nothing there:
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_URL` | the project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | the `sb_publishable_…` key, never the secret one |
+| `ESRI_API_KEY` | the imagery key; without it the build uses the open endpoint |
+
+The build prints which of the two it got, so a run log says plainly whether
+the app it produced can sign anybody in.
+
 With those set, pushing a tag builds a signed `.apk` and `.aab`:
 
 ```bash
