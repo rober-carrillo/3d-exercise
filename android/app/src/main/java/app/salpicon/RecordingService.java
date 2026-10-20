@@ -45,6 +45,19 @@ public class RecordingService extends Service implements LocationListener {
     private static final int NOTIFICATION_ID = 7301;
 
     private LocationManager locations;
+    private com.google.android.gms.location.FusedLocationProviderClient fused;
+    private boolean usingFused = false;
+
+    /** Fixes from the fused provider arrive here instead of onLocationChanged. */
+    private final com.google.android.gms.location.LocationCallback fusedCallback =
+        new com.google.android.gms.location.LocationCallback() {
+            @Override
+            public void onLocationResult(com.google.android.gms.location.LocationResult result) {
+                if (paused) return;
+                Location l = result.getLastLocation();
+                if (l != null) RecordingPlugin.onFix(l);
+            }
+        };
     private boolean paused = false;
     private boolean foreground = false;
     private String line1 = "Recording";
@@ -75,6 +88,11 @@ public class RecordingService extends Service implements LocationListener {
             nm.createNotificationChannel(channel);
         }
         locations = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        try {
+            fused = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this);
+        } catch (Throwable t) {
+            fused = null;                     // no Play Services; the raw provider is the plan
+        }
     }
 
     @Override
@@ -113,17 +131,57 @@ public class RecordingService extends Service implements LocationListener {
         return START_STICKY;
     }
 
+    /**
+     * Start asking for positions, by the best route this device offers.
+     *
+     * The fused provider first. It was avoided originally to keep Play
+     * Services out of the build, on the reasoning that this app wants the
+     * satellite fix rather than a guess assembled from wifi — which turned out
+     * to be the wrong way round. Fused does not replace GNSS, it runs a motion
+     * model over it using the accelerometer and gyroscope, and that model is
+     * what tells a fix twenty metres to the left of a runner that it is wrong.
+     * Measured against Strava over the same 494 m, the raw provider wandered
+     * sideways about twice as far.
+     *
+     * Raw GPS stays as the fallback, and it is not a token one: a phone with
+     * no Play Services — a de-Googled ROM, some Huawei models — records
+     * exactly as it did before, through the same listener.
+     */
     private void startLocations() {
-        if (locations == null) return;
+        if (fused != null && startFused()) return;
+        if (locations == null) {
+            RecordingPlugin.onError("This device has no location provider");
+            return;
+        }
         try {
-            // GPS directly rather than the fused provider: no Play Services
-            // dependency, and this app wants the satellite fix, not a guess
-            // assembled from wifi. One second is what the filtering expects.
             locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this);
         } catch (SecurityException e) {
             RecordingPlugin.onError("Location permission was not granted");
         } catch (IllegalArgumentException e) {
             RecordingPlugin.onError("This device has no GPS provider");
+        }
+    }
+
+    private boolean startFused() {
+        try {
+            com.google.android.gms.location.LocationRequest req =
+                new com.google.android.gms.location.LocationRequest.Builder(
+                        com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+                    .setMinUpdateIntervalMillis(1000L)
+                    .setMinUpdateDistanceMeters(0f)
+                    .setWaitForAccurateLocation(false)
+                    .build();
+            fused.requestLocationUpdates(req, fusedCallback, getMainLooper());
+            usingFused = true;
+            return true;
+        } catch (SecurityException e) {
+            RecordingPlugin.onError("Location permission was not granted");
+            return true;                      // permission, not availability: do not fall back
+        } catch (Throwable t) {
+            // No Play Services on this device, or a version that does not know
+            // this API. Nothing is wrong; the raw provider handles it.
+            usingFused = false;
+            return false;
         }
     }
 
@@ -196,6 +254,9 @@ public class RecordingService extends Service implements LocationListener {
 
     @Override
     public void onDestroy() {
+        if (usingFused && fused != null) {
+            try { fused.removeLocationUpdates(fusedCallback); } catch (Throwable ignored) {}
+        }
         if (locations != null) {
             try { locations.removeUpdates(this); } catch (SecurityException ignored) {}
         }

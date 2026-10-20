@@ -77,6 +77,11 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // The fused location provider. It is a Play Services library, not a Play
+    // Store privilege — a sideloaded build uses it exactly the same way — and
+    // RecordingService falls back to the raw GPS provider on any device that
+    // does not have Play Services at all.
+    implementation "com.google.android.gms:play-services-location:21.3.0"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

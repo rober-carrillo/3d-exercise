@@ -11,6 +11,7 @@
 import { loadTrack, parseGPX, analyze, formatDate } from './gpx.js';
 import { Renderer } from './renderer.js';
 import { t, lang, applyI18n } from './i18n.js';
+import { correctElevation } from './elevation.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp, setEsriToken,
 } from './terrain.js';
@@ -193,7 +194,9 @@ export class RouteViewer {
 
   async boot() {
     const o = this.opts;
-    const track = this.track = o.track ? o.track
+    // `let`, because the elevations are replaced from the terrain model a few
+    // steps down and the geometry built after that has to see the new ones.
+    let track = this.track = o.track ? o.track
       : o.gpxText ? analyze(parseGPX(o.gpxText))
       : await loadTrack(o.gpxUrl);
     const s = track.stats;
@@ -217,12 +220,18 @@ export class RouteViewer {
     };
     paintSub();
     window.addEventListener('salpicon:lang', () => { paintSub(); applyI18n(this.mount); });
-    this.$('s-dist').innerHTML = (s.distance_m / 1000).toFixed(2) + '<small>km</small>';
-    this.$('s-gain').innerHTML = fmt(s.gain_m) + '<small>m</small>';
-    this.$('s-loss').innerHTML = fmt(s.loss_m) + '<small>m</small>';
-    this.$('s-max').innerHTML = fmt(s.ele_max) + '<small>m</small>';
-    this.$('lg-lo').textContent = fmt(s.ele_min) + ' m';
-    this.$('lg-hi').textContent = fmt(s.ele_max) + ' m';
+    // Painted from whatever the track says now; called again once the terrain
+    // model has arrived and the elevations have been corrected against it.
+    const paintStats = () => {
+      const st = this.track.stats;
+      this.$('s-dist').innerHTML = (st.distance_m / 1000).toFixed(2) + '<small>km</small>';
+      this.$('s-gain').innerHTML = fmt(st.gain_m) + '<small>m</small>';
+      this.$('s-loss').innerHTML = fmt(st.loss_m) + '<small>m</small>';
+      this.$('s-max').innerHTML = fmt(st.ele_max) + '<small>m</small>';
+      this.$('lg-lo').textContent = fmt(st.ele_min) + ' m';
+      this.$('lg-hi').textContent = fmt(st.ele_max) + ' m';
+    };
+    paintStats();
     if (o.backHref) { const b = this.$('back'); b.href = o.backHref; b.hidden = false; }
     this.flyDuration = o.flyDuration ?? flyDurationFor(track);
     this.buildProfile();
@@ -286,6 +295,21 @@ export class RouteViewer {
     let sample = null, demReal = false;
     if (dem.ok) { const fn = demSampler(dem); if (fn) { sample = fn; demReal = true; } }
     if (!sample) sample = idwSampler(track, frame);
+
+    // Take the route's own heights off the terrain rather than off the phone.
+    // A GPS altitude is wrong by the geoid separation before any noise is
+    // added — tens of metres — and that error is what paints a flat walk as a
+    // climb, fills the elevation profile with hills that are not there, and
+    // leaves the colour ramp spending its whole range on nothing. The model is
+    // already here; this costs one pass over the track.
+    if (demReal) {
+      const fixed = await correctElevation(track, { sample });
+      if (fixed) {
+        track = this.track = fixed;
+        this.buildProfile();
+        paintStats();
+      }
+    }
 
     const g = buildGeometry({
       track, frame, sample, sat,

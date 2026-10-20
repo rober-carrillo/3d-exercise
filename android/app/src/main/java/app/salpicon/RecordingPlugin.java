@@ -45,7 +45,21 @@ public class RecordingPlugin extends Plugin {
         JSObject o = new JSObject();
         o.put("lat", l.getLatitude());
         o.put("lon", l.getLongitude());
-        o.put("ele", l.hasAltitude() ? l.getAltitude() : 0);
+        // Height above sea level where the platform can give it, and height
+        // above the WGS84 ellipsoid where it cannot — which are not the same
+        // number and differ by the geoid separation, about −32 m in San
+        // Francisco and +50 m over Colombia. A recorded walk on flat ground at
+        // 15 m came back as −14 m for exactly this reason. Android 14 is the
+        // first version that will do the conversion; older ones hand over the
+        // ellipsoidal figure and the app corrects it against the terrain model
+        // instead (see src/elevation.js), which is better anyway.
+        if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) {
+            o.put("ele", l.getMslAltitudeMeters());
+            o.put("eleRef", "msl");
+        } else {
+            o.put("ele", l.hasAltitude() ? l.getAltitude() : 0);
+            o.put("eleRef", l.hasAltitude() ? "ellipsoid" : "none");
+        }
         o.put("accuracy", l.hasAccuracy() ? l.getAccuracy() : 999);
         o.put("speed", l.hasSpeed() ? l.getSpeed() : null);
         o.put("t", l.getTime());

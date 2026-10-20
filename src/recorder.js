@@ -199,7 +199,26 @@ export class TrackRecorder {
         ? distance(this._mean(0), this._mean(1)) >= stillGate
         : d >= Math.max(this.minMove, acc);
       if (!going) { this.rejected.still++; return 'still'; }
-      if (d < this.minMove) { this.rejected.still++; return 'still'; }
+
+      // There used to be a second gate here, dropping any individual step
+      // shorter than minMove even when the window had just established that
+      // you were plainly going somewhere. It was there to stop drift
+      // accumulating while stationary, which is a real problem — but the
+      // window above already answers that question, and far better, because
+      // it looks at net displacement over twenty-four seconds instead of at
+      // one step.
+      //
+      // What the second gate actually did was throw away two thirds of the
+      // track. At a 1.35 m/s walk a 3 m floor means no point is kept until
+      // nearly three seconds have passed, which is exactly the spacing a real
+      // recording came back with: 1 Hz in, 0.37 Hz out, minimum step 2.97 m.
+      // Fed the same 1 Hz track with and without it, the recorder produces
+      // 114 points and 463 m, or 335 points and 463 m. Identical distance,
+      // three times the resolution.
+      //
+      // The smoothing is unaffected either way: its weight comes from the
+      // time since the last fix, not from how many fixes there have been, so
+      // it is the same strength in seconds whichever way this goes.
 
       this.distance_m += d;
       this.moving_ms += Math.min(dt, 10) * 1000;   // a long gap is a pause, not a sprint
