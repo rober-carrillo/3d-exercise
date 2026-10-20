@@ -81,8 +81,8 @@ function paintList() {
   // label — the "example" tag the other lists carry would be on all of them.
   grid.innerHTML = routeDiary(routes, {
     tagOrigin: false,
-    actions: r => `<button class="dl copy" data-slug="${r.slug}" title="${t('share.viewer')}">🔗<span> ${t('row.copy')}</span></button>
-      <a class="dl" href="./standalone/${r.slug}.html">⤓<span> ${t('row.single')}</span></a>`,
+    actions: r => `<button class="dl copy" data-slug="${r.slug}" title="${t('share.viewer')}"><i class="ic">🔗</i><span class="lbl">${t('row.copy')}</span></button>
+      <a class="dl" href="./standalone/${r.slug}.html"><i class="ic">⤓</i><span class="lbl">${t('row.single')}</span></a>`,
   });
 
   grid.querySelectorAll('.dl.copy').forEach(b => b.addEventListener('click', async e => {

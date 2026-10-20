@@ -157,10 +157,16 @@ export function idwSampler(track, frame) {
 /**
  * Elevation colours shared by the ribbon, the profile and the legend: five flat
  * fruit bands, like the tints on a printed map. Bands, not a blend, because
- * blending mango into watermelon passes through orange. Keep in step with
- * RAMP_GLSL in renderer.js and .rv-ramp in ui.css.
+ * blending mango into watermelon passes through a muddy orange of its own.
+ *
+ * It used to end on plum. Purple reads as "off the end of the scale" rather
+ * than as "high", so the top of every route looked like an error — and the
+ * eye has no idea whether plum is above or below watermelon. Climbing from
+ * green through mango to a bright red is a gradient everybody already knows.
+ *
+ * Keep in step with RAMP_GLSL in renderer.js and .rv-ramp in ui.css.
  */
-const BANDS = [[46, 138, 80], [124, 192, 106], [245, 183, 0], [228, 35, 63], [122, 46, 107]];
+const BANDS = [[46, 138, 80], [124, 192, 106], [245, 183, 0], [240, 118, 26], [232, 22, 46]];
 export function ramp(t) {
   const c = BANDS[Math.min(BANDS.length - 1, Math.floor(clamp(t, 0, 1) * BANDS.length))];
   return [c[0] / 255, c[1] / 255, c[2] / 255];

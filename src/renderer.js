@@ -69,8 +69,8 @@ vec3 ramp(float t){t=clamp(t,0.0,1.0);
   if(t<0.2)return vec3(0.180,0.541,0.314);
   if(t<0.4)return vec3(0.486,0.753,0.416);
   if(t<0.6)return vec3(0.961,0.718,0.0);
-  if(t<0.8)return vec3(0.894,0.137,0.247);
-  return vec3(0.478,0.180,0.420);}`;
+  if(t<0.8)return vec3(0.941,0.463,0.102);
+  return vec3(0.910,0.086,0.180);}`;
 const FOG_GLSL = `float fogf(float d){return smoothstep(uFogNear,uFogFar,d);}`;
 
 export class Renderer {

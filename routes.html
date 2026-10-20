@@ -131,6 +131,17 @@
   </div>
 </div>
 
+<div class="ask" id="ask">
+  <div class="ask-card rv-panel">
+    <h2 data-i18n="del.title">¿Borrar esta ruta?</h2>
+    <p id="ask-body"></p>
+    <div class="ask-btns">
+      <button type="button" class="danger" id="ask-yes" data-i18n="del.yes">Borrar</button>
+      <button type="button" id="ask-no" data-i18n="del.no">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="drop"><div data-i18n="routes.drop">Suelta archivos GPX para construirlos</div></div>
 <div id="toast" class="rv-panel"></div>
 
@@ -201,15 +212,16 @@ function actions(r) {
   // teaches that in the moment somebody wants it — which is a better place to
   // learn it than a paragraph nobody read on the way in.
   out.push(`<button class="dl copy" data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"
-    title="${canLink(r) ? t('share.viewer') : t('share.local')}">🔗<span> ${t('row.copy')}</span></button>`);
+    title="${canLink(r) ? t('share.viewer') : t('share.local')}"><i class="ic">🔗</i><span class="lbl">${t('row.copy')}</span></button>`);
   if (r.cloud) {
-    out.push(`<button class="dl share" data-id="${r.id}" title="${t('share.title')}">${
+    out.push(`<button class="dl share" data-id="${r.id}" title="${t('share.title')}"><i class="ic">${
       r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
-    }<span> ${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}</span></button>`);
+    }</i><span class="lbl">${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}</span></button>`);
   }
   if (r.local) {
-    out.push(`<button class="dl gpx" data-slug="${r.slug}">⤓<span> ${t('row.gpx')}</span></button>
-      <button class="rm" data-slug="${r.slug}" aria-label="${escapeHtml(r.name)}">✕</button>`);
+    out.push(`<button class="dl gpx" data-slug="${r.slug}"><i class="ic">⤓</i><span class="lbl">${t('row.gpx')}</span></button>
+      <button class="rm" data-slug="${r.slug}" data-name="${escapeHtml(r.name)}"
+        aria-label="${t('del.yes')} ${escapeHtml(r.name)}"><i class="ic">✕</i></button>`);
   }
   return out.join('');
 }
@@ -335,18 +347,49 @@ function render() {
     try {
       const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.track?.activity ?? 'other' });
       const how = await saveGPX(safeName(entry.name), gpx);
-      toast(how === 'shared' ? t('toast.sendto') : t('toast.saved', { name: safeName(entry.name) }));
+      // Only when the file was written somewhere. A 'shared' result means the
+      // Android share sheet has already come up and been dealt with, so a
+      // toast telling them to choose where to send it arrives after they have.
+      if (how !== 'shared') toast(t('toast.saved', { name: safeName(entry.name) }));
     } catch (err) {
       toast(t('toast.savefail', { why: err.message }));
     } finally { b.disabled = false; }
   }));
 
+  // These buttons are small and sit beside each other, and the route behind
+  // one of them may be the only copy in existence. One stray tap is not
+  // consent to destroy it.
   grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
-    removeLocalRoute(b.dataset.slug);
-    render();
+    askDelete(b.dataset.slug, b.dataset.name || '');
   }));
 }
+
+/* ---------- deleting one ---------- */
+const askEl = document.getElementById('ask');
+let askSlug = null;
+
+function askDelete(slug, name) {
+  askSlug = slug;
+  // A route held only here has no copy anywhere, and the warning says so
+  // rather than offering the same sentence for both situations.
+  const entry = all().find(r => r.slug === slug);
+  document.getElementById('ask-body').innerHTML =
+    t(entry?.local ? 'del.body.only' : 'del.body', { name: escapeHtml(name || entry?.name || '') });
+  askEl.classList.add('on');
+  document.getElementById('ask-no').focus();
+}
+const closeAsk = () => { askEl.classList.remove('on'); askSlug = null; };
+document.getElementById('ask-no').addEventListener('click', closeAsk);
+askEl.addEventListener('click', e => { if (e.target === askEl) closeAsk(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && askEl.classList.contains('on')) closeAsk(); });
+document.getElementById('ask-yes').addEventListener('click', () => {
+  if (!askSlug) return;
+  removeLocalRoute(askSlug);
+  closeAsk();
+  render();
+  toast(t('del.done'));
+});
 
 /* ---------- adding files ---------- */
 async function ingest(files) {

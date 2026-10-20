@@ -139,7 +139,7 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-readout b{color:var(--ink);font-weight:600}
 
 .rv-legend{position:fixed;left:16px;bottom:154px;padding:9px 12px;z-index:5;font-size:10.5px;color:var(--ink-2)}
-.rv-ramp{width:132px;height:6px;border-radius:4px;margin:6px 0 4px;background:linear-gradient(90deg,#2e8a50 0 20%,#7cc06a 20% 40%,#f5b700 40% 60%,#e4233f 60% 80%,#7a2e6b 80%)}
+.rv-ramp{width:132px;height:6px;border-radius:4px;margin:6px 0 4px;background:linear-gradient(90deg,#2e8a50 0 20%,#7cc06a 20% 40%,#f5b700 40% 60%,#f0761a 60% 80%,#e8162e 80%)}
 .rv-lgrow{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:10px;color:var(--ink-3)}
 .rv-status{position:fixed;right:16px;bottom:154px;padding:8px 12px;z-index:5;font-size:10.5px;color:var(--ink-3);max-width:272px;white-space:nowrap}
 .rv-ver{margin-left:8px;padding-left:8px;border-left:1px solid var(--line);color:var(--ink-3);font-variant-numeric:tabular-nums}
@@ -271,8 +271,14 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .num small{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .acts{display:flex;gap:2px;position:relative;z-index:2}
 .dl,.rm{font:inherit;font-size:11.5px;color:var(--ink-3);background:none;border:1px solid transparent;border-radius:8px;
-  min-height:40px;padding:0 10px;cursor:pointer;text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;
+  min-height:40px;min-width:40px;padding:0 10px;cursor:pointer;text-decoration:none;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
   transition:color .15s,border-color .15s}
+/* The glyph is the button as far as the eye is concerned, so it is sized like
+   one. Inheriting the label's 11.5px left a tiny arrow adrift in a 40px
+   target, which reads as a mistake rather than as something to press. */
+.dl .ic,.rm .ic{font-size:18px;line-height:1;font-style:normal;display:block}
+.rm .ic{font-size:15px}
 .dl:hover{color:var(--accent);border-color:var(--line-2)}
 .rm:hover{color:var(--hot);border-color:var(--line-2)}
 .dl:disabled{opacity:.5;cursor:wait}
@@ -290,7 +296,7 @@ footer a{color:var(--ink-2)}
   .wrap{padding:36px 16px 72px}
   .row a.go{grid-template-columns:40px minmax(0,1fr) auto;gap:12px}
   .spark{display:none}
-  .dl span,.rm span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .dl .lbl,.rm .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 }
 
 /* ---- the crowd in the background (src/ambient.js) ----
@@ -302,3 +308,17 @@ footer a{color:var(--ink-2)}
    wanders about inside a small invisible box in the corner. */
 .amb{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:auto}
 @media (prefers-reduced-motion:reduce){.amb{display:none}}
+
+/* ---- asking before something cannot be undone ---- */
+.ask{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
+  background:var(--scrim);backdrop-filter:blur(8px);padding:20px}
+.ask.on{display:flex}
+.ask-card{width:min(400px,100%);padding:26px;display:flex;flex-direction:column;gap:12px}
+.ask-card h2{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em}
+.ask-card p{margin:0;font-size:13.5px;line-height:1.6;color:var(--ink-2)}
+.ask-card b{color:var(--ink)}
+.ask-btns{display:flex;gap:8px;margin-top:8px}
+.ask-btns button{flex:1;font:inherit;font-size:13px;font-weight:580;border-radius:10px;padding:11px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--panel);color:var(--ink)}
+.ask-btns .danger{background:var(--hot);border-color:var(--hot);color:var(--on-accent)}
+.ask-btns .danger:hover{filter:brightness(1.08)}

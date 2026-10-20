@@ -162,6 +162,12 @@ const DICT = {
     'routes.best': 'Mejor a pie',
     'routes.best.none': 'todavía no hay nada cronometrado y lo bastante largo — cualquier cosa que grabes en la app contará',
     'routes.best.busy': 'comprobando {n} más…',
+    'del.title': '¿Borrar esta ruta?',
+    'del.body': 'Vas a quitar <b>{name}</b> de este aparato. No se puede deshacer.',
+    'del.body.only': 'Vas a quitar <b>{name}</b>. Esta ruta solo está aquí, así que no se puede recuperar.',
+    'del.yes': 'Borrar',
+    'del.no': 'Cancelar',
+    'del.done': 'Ruta borrada.',
 
     'lib.title': 'Rutas públicas',
     'lib.lede': 'Rutas publicadas con Salpicón!, abiertas para cualquiera. Ninguna es tuya — están aquí como ejemplo '
@@ -384,6 +390,12 @@ const DICT = {
     'routes.best': 'Best on foot',
     'routes.best.none': 'nothing timed and long enough yet — anything you record in the app will count',
     'routes.best.busy': 'checking {n} more…',
+    'del.title': 'Delete this route?',
+    'del.body': 'This will remove <b>{name}</b> from this device. It cannot be undone.',
+    'del.body.only': 'This will remove <b>{name}</b>. This route exists only here, so it cannot be recovered.',
+    'del.yes': 'Delete',
+    'del.no': 'Cancel',
+    'del.done': 'Route deleted.',
 
     'lib.title': 'Public library',
     'lib.lede': 'Routes published with Salpicón!, open to anyone. None of these are yours — they are here as '
