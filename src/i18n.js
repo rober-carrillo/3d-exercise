@@ -138,6 +138,12 @@ const DICT = {
     'rec.saved.local': 'Guardado {name} — {km} km',
     'rec.saved.cloud': 'Guardado en tu cuenta — {km} km',
     'rec.saved.offline': 'Guardado en este aparato. Se subirá cuando vuelvas a tener conexión.',
+    'sync.waiting': 'Sin conexión. {n} ruta(s) se subirán solas en cuanto vuelvas a tener internet.',
+    'sync.uploading': 'Subiendo tus rutas… {done} de {total}',
+    'sync.done.one': 'Tu ruta ya está en tu cuenta.',
+    'sync.done.many': '{n} rutas subidas a tu cuenta.',
+    'sync.failed': 'No se pudieron subir {n} ruta(s) todavía. Se intentará de nuevo solo.',
+    'sync.pending': '{n} ruta(s) esperando a subirse a tu cuenta.',
 
     'routes.title': 'Tus rutas',
     'routes.empty.title': 'Todavía no hay nada aquí',
@@ -166,6 +172,7 @@ const DICT = {
 
     'row.pace': 'ritmo grabado',
     'row.local': 'este navegador',
+    'row.local.app': 'solo en este teléfono',
     'row.example': 'ejemplo',
     'row.added': 'añadida',
     'row.copy': 'copiar enlace',
@@ -181,6 +188,8 @@ const DICT = {
     'share.opened': 'Enlace copiado. Cualquiera que lo tenga puede abrir esta ruta.',
     'share.blocked': 'No se ha podido copiar. El enlace es {url}',
     'share.local': 'Esta ruta solo está en este navegador, así que todavía no hay enlace. Entra y súbela primero.',
+    'share.local.app': 'Esta ruta todavía está solo en este teléfono. Entra en tu cuenta y se subirá sola; '
+      + 'entonces habrá un enlace.',
     'share.private': 'Esta ruta es privada. Ábrela primero y el enlace funcionará.',
     'share.gone': 'Esa ruta ya no está.',
     'share.nolink': 'No se ha podido crear un enlace para esa ruta.',
@@ -217,6 +226,12 @@ const DICT = {
     'r.failed.offline': 'No hay conexión con el servidor. Vuelve a probar cuando tengas conexión.',
     'r.failed.why': 'Algo ha salido mal al buscarla. Prueba el enlace otra vez en un momento.',
     'r.open': 'Abrir Salpicón!',
+    'map.offline': 'Estás sin conexión, así que no se pudo cargar la imagen de satélite. El relieve viene de '
+      + 'los datos de elevación y de tu propia traza. Vuelve a abrir esta ruta con wifi o datos y se verá el mapa.',
+    'map.partial': 'Solo llegó parte del mapa ({pct}%). Necesita conexión la primera vez que se abre una ruta.',
+    'map.none': 'No se pudo cargar la imagen del mapa. Necesita conexión la primera vez que se abre una ruta.',
+    'map.retry': 'Reintentar',
+    'map.skip': 'Ver la ruta igual',
 
     'foot.all': 'Imágenes © Esri y sus colaboradores · Elevación de '
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP y otros) · '
@@ -345,6 +360,12 @@ const DICT = {
     'rec.saved.local': 'Saved {name} — {km} km',
     'rec.saved.cloud': 'Saved to your account — {km} km',
     'rec.saved.offline': 'Saved on this device. It will upload when you are back online.',
+    'sync.waiting': 'No connection. {n} route(s) will upload on their own as soon as you are back online.',
+    'sync.uploading': 'Uploading your routes… {done} of {total}',
+    'sync.done.one': 'Your route is in your account now.',
+    'sync.done.many': '{n} routes uploaded to your account.',
+    'sync.failed': 'Could not upload {n} route(s) yet. It will keep trying on its own.',
+    'sync.pending': '{n} route(s) waiting to upload to your account.',
 
     'routes.title': 'Your routes',
     'routes.empty.title': 'Nothing here yet',
@@ -373,6 +394,7 @@ const DICT = {
 
     'row.pace': 'recorded pace',
     'row.local': 'this browser',
+    'row.local.app': 'only on this phone',
     'row.example': 'example',
     'row.added': 'added',
     'row.copy': 'copy link',
@@ -388,6 +410,8 @@ const DICT = {
     'share.opened': 'Link copied. Anyone with it can now open this route.',
     'share.blocked': 'Copying was blocked. The link is {url}',
     'share.local': 'This route is only in this browser, so there is no link to it yet. Sign in and upload it first.',
+    'share.local.app': 'This route is still only on this phone. Sign in and it will upload on its own, and '
+      + 'then there will be a link.',
     'share.private': 'This route is private. Open it up first and the link will work.',
     'share.gone': 'That route is gone.',
     'share.nolink': 'No link could be made for that route.',
@@ -424,6 +448,12 @@ const DICT = {
     'r.failed.offline': 'No connection to the server. Try again when you are back online.',
     'r.failed.why': 'Something went wrong fetching it. Try the link again in a moment.',
     'r.open': 'Open Salpicón!',
+    'map.offline': 'You are offline, so the satellite imagery could not load. The relief comes from elevation '
+      + 'data and from your own track. Open this route again on wifi or data and the map will be there.',
+    'map.partial': 'Only part of the map arrived ({pct}%). It needs a connection the first time a route is opened.',
+    'map.none': 'The map imagery did not load. It needs a connection the first time a route is opened.',
+    'map.retry': 'Try again',
+    'map.skip': 'Show the route anyway',
 
     'foot.all': 'Imagery © Esri and its contributors · Elevation from '
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) · '
@@ -505,7 +535,22 @@ export const toggleLang = () => setLang(current === 'es' ? 'en' : 'es');
  * page with `hero.title` across the top is a bug anybody can see and report,
  * and a page with a blank heading looks like a layout problem.
  */
+/**
+ * Is this the Android app rather than a browser tab?
+ *
+ * It matters for wording and nothing else. "Kept in this browser" is accurate
+ * — the app is a WebView and that is genuinely where the route is — and it is
+ * also nonsense to somebody holding a phone who never opened a browser. Where
+ * a string has an `.app` variant, the app gets it.
+ */
+const inApp = () => {
+  try { return !!(window.Capacitor?.isNativePlatform?.() || window.Capacitor?.Plugins?.RelieveRecorder); }
+  catch { return false; }
+};
+
 export function t(key, vars) {
+  const dict = DICT[current] ?? DICT.es;
+  if (inApp() && (dict[key + '.app'] ?? DICT.es[key + '.app'])) key += '.app';
   let s = DICT[current][key] ?? DICT.es[key] ?? key;
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, v);
   return s;

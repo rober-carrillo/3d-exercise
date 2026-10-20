@@ -60,11 +60,18 @@ export function addLocalRoute(fileName, track, profile) {
     date: track.time || new Date().toISOString(),
     dateSource: track.time ? 'recorded' : 'added',
     pace: !!track.secs,
+    // carried so an upload can say what the outing was. Without it every
+    // synced route arrives in the account as a run, football included.
+    activity: track.activity ?? null,
     stats: track.stats,
     bbox: b,
     center: [(b.minLat + b.maxLat) / 2, (b.minLon + b.maxLon) / 2],
     profile,
-    track: { name: track.name, time: track.time, stats: track.stats, bbox: b, lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist, secs: track.secs },
+    track: {
+      name: track.name, time: track.time, activity: track.activity ?? null,
+      stats: track.stats, bbox: b,
+      lat: track.lat, lon: track.lon, ele: track.ele, dist: track.dist, secs: track.secs,
+    },
   };
   all[slug] = entry;
   if (!writeAll(all)) {

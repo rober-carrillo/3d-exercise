@@ -248,6 +248,7 @@ import { markSVG, signalFor } from './src/mark.js';
 import { initTheme, themeToggle } from './src/theme.js';
 import { initLang, langToggle, t } from './src/i18n.js';
 import { startAmbient } from './src/ambient.js';
+import { startSync, onSync, pendingCount } from './src/sync.js';
 
 initTheme();
 initLang();
@@ -694,7 +695,11 @@ document.getElementById('recstop').addEventListener('click', async () => {
       href = `./view.html?cloud=${encodeURIComponent(saved.id)}`;
       toast(t('rec.saved.cloud', { km: fmtKm(track.stats.distance_m) }));
     } catch {
+      // The upload failed — almost always because a run ends somewhere with no
+      // signal. The route is already in local storage and src/sync.js will
+      // keep trying, so the promise in this message is one the app now keeps.
       toast(t('rec.saved.offline'));
+      syncer.now();
     }
   } else {
     toast(t('rec.saved.local', { name, km: fmtKm(track.stats.distance_m) }));
@@ -736,7 +741,7 @@ function paintAccount(user) {
     document.getElementById('acct-email-out').textContent = user.email ?? '';
     const local = listLocalRoutes().length;
     document.getElementById('acct-sync').textContent = !local ? t('acct.pending.none')
-      : local === 1 ? t('acct.pending.one') : t('acct.pending.many', { n: local });
+      : t('sync.pending', { n: local });
   }
 }
 
@@ -820,6 +825,16 @@ document.getElementById('acct-upload').addEventListener('click', async e => {
 await account.ready();
 account.onChange(paintAccount);
 setMode('in');
+
+/* ---------- uploading what is still on this device ---------- */
+const syncer = startSync();
+onSync(s => {
+  if (s.state === 'uploading' && s.total) toast(t('sync.uploading', s));
+  else if (s.state === 'done' && s.done) toast(t(s.done === 1 ? 'sync.done.one' : 'sync.done.many', { n: s.done }));
+  else if (s.state === 'failed' && s.failed) toast(t('sync.failed', { n: s.failed }));
+  else if (s.state === 'waiting' && s.total) toast(t('sync.waiting', { n: s.total }));
+  paintAccount(account.user());
+});
 
 // The other pages send people here for the two things that only live here: the
 // recorder, and the sign-in form. One copy of each, reached by a link.

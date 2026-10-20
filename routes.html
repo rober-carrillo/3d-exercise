@@ -145,6 +145,7 @@ import { shareRoute, routeLink, canLink } from './src/share.js';
 import { markSVG } from './src/mark.js';
 import { initTheme, themeToggle } from './src/theme.js';
 import { initLang, langToggle, t } from './src/i18n.js';
+import { startSync, onSync } from './src/sync.js';
 
 initTheme();
 initLang();
@@ -469,6 +470,17 @@ account.onChange(user => {
   btn.removeAttribute('data-i18n');
   btn.textContent = user ? (user.email?.split('@')[0] ?? t('nav.account')) : t('nav.signin');
   refreshCloud();
+});
+
+/* Anything still only on this device goes up from here too, so a route does
+ * not sit waiting just because the person opened their routes rather than the
+ * landing page. */
+startSync();
+onSync(s => {
+  if (s.state === 'uploading' && s.total) toast(t('sync.uploading', s));
+  else if (s.state === 'done' && s.done) { toast(t(s.done === 1 ? 'sync.done.one' : 'sync.done.many', { n: s.done })); refreshCloud(); }
+  else if (s.state === 'failed' && s.failed) toast(t('sync.failed', { n: s.failed }));
+  else render();
 });
 
 render();

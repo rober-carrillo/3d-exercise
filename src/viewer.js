@@ -163,12 +163,17 @@ export class RouteViewer {
     const msg = this.$('msg'), bar = this.mount.querySelector('.rv-bar');
     if (!msg) return Promise.resolve(false);
     if (bar) bar.style.display = 'none';
-    msg.innerHTML = (share > 0
-        ? `Only part of the map arrived (${Math.round(share * 100)}%).`
-        : 'The map imagery did not load.')
-      + ' It needs a connection the first time a route is opened.'
-      + '<span class="rv-choice"><button type="button" class="rv-again">Try again</button>'
-      + '<button type="button" class="rv-skip">Show the route anyway</button></span>';
+    // Being offline is not the same as the imagery failing, and saying so
+    // matters: the first is nobody's fault, it is temporary, and the thing to
+    // do about it is come back later. The route itself is already drawn from
+    // the track and the elevation data, so there is something to look at
+    // meanwhile — which is worth saying too, or it reads as a broken app.
+    const offline = navigator.onLine === false;
+    msg.innerHTML = (offline ? t('map.offline')
+        : share > 0 ? t('map.partial', { pct: Math.round(share * 100) })
+        : t('map.none'))
+      + `<span class="rv-choice"><button type="button" class="rv-again">${t('map.retry')}</button>`
+      + `<button type="button" class="rv-skip">${t('map.skip')}</button></span>`;
     return new Promise(resolve => {
       const done = v => { if (bar) bar.style.display = ''; resolve(v); };
       msg.querySelector('.rv-again').addEventListener('click', () => done(true), { once: true });
