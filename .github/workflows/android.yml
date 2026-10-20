@@ -29,9 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 22, not 20: the Capacitor CLI refuses to run on anything older, and the
+      # only sign of it is `cap sync` failing after the web build has already
+      # succeeded — which reads like a problem with the app rather than with
+      # the runner.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - uses: actions/setup-java@v4

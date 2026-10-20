@@ -12,6 +12,7 @@
   "engines": {
     "node": ">=18"
   },
+  "comment:engines": "The site itself builds on 18. `npx cap sync`, which only the Android build runs, needs 22.",
   "dependencies": {
     "@capacitor/android": "^8.5.3",
     "@capacitor/cli": "^8.5.3",
