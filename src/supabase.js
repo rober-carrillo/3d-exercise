@@ -190,6 +190,41 @@ export function createClient(url, publishableKey) {
       }));
       return session;
     },
+    /**
+     * Send somebody a link to set a new password.
+     *
+     * Always resolves, whatever the server says about the address. Reporting
+     * that an email is not registered tells anyone who asks which addresses
+     * have accounts here, and that is a list worth not handing out; the
+     * caller says "if that address has an account, a link is on its way"
+     * either way.
+     */
+    async recover(email, { redirectTo } = {}) {
+      const q = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+      try {
+        await request(`/auth/v1/recover${q}`, { method: 'POST', body: { email } });
+      } catch (err) {
+        // A rate limit is worth passing on, since waiting is the fix and the
+        // person needs to know that. Anything else is swallowed on purpose.
+        if (/rate limit|too many/i.test(String(err?.message))) throw err;
+      }
+      return true;
+    },
+
+    /**
+     * Change the password of whoever is signed in.
+     *
+     * Used both from the recovery link — which signs somebody in just long
+     * enough to do this — and from an ordinary session.
+     */
+    async setPassword(password) {
+      const tok = await token();
+      if (!tok) throw new Error('Not signed in');
+      const user = await request('/auth/v1/user', { method: 'PUT', body: { password }, token: tok });
+      if (user?.id) setSession({ ...session, expires_in: (session.expires_at - Date.now()) / 1000, user });
+      return user;
+    },
+
     async signOut() {
       const t = await token();
       if (t) { try { await request('/auth/v1/logout', { method: 'POST', token: t }); } catch {} }

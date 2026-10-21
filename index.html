@@ -187,12 +187,15 @@
       <input id="acct-email" name="email" type="email" required autocomplete="email" inputmode="email">
       <label for="acct-pass" data-i18n="acct.pass">Contraseña</label>
       <input id="acct-pass" name="password" type="password" required autocomplete="current-password" minlength="6">
+      <label for="acct-pass2" id="acct-pass2-label" data-i18n="acct.pass2" hidden>Repite la contraseña</label>
+      <input id="acct-pass2" name="password2" type="password" autocomplete="new-password" minlength="6" hidden>
       <p class="acct-msg" id="acct-msg" role="status"></p>
       <div class="acct-btns">
         <button type="submit" class="add" id="acct-go" data-i18n="acct.go.in">Entrar</button>
         <button type="button" class="add quiet" id="acct-swap" data-i18n="acct.title.up">Crear una cuenta</button>
         <button type="button" class="add quiet" id="acct-close" data-i18n="acct.notnow">Ahora no</button>
       </div>
+      <button type="button" class="linky" id="acct-forgot" data-i18n="acct.forgot">¿Olvidaste tu contraseña?</button>
     </form>
     <div id="acct-in" hidden>
       <p class="acct-who"><span data-i18n="acct.signedas">Has entrado como</span> <b id="acct-email-out"></b></p>
@@ -884,7 +887,7 @@ document.getElementById('recstop').addEventListener('click', async () => {
  */
 const acctEl = document.getElementById('acct');
 const acctMsg = document.getElementById('acct-msg');
-let mode = 'in';                               // 'in' to sign in, 'up' to register
+let mode = 'in';     // 'in' sign in · 'up' register · 'recover' ask for a link · 'new' set one
 
 const say = (text, ok = false) => {
   acctMsg.textContent = text;
@@ -914,17 +917,54 @@ function paintAccount(user) {
   }
 }
 
+/**
+ * Point the one form at one of four jobs.
+ *
+ * One form rather than four, because they differ by a field and a verb and
+ * nothing else, and four copies of an email box is four places for a
+ * validation rule to drift.
+ */
 function setMode(next) {
   mode = next;
-  // These four carry data-i18n for their first paint and are driven by hand
-  // after that, since what they say depends on which way the form is pointing.
-  for (const id of ['acct-go', 'acct-swap', 'acct-title']) {
-    document.getElementById(id).removeAttribute('data-i18n');
-  }
-  document.getElementById('acct-go').textContent = t(mode === 'in' ? 'acct.go.in' : 'acct.go.up');
-  document.getElementById('acct-swap').textContent = t(mode === 'in' ? 'acct.title.up' : 'hero.havaccount');
-  document.getElementById('acct-pass').autocomplete = mode === 'in' ? 'current-password' : 'new-password';
-  document.getElementById('acct-title').textContent = t(mode === 'in' ? 'acct.title.in' : 'acct.title.up');
+  const el = id => document.getElementById(id);
+  // These carry data-i18n for their first paint and are driven by hand after
+  // that, since what they say depends on which way the form is pointing.
+  for (const id of ['acct-go', 'acct-swap', 'acct-title', 'acct-forgot']) el(id).removeAttribute('data-i18n');
+
+  const needsPassword = mode !== 'recover';
+  const needsEmail = mode !== 'new';
+  const confirming = mode === 'up' || mode === 'new';
+
+  el('acct-title').textContent = t({
+    in: 'acct.title.in', up: 'acct.title.up',
+    recover: 'acct.recover.title', new: 'acct.new.title',
+  }[mode]);
+  el('acct-go').textContent = t({
+    in: 'acct.go.in', up: 'acct.go.up',
+    recover: 'acct.recover.go', new: 'acct.new.go',
+  }[mode]);
+  document.querySelector('.acct-why').textContent = t({
+    in: 'acct.why', up: 'acct.why',
+    recover: 'acct.recover.why', new: 'acct.new.why',
+  }[mode]);
+
+  el('acct-email').parentElement.querySelector('label[for="acct-email"]').hidden = !needsEmail;
+  el('acct-email').hidden = !needsEmail;
+  el('acct-email').required = needsEmail;
+  el('acct-pass').parentElement.querySelector('label[for="acct-pass"]').hidden = !needsPassword;
+  el('acct-pass').hidden = !needsPassword;
+  el('acct-pass').required = needsPassword;
+  el('acct-pass').autocomplete = mode === 'in' ? 'current-password' : 'new-password';
+  el('acct-pass2').hidden = !confirming;
+  el('acct-pass2-label').hidden = !confirming;
+  el('acct-pass2').required = confirming;
+
+  // Swapping between sign-in and sign-up is the only swap worth offering; the
+  // other two modes are reached from somewhere and left by finishing.
+  el('acct-swap').hidden = confirming && mode === 'new';
+  el('acct-swap').textContent = t(mode === 'up' ? 'hero.havaccount' : 'acct.title.up');
+  el('acct-forgot').hidden = mode !== 'in';
+  el('acct-forgot').textContent = t('acct.forgot');
   say('');
 }
 addEventListener('salpicon:lang', () => setMode(mode));
@@ -945,21 +985,50 @@ for (const id of ['acct-close', 'acct-close2']) {
   document.getElementById(id).addEventListener('click', () => acctEl.classList.remove('on'));
 }
 acctEl.addEventListener('click', e => { if (e.target === acctEl) acctEl.classList.remove('on'); });
-document.getElementById('acct-swap').addEventListener('click', () => setMode(mode === 'in' ? 'up' : 'in'));
+document.getElementById('acct-swap').addEventListener('click', () => setMode(mode === 'up' ? 'in' : 'up'));
+document.getElementById('acct-forgot').addEventListener('click', () => {
+  setMode('recover');
+  document.getElementById('acct-email').focus();
+});
 
 document.getElementById('acct-form').addEventListener('submit', async e => {
   e.preventDefault();
   const go = document.getElementById('acct-go');
   const email = document.getElementById('acct-email').value;
   const password = document.getElementById('acct-pass').value;
+  const repeat = document.getElementById('acct-pass2').value;
+
+  // Checked here rather than left to the server, which never sees the second
+  // box and would happily create an account around a typo nobody can see.
+  if ((mode === 'up' || mode === 'new')) {
+    if (password.length < 6) return say(t('acct.short'));
+    if (password !== repeat) {
+      say(t('acct.mismatch'));
+      document.getElementById('acct-pass2').focus();
+      document.getElementById('acct-pass2').select();
+      return;
+    }
+  }
+
   go.disabled = true;
-  say(t(mode === 'in' ? 'acct.working.in' : 'acct.working.up'));
+  say(t({ in: 'acct.working.in', up: 'acct.working.up',
+          recover: 'acct.recover.sending', new: 'acct.new.saving' }[mode]));
   try {
     if (mode === 'in') {
       await account.signIn(email, password);
       say('');
       acctEl.classList.remove('on');
       toast(t('acct.done.in'));
+    } else if (mode === 'recover') {
+      await account.recover(email);
+      // Said the same way whether or not that address has an account: a page
+      // that confirms which emails are registered enumerates its own users.
+      say(t('acct.recover.sent'), true);
+    } else if (mode === 'new') {
+      await account.setPassword(password);
+      acctEl.classList.remove('on');
+      setMode('in');
+      toast(t('acct.new.done'));
     } else {
       const { needsConfirmation } = await account.signUp(email, password);
       // the two outcomes look nothing alike to the person in front of the
@@ -1001,7 +1070,15 @@ setMode('in');
  * page is indistinguishable from the link not having worked.
  */
 const arrived = account.arrivedFromEmail();
-if (arrived?.state === 'signed-in') {
+if (arrived?.state === 'signed-in' && arrived.kind === 'recovery') {
+  // A recovery link signs somebody in just long enough to choose a password.
+  // Landing them on the home page signed in, with the old password still
+  // live and nothing said about it, would be a strange end to pressing
+  // "I forgot my password".
+  setMode('new');
+  acctEl.classList.add('on');
+  document.getElementById('acct-pass').focus();
+} else if (arrived?.state === 'signed-in') {
   toast(t('acct.welcome'));
 } else if (arrived?.state === 'error') {
   const expired = /expired/i.test(arrived.message || '') || arrived.kind === 'otp_expired';

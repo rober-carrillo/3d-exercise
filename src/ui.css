@@ -322,3 +322,8 @@ footer a{color:var(--ink-2)}
   border:1px solid var(--line-2);background:var(--panel);color:var(--ink)}
 .ask-btns .danger{background:var(--hot);border-color:var(--hot);color:var(--on-accent)}
 .ask-btns .danger:hover{filter:brightness(1.08)}
+
+/* a quiet text button, for the things that are not the main action */
+.linky{align-self:flex-start;margin-top:10px;font:inherit;font-size:12px;color:var(--ink-3);
+  background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.linky:hover{color:var(--accent)}

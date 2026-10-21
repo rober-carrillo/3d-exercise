@@ -106,6 +106,25 @@ export async function signUp(email, password) {
   return { needsConfirmation: res.needsConfirmation, user: res.user };
 }
 
+/**
+ * Ask for a password-reset link.
+ *
+ * Resolves the same way whether or not that address has an account. The
+ * message the caller shows says "if there is an account" for the same reason:
+ * a page that confirms which addresses are registered is a page that enumerates
+ * its own users for anybody who asks.
+ */
+export async function recover(email) {
+  if (!client) throw new Error('Accounts are not configured in this build');
+  return client.auth.recover(email.trim(), { redirectTo: returnUrl() });
+}
+
+/** Set a new password for whoever is signed in. */
+export async function setPassword(password) {
+  if (!client) throw new Error('Accounts are not configured in this build');
+  return client.auth.setPassword(password);
+}
+
 export async function signOut() {
   if (client) await client.auth.signOut();
 }
