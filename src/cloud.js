@@ -58,7 +58,17 @@ export function rowToRoute(row) {
     source: row.source,
     date: row.recorded_at ?? row.created_at ?? null,
     dateSource: row.recorded_at ? 'recorded' : 'added',
-    pace: !!t.secs,
+    // Whether the replay can follow the pace it was run at.
+    //
+    // Not `!!t.secs`, which is the obvious answer and wrong for most rows: the
+    // list query deliberately leaves the points behind — they are megabytes —
+    // so `track` is absent and every route in the list claimed to be untimed,
+    // including ones recorded by the app a minute earlier.
+    //
+    // `duration_s` answers the same question from the summary, which the list
+    // does fetch. analyze() sets both from one `timed` flag, so a route has a
+    // duration exactly when it has per-point times.
+    pace: !!(t.secs || row.stats?.duration_s != null),
     visibility: row.visibility,
     shareToken: row.share_token ?? null,
     stats: row.stats,
