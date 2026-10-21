@@ -38,6 +38,24 @@ public class RecordingPlugin extends Plugin {
     @Override
     public void load() { instance = this; }
 
+    /**
+     * Has this app been given *precise* location, as opposed to approximate?
+     *
+     * Android 12 split the prompt in two, and the alias above lists both fine
+     * and coarse, so Capacitor reports the permission GRANTED when somebody
+     * taps "Approximate". Everything then looks fine and nothing works: the
+     * fused provider answers from wifi and cell towers, which is accurate to
+     * a few hundred metres and never improves, so every fix is thrown out by
+     * the accuracy filter and the recording never starts. The raw GPS provider
+     * used to throw a SecurityException in the same situation, which at least
+     * said something. This is how we say something now.
+     */
+    private boolean hasPrecise() {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+                getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
     /* ---------- called from the service ---------- */
 
     static void onFix(Location l) {
@@ -127,6 +145,101 @@ public class RecordingPlugin extends Plugin {
         JSObject res = new JSObject();
         res.put("started", true);
         res.put("notifications", getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED);
+        // The caller needs this to explain why a recording is going nowhere.
+        res.put("precise", hasPrecise());
+        call.resolve(res);
+    }
+
+    /**
+     * Start the receiver early, for a little while, without recording anything.
+     *
+     * A cold GNSS fix takes the better part of a minute, and most people open
+     * this app in order to press Record within seconds of opening it. Asking
+     * for position the moment the app is in front of somebody means the
+     * satellites are found while they are still putting their headphones in,
+     * rather than over the first block of the run.
+     *
+     * No foreground service and no notification: this stops on its own, and it
+     * is not a recording. If permission has not been granted yet it does
+     * nothing at all rather than prompting — being asked for location by an
+     * app you have only just opened, for no stated reason, is how people
+     * refuse.
+     */
+    @PluginMethod
+    public void warm(PluginCall call) {
+        JSObject res = new JSObject();
+        if (getPermissionState("location") != com.getcapacitor.PermissionState.GRANTED) {
+            res.put("warming", false);
+            res.put("reason", "no permission yet");
+            call.resolve(res);
+            return;
+        }
+        int seconds = call.getInt("seconds", 20);
+        Intent i = new Intent(getContext(), RecordingService.class)
+                .setAction(RecordingService.ACTION_WARM)
+                .putExtra("seconds", seconds);
+        getContext().startService(i);
+        res.put("warming", true);
+        res.put("precise", hasPrecise());
+        call.resolve(res);
+    }
+
+    /**
+     * Ask for location, on purpose, at a moment the app has explained itself.
+     *
+     * Separate from start() because the two are different conversations. By
+     * the time somebody presses Record they have already decided to record;
+     * a permission sheet then is an obstacle, and if they tap the wrong half
+     * of it the feature is broken with no obvious way back. Android also
+     * stops asking after a couple of refusals, so the one chance to ask is
+     * worth spending where the reason can be given first.
+     */
+    @PluginMethod
+    public void requestLocation(final PluginCall call) {
+        if (getPermissionState("location") == com.getcapacitor.PermissionState.GRANTED) {
+            resolvePrecision(call);
+            return;
+        }
+        requestPermissionForAlias("location", call, "afterAsked");
+    }
+
+    @PermissionCallback
+    private void afterAsked(PluginCall call) { resolvePrecision(call); }
+
+    private void resolvePrecision(PluginCall call) {
+        JSObject res = new JSObject();
+        res.put("granted", getPermissionState("location") == com.getcapacitor.PermissionState.GRANTED);
+        res.put("precise", hasPrecise());
+        call.resolve(res);
+    }
+
+    /**
+     * The app's own settings page, which is where location precision lives.
+     *
+     * Android will not show the location prompt again once it has been
+     * refused, and it has no prompt at all for upgrading approximate to
+     * precise. Settings is the only route, so the app has to be able to point
+     * at it rather than describing where to go.
+     */
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", getContext().getPackageName(), null));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("Could not open settings");
+        }
+    }
+
+    /** Whether precise location is available, without starting anything. */
+    @PluginMethod
+    public void precision(PluginCall call) {
+        JSObject res = new JSObject();
+        res.put("granted", getPermissionState("location") == com.getcapacitor.PermissionState.GRANTED);
+        res.put("precise", hasPrecise());
         call.resolve(res);
     }
 

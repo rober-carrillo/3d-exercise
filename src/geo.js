@@ -152,6 +152,39 @@ const recorderPlugin = () =>
 export const nativeGeoAvailable = () => !!recorderPlugin();
 
 /**
+ * Ask for location, having first said why.
+ *
+ * Returns `{ granted, precise }`, or null outside the app where the question
+ * does not arise.
+ */
+export async function requestLocationPermission() {
+  const plugin = recorderPlugin();
+  if (!plugin?.requestLocation) return null;
+  try { return await plugin.requestLocation(); } catch { return null; }
+}
+
+/** The app's own settings page — the only way to upgrade approximate to precise. */
+export async function openAppSettings() {
+  const plugin = recorderPlugin();
+  try { await plugin?.openAppSettings?.(); return true; } catch { return false; }
+}
+
+/**
+ * Has the app been given precise location, or only approximate?
+ *
+ * Android 12 split that prompt in two and the difference is the whole
+ * feature: approximate location comes from wifi and cell towers, is accurate
+ * to a few hundred metres, and never improves, so a recording made with it
+ * produces nothing a filter will accept. Returns null where the question does
+ * not apply — a browser, or an older Android.
+ */
+export async function locationPrecision() {
+  const plugin = recorderPlugin();
+  if (!plugin?.precision) return null;
+  try { return await plugin.precision(); } catch { return null; }
+}
+
+/**
  * Recording that survives the screen going off.
  *
  * `onAction` is called when one of the notification's buttons is pressed, with
@@ -243,14 +276,34 @@ export function pickGeo(opts) {
  * only just opened the app — they will be asked when they press Record, which
  * is the moment it makes sense to ask.
  */
-export function warmUp({ onAccuracy, maxMs = 10 * 60 * 1000 } = {}) {
+export function warmUp({ onAccuracy, maxMs = 10 * 60 * 1000, nativeSeconds = 20 } = {}) {
   let id = null, timer = null, best = Infinity;
   const stop = () => {
     if (id !== null) { try { navigator.geolocation.clearWatch(id); } catch {} id = null; }
     if (timer) { clearTimeout(timer); timer = null; }
   };
 
-  (async () => {
+  const begin = async () => {
+    // In the app, warm the receiver the app will actually record with — the
+    // fused provider, through the service — rather than the WebView's own
+    // geolocation, which is a different subscription that teaches the good one
+    // nothing. Twenty seconds, because somebody who opens this app is usually
+    // about to press Record, and a cold GNSS fix otherwise lands somewhere in
+    // the first block of the run. After that they are reading their routes and
+    // the receiver should be off.
+    const plugin = recorderPlugin();
+    if (plugin?.warm) {
+      try {
+        const res = await plugin.warm({ seconds: nativeSeconds });
+        const off = await plugin.addListener?.('fix', fix => {
+          best = Math.min(best, fix.accuracy ?? Infinity);
+          onAccuracy?.(fix.accuracy ?? null, best);
+        });
+        timer = setTimeout(() => { try { off?.remove?.(); } catch {} }, (nativeSeconds + 5) * 1000);
+        warmUp.precise = res?.precise ?? null;
+        return;
+      } catch {}                 // fall through to the browser receiver
+    }
     if (!geoAvailable()) return;
     try {
       // only if it is already ours; never prompt from here
@@ -267,7 +320,19 @@ export function warmUp({ onAccuracy, maxMs = 10 * 60 * 1000 } = {}) {
     );
     // a receiver left running all afternoon is a flat battery
     timer = setTimeout(stop, maxMs);
-  })();
+  };
+  begin();
 
-  return { stop, best: () => best };
+  return {
+    stop,
+    best: () => best,
+    /**
+     * Go again. Called the moment location permission is granted: the first
+     * attempt at app start found nothing to do, because at that point there
+     * was no permission to use, and without this the satellites would not be
+     * looked for until Record was pressed — which is the wait the warm-up
+     * exists to remove.
+     */
+    restart() { stop(); best = Infinity; begin(); },
+  };
 }

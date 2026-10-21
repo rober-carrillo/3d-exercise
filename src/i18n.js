@@ -135,6 +135,29 @@ const DICT = {
     'rec.denied.help': 'Salpicón! necesita permiso de ubicación para grabar. Toca Descartar, permítelo en Ajustes y empieza de nuevo.',
     'rec.nopos': 'sin posición',
     'rec.nogps': 'Este aparato no puede informar de su posición',
+    'rec.coarse': 'Le diste a Salpicón! ubicación aproximada, que viene del wifi y de las antenas y falla '
+      + 'por cientos de metros. Para grabar una ruta hace falta la precisa.',
+    'rec.coarse.fix': 'Abrir ajustes',
+    'rec.warming': 'Buscando satélites… ya puedes darle a Grabar cuando quieras.',
+    'loc.title': 'Salpicón! necesita tu ubicación precisa',
+    'loc.why': 'Para dibujar tu ruta sobre el terreno hace falta la ubicación <b>precisa</b>, la del GPS. '
+      + 'La <b>aproximada</b> viene del wifi y de las antenas, falla por cientos de metros y no sirve para '
+      + 'grabar una ruta.',
+    'loc.when': 'Solo se usa mientras grabas, y la ruta se queda en tu teléfono hasta que tú decidas subirla.',
+    'loc.ask': 'Continuar',
+    'loc.later': 'Ahora no',
+    'loc.pick': 'En la siguiente pantalla elige <b>Precisa</b>.',
+    'loc.coarse.title': 'Esa es la aproximada',
+    'loc.coarse.why': 'Android te dio ubicación aproximada, que falla por cientos de metros. Para grabar '
+      + 'rutas hay que cambiarla a precisa en los ajustes de la app.',
+    'loc.open': 'Abrir ajustes',
+    'loc.later.again': 'Sin ubicación no se pueden grabar rutas, pero todo lo demás funciona. Te lo volvemos '
+      + 'a preguntar la próxima vez que abras la app.',
+    'loc.later.last': 'Entendido, no te lo preguntamos más. Cuando quieras grabar una ruta puedes activar la '
+      + 'ubicación desde los ajustes de la app.',
+    'loc.denied': 'Sin ubicación no se pueden grabar rutas, pero todo lo demás funciona. Puedes activarla '
+      + 'más tarde en los ajustes.',
+    'loc.ok': 'Listo, ya puedes grabar rutas.',
     'rec.weak': 'señal débil · ±{m} m',
     'rec.still': ' · parado',
     'rec.nothing': 'No se ha grabado nada — ninguna posición utilizable.',
@@ -366,6 +389,30 @@ const DICT = {
     'rec.denied.help': 'Salpicón! needs location permission to record. Tap Discard, allow it in Settings, and start again.',
     'rec.nopos': 'no position',
     'rec.nogps': 'This device cannot report its position',
+    'rec.coarse': 'Salpicón! was given approximate location, which comes from wifi and cell towers and is '
+      + 'wrong by hundreds of metres. Recording a route needs the precise one.',
+    'rec.coarse.fix': 'Open settings',
+    'rec.warming': 'Finding satellites — you can press Record whenever you like.',
+    'loc.title': 'Salpicón! needs your precise location',
+    'loc.why': 'Drawing your route across the terrain needs <b>precise</b> location, the kind that comes '
+      + 'from GPS. <b>Approximate</b> location comes from wifi and cell towers, is wrong by hundreds of '
+      + 'metres, and cannot record a route.',
+    'loc.when': 'It is only used while you are recording, and the route stays on your phone until you '
+      + 'choose to upload it.',
+    'loc.ask': 'Continue',
+    'loc.later': 'Not now',
+    'loc.pick': 'On the next screen, choose <b>Precise</b>.',
+    'loc.coarse.title': 'That was the approximate one',
+    'loc.coarse.why': 'Android granted approximate location, which is wrong by hundreds of metres. '
+      + 'Recording routes needs it changed to precise in the app settings.',
+    'loc.open': 'Open settings',
+    'loc.later.again': 'Without location you cannot record routes, but everything else works. We will ask '
+      + 'again next time you open the app.',
+    'loc.later.last': 'Understood — we will not ask again. You can turn location on from the app settings '
+      + 'whenever you want to record a route.',
+    'loc.denied': 'Without location you cannot record routes, but everything else works. You can turn it '
+      + 'on later in settings.',
+    'loc.ok': 'All set — you can record routes now.',
     'rec.weak': 'weak signal · ±{m} m',
     'rec.still': ' · holding still',
     'rec.nothing': 'Nothing recorded — no usable position fixes.',

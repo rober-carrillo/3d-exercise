@@ -236,6 +236,18 @@
   </div>
 </div>
 
+<div class="ask" id="loc">
+  <div class="ask-card rv-panel">
+    <h2 id="loc-title" data-i18n="loc.title">Salpicón! necesita tu ubicación precisa</h2>
+    <p id="loc-why" data-i18n-html="loc.why"></p>
+    <p id="loc-when" data-i18n="loc.when"></p>
+    <div class="ask-btns">
+      <button type="button" class="danger" id="loc-go" data-i18n="loc.ask">Continuar</button>
+      <button type="button" id="loc-later" data-i18n="loc.later">Ahora no</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="rv-panel"></div>
 
 <script type="module">
@@ -243,7 +255,8 @@ import { parseGPX, analyze, profileSamples } from './src/gpx.js';
 import * as account from './src/account.js';
 import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
-import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp } from './src/geo.js';
+import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp,
+         locationPrecision, requestLocationPermission, openAppSettings } from './src/geo.js';
 import { markSVG, signalFor } from './src/mark.js';
 import { initTheme, themeToggle } from './src/theme.js';
 import { initLang, langToggle, t } from './src/i18n.js';
@@ -282,6 +295,24 @@ if (stillMark) {
 }
 
 const fmtKm = m => (m / 1000).toFixed(2);
+
+/**
+ * Run something once the page has finished arriving.
+ *
+ * `addEventListener('load')` on its own is a trap here: this module awaits a
+ * fetch and an account check before it reaches any of its own setup, and by
+ * then `load` has usually already fired — so the listener is registered for
+ * an event that will never come again and the work silently never happens.
+ * Checking readyState first is the difference between deferring something and
+ * dropping it.
+ */
+const afterLoad = (fn, delay = 0) => (document.readyState === 'complete'
+  ? setTimeout(fn, delay)
+  : addEventListener('load', () => setTimeout(fn, delay), { once: true }));
+const idle = fn => ('requestIdleCallback' in window
+  ? requestIdleCallback(fn, { timeout: 2500 })
+  : setTimeout(fn, 400));
+const whenReady = fn => afterLoad(() => idle(fn));
 const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
 const built = (manifest.routes || []).map(r => ({ ...r, local: false }));
 
@@ -337,12 +368,21 @@ if (!stageRoute) {
 } else if (!webglOK || saveData) {
   stage.innerHTML = shapeArt(stageRoute);
 } else {
-  // Mounted when it is actually on screen: on a phone in portrait the stage can
-  // start below the fold, and loading terrain nobody has looked at yet is the
-  // kind of thing that makes a page feel slow.
+  // The flat drawing goes up immediately, so the box is never empty and the
+  // page is never waiting on it.
+  stage.innerHTML = shapeArt(stageRoute);
+
+  // Mounted when it is on screen *and* the browser has nothing better to do.
+  // Building terrain is a few hundred milliseconds of solid main-thread work —
+  // parsing a track, decoding tiles, compiling shaders — and starting it while
+  // the page is still arriving freezes everything, including the buttons. On a
+  // cold start on a phone that is long enough for Android to put up the "app
+  // isn't responding" dialog. The page comes up first, every time; the route
+  // replaces its own drawing a moment later.
   const mountStage = async () => {
     try {
       const { RouteViewer } = await import('./src/viewer.js');
+      stage.innerHTML = '';
       new RouteViewer({
         mount: stage,
         gpxUrl: './routes/' + stageRoute.file,
@@ -364,11 +404,11 @@ if (!stageRoute) {
   };
   if ('IntersectionObserver' in window) {
     const io = new IntersectionObserver(entries => {
-      if (entries.some(e => e.isIntersecting)) { io.disconnect(); mountStage(); }
+      if (entries.some(e => e.isIntersecting)) { io.disconnect(); whenReady(mountStage); }
     }, { rootMargin: '200px' });
     io.observe(stage);
   } else {
-    mountStage();
+    whenReady(mountStage);
   }
 }
 
@@ -417,6 +457,95 @@ function toast(msg) {
   toastEl.classList.add('on');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3600);
+}
+
+/* ---------- asking for location, once, with a reason ----------
+ * Android gives an app about two chances to ask before it stops showing the
+ * prompt at all, and its prompt says only "Allow Salpicón! to access this
+ * device's location?" with a Precise/Approximate toggle and no hint that the
+ * choice matters. So the reason goes first, in our own words, and the system
+ * prompt follows from a button somebody has already decided to press.
+ *
+ * Asking at the moment Record is pressed would be too late twice over: they
+ * have already decided to record, and a wrong tap leaves the feature broken
+ * with no obvious way back.
+ */
+const ASKED_KEY = 'salpicon.askedLocation.v2';
+/**
+ * How many times somebody may wave this away before we stop bringing it up.
+ *
+ * "Not now" is one tap away from "Continue" on a dialog that appears while
+ * the app is still settling, and losing the headline feature to a misplaced
+ * thumb — with no way back except a Settings screen nobody is going to go
+ * looking for — is a bad trade for the small cost of asking again. Three is
+ * enough to be sure it was meant.
+ */
+const MAX_DECLINES = 3;
+const locEl = document.getElementById('loc');
+
+const askState = () => {
+  try { return JSON.parse(localStorage.getItem(ASKED_KEY) || '{}') || {}; } catch { return {}; }
+};
+const writeAsk = v => { try { localStorage.setItem(ASKED_KEY, JSON.stringify(v)); } catch {} };
+/** Settled: either they dealt with it, or they have waved it away enough times. */
+const asked = () => { const a = askState(); return !!a.done || (a.declines ?? 0) >= MAX_DECLINES; };
+const markAsked = () => writeAsk({ ...askState(), done: true, at: new Date().toISOString() });
+/** @returns {boolean} whether we will bring it up again */
+const markDeclined = () => {
+  const declines = (askState().declines ?? 0) + 1;
+  writeAsk({ ...askState(), declines, at: new Date().toISOString() });
+  return declines < MAX_DECLINES;
+};
+
+/** Explain, then ask. Resolves to the final `{ granted, precise }` or null. */
+function askForLocation() {
+  return new Promise(resolve => {
+    locEl.classList.add('on');
+    const go = document.getElementById('loc-go');
+    const later = document.getElementById('loc-later');
+    const close = v => { locEl.classList.remove('on'); resolve(v); };
+    later.onclick = () => {
+      // Not a refusal of the feature, just of this moment. Say which it is.
+      const willAskAgain = markDeclined();
+      close(null);
+      toast(t(willAskAgain ? 'loc.later.again' : 'loc.later.last'));
+    };
+    go.onclick = async () => {
+      go.disabled = true;
+      const res = await requestLocationPermission();
+      go.disabled = false;
+      markAsked();                      // the system has now had its say
+      close(res);
+      if (!res?.granted) { toast(t('loc.denied')); return; }
+      if (res.precise === false) { showCoarse(); return; }
+      toast(t('loc.ok'));
+      warm.restart?.();                 // satellites, now that we may look
+    };
+  });
+}
+
+/** Approximate was granted. Only Settings can change it, so point at Settings. */
+function showCoarse() {
+  document.getElementById('loc-title').textContent = t('loc.coarse.title');
+  document.getElementById('loc-why').innerHTML = t('loc.coarse.why');
+  document.getElementById('loc-when').textContent = '';
+  const go = document.getElementById('loc-go');
+  go.textContent = t('loc.open');
+  go.onclick = () => { openAppSettings(); locEl.classList.remove('on'); };
+  document.getElementById('loc-later').textContent = t('loc.later');
+  document.getElementById('loc-later').onclick = () => locEl.classList.remove('on');
+  locEl.classList.add('on');
+}
+
+if (nativeGeoAvailable()) {
+  // After the page is up, not during it: a permission sheet over a half-drawn
+  // app is the most common reason people say no.
+  afterLoad(async () => {
+    const now = await locationPrecision();
+    if (!now || asked()) return;
+    if (!now.granted) { await askForLocation(); return; }
+    if (now.precise === false) { markAsked(); showCoarse(); }
+  }, 1200);
 }
 
 /* ---------- record ---------- */
@@ -629,6 +758,15 @@ function countdown(seconds = 3) {
  * finding that out afterwards is not a reasonable way to learn it.
  */
 async function pressRecord() {
+  // Approximate location looks exactly like precise location until the first
+  // fix arrives ±250 m out and every one of them is thrown away, at which
+  // point the app appears to be broken. Ask before the countdown, not after.
+  // A safety net, not the main ask: permission can be revoked or downgraded
+  // in Settings long after the first run, and a recording that cannot work
+  // should say so before the countdown rather than after it.
+  const prec = await locationPrecision();
+  if (prec && !prec.granted) { await askForLocation(); return; }
+  if (prec && prec.precise === false) { showCoarse(); return; }
   const signedOut = !account.user();
   document.getElementById('recwarn').hidden = !signedOut;
   if (signedOut) toast(t('rec.warn.toast'));

@@ -36,6 +36,8 @@ public class RecordingService extends Service implements LocationListener {
     public static final String ACTION_PAUSE  = "app.salpicon.PAUSE";
     public static final String ACTION_RESUME = "app.salpicon.RESUME";
     public static final String ACTION_FINISH = "app.salpicon.FINISH";
+    /** Find the satellites now, record nothing, and stop on your own. */
+    public static final String ACTION_WARM   = "app.salpicon.WARM";
 
     // Version the channel id. A channel's importance belongs to the user the
     // moment it is created: later changes to it are ignored, for ever, on every
@@ -57,9 +59,18 @@ public class RecordingService extends Service implements LocationListener {
                 Location l = result.getLastLocation();
                 if (l != null) RecordingPlugin.onFix(l);
             }
+
+            @Override
+            public void onLocationAvailability(com.google.android.gms.location.LocationAvailability a) {
+                if (!a.isLocationAvailable() && !warming) {
+                    RecordingPlugin.onError("No position available — check that location is switched on");
+                }
+            }
         };
     private boolean paused = false;
     private boolean foreground = false;
+    private boolean warming = false;          // a warm-up, not a recording
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
     private String line1 = "Recording";
     private String line2 = "Waiting for GPS…";
 
@@ -99,6 +110,23 @@ public class RecordingService extends Service implements LocationListener {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
         if (action == null) action = ACTION_START;
+
+        // A warm-up asks for position and nothing else: no notification, no
+        // foreground promotion, no track. It stops itself, and a real Record
+        // arriving in the meantime simply takes over the same provider.
+        if (ACTION_WARM.equals(action)) {
+            if (foreground) return START_STICKY;        // already recording; nothing to warm
+            if (!warming) {
+                warming = true;
+                startLocations();
+                int seconds = intent != null ? intent.getIntExtra("seconds", 20) : 20;
+                handler.postDelayed(() -> {
+                    if (warming && !foreground) { stopLocations(); warming = false; stopSelf(); }
+                }, Math.max(5, Math.min(60, seconds)) * 1000L);
+            }
+            return START_NOT_STICKY;
+        }
+        warming = false;
 
         switch (action) {
             case ACTION_PAUSE:
@@ -147,7 +175,18 @@ public class RecordingService extends Service implements LocationListener {
      * no Play Services — a de-Googled ROM, some Huawei models — records
      * exactly as it did before, through the same listener.
      */
+    private void stopLocations() {
+        if (usingFused && fused != null) {
+            try { fused.removeLocationUpdates(fusedCallback); } catch (Throwable ignored) {}
+            usingFused = false;
+        }
+        if (locations != null) {
+            try { locations.removeUpdates(this); } catch (SecurityException ignored) {}
+        }
+    }
+
     private void startLocations() {
+        stopLocations();                      // never stack two subscriptions
         if (fused != null && startFused()) return;
         if (locations == null) {
             RecordingPlugin.onError("This device has no location provider");
@@ -164,12 +203,18 @@ public class RecordingService extends Service implements LocationListener {
 
     private boolean startFused() {
         try {
+            // waitForAccurateLocation true: the first thing fused can offer is
+            // a wifi-and-cell estimate good to a few hundred metres, and with
+            // it set false that estimate arrives immediately and the recording
+            // screen sits on "±250 m" looking broken while the satellites are
+            // still being found. Waiting costs a few seconds once, which the
+            // warm-up has usually already spent.
             com.google.android.gms.location.LocationRequest req =
                 new com.google.android.gms.location.LocationRequest.Builder(
                         com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 1000L)
                     .setMinUpdateIntervalMillis(1000L)
                     .setMinUpdateDistanceMeters(0f)
-                    .setWaitForAccurateLocation(false)
+                    .setWaitForAccurateLocation(true)
                     .build();
             fused.requestLocationUpdates(req, fusedCallback, getMainLooper());
             usingFused = true;
@@ -254,12 +299,9 @@ public class RecordingService extends Service implements LocationListener {
 
     @Override
     public void onDestroy() {
-        if (usingFused && fused != null) {
-            try { fused.removeLocationUpdates(fusedCallback); } catch (Throwable ignored) {}
-        }
-        if (locations != null) {
-            try { locations.removeUpdates(this); } catch (SecurityException ignored) {}
-        }
+        handler.removeCallbacksAndMessages(null);
+        stopLocations();
+        warming = false;
         foreground = false;
         super.onDestroy();
     }

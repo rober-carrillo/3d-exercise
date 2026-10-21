@@ -16,37 +16,37 @@
 
 const POSES = {
   run: {
-    head: [44, 19.5],
+    head: [44, 20.5],
     limbs: [
-      [[41, 33], [32, 58]],                 // torso
-      [[40, 37], [52, 46], [61, 37]],       // front arm
-      [[38, 38], [25, 44], [19, 56]],       // back arm
-      [[32, 58], [49, 66], [45, 88]],       // front leg
-      [[32, 58], [24, 76], [10, 80]],       // back leg
+      [[41, 34], [32, 59]],                 // torso
+      [[40, 38], [53, 47], [62, 37]],       // front arm
+      [[38, 39], [24, 45], [17, 57]],       // back arm
+      [[32, 59], [50, 67], [46, 89]],       // front leg
+      [[32, 59], [23, 77], [8, 81]],        // back leg
     ],
   },
   pass: {                                   // the second frame of the stride
-    head: [44, 19.5],
+    head: [44, 20.5],
     limbs: [
-      [[41, 33], [32, 58]],
-      [[40, 37], [48, 48], [55, 43]],
-      [[38, 38], [32, 49], [31, 59]],
-      [[32, 58], [41, 72], [36, 88]],
-      [[32, 58], [27, 74], [21, 87]],
-    ],
+      [[41, 34], [32, 59]],
+      [[40, 38], [50, 49], [58, 44]],
+      [[38, 39], [29, 50], [27, 61]],
+      [[32, 59], [43, 74], [39, 89]],
+      [[32, 59], [24, 76], [15, 88]],       // further back: at this weight a
+    ],                                      // narrow stride closes into a blob
   },
   stand: {                                  // the "wait" figure: upright, arms down
-    head: [40.5, 19.5],
+    head: [40.5, 20.5],
     limbs: [
-      [[40.5, 33], [40.5, 58]],
-      [[38, 37], [33, 49], [32, 60]],
-      [[43, 37], [48, 49], [49, 60]],
-      [[40.5, 58], [36, 73], [36, 88]],
-      [[40.5, 58], [45, 73], [45, 88]],
+      [[40.5, 34], [40.5, 59]],
+      [[37, 38], [31, 50], [30, 62]],
+      [[44, 38], [50, 50], [51, 62]],
+      [[40.5, 59], [34, 74], [34, 89]],
+      [[40.5, 59], [47, 74], [47, 89]],
     ],
   },
 };
-const HEAD_R = 8.5;
+const HEAD_R = 10.2;
 const DOT = [95, 84.5], DOT_R = 7.6;
 const STRAW = [[99, 24], [99, 6.5], [105.5, 1.5]];
 const GLASS_TOP = 12, GLASS_BOTTOM = 62;
@@ -81,8 +81,13 @@ export function ledMark({ pose = 'run', juice = 1, unlit = true } = {}) {
   const P = POSES[pose] || POSES.run;
   let out = '';
   if (unlit) for (let y = 1; y < 98; y += 3.4) for (let x = 1; x < 120; x += 3.4) out += bead([x, y], 'o', 0.8);
-  for (const l of P.limbs) for (const p of beadsAlong(l, 2.9)) out += bead(p, 'f', 3.1);
-  for (const p of discBeads(P.head[0], P.head[1], HEAD_R - 2.4, 3.0)) out += bead(p, 'f', 2.3);
+  // Chunky on purpose, the way a pedestrian on a crossing sign is chunky: at
+  // the size this mark is actually used — 56 to 76 px across a header — a thin
+  // stick figure reads as a scribble, and the thing that makes a crossing
+  // light legible at a hundred metres is the weight of the limbs. Beads of
+  // 4.3 laid every 2.4 overlap into a solid stroke rather than a dotted one.
+  for (const l of P.limbs) for (const p of beadsAlong(l, 2.4)) out += bead(p, 'f', 4.3);
+  for (const p of discBeads(P.head[0], P.head[1], HEAD_R - 2.8, 2.6)) out += bead(p, 'f', 3.0);
   // the glass: rows of beads narrowing toward the base, juice from the bottom up
   const level = juice == null ? null : GLASS_BOTTOM - (GLASS_BOTTOM - GLASS_TOP) * Math.max(0, Math.min(1, juice));
   for (let y = 15; y <= 59; y += 3.4) {
