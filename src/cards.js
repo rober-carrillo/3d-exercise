@@ -39,6 +39,20 @@ export const escapeHtml = s => String(s).replace(/[&<>"']/g, c =>
  */
 export const whenOf = r => new Date(r.date || r.added || 0);
 
+/**
+ * The calendar day of a route, read in UTC.
+ *
+ * Deliberately not the local day. `formatDate` has always rendered in UTC, so
+ * reading the row's big day number in local time meant the two could disagree
+ * by one: a route stamped at 02:00 UTC shows "12 Oct" in the viewer and the
+ * number 11 on its own row, for anybody west of Greenwich. One of them has to
+ * win and UTC is the one already written down.
+ */
+export const dayOf = d => ({
+  day: d.getUTCDate(),
+  weekday: d.toLocaleDateString(locale(), { weekday: 'short', timeZone: 'UTC' }),
+});
+
 /** Newest first. ISO strings sort chronologically as text. */
 export const byDate = (a, b) => String(b.date || b.added || '').localeCompare(String(a.date || a.added || ''));
 
@@ -59,7 +73,7 @@ export function routeHref(r) {
 export function groupByMonth(routes) {
   const groups = new Map();
   for (const r of routes) {
-    const d = whenOf(r), key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+    const d = whenOf(r), key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, '0')}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(r);
   }
@@ -101,7 +115,7 @@ export function routeRow(r, { actions = () => '', tagOrigin = true } = {}) {
   return `
     <div class="row">
       <a class="go" href="${routeHref(r)}">
-        <span class="day"><b>${d.getDate()}</b><small>${d.toLocaleDateString(locale(), { weekday: 'short' })}</small></span>
+        <span class="day"><b>${dayOf(d).day}</b><small>${dayOf(d).weekday}</small></span>
         <span class="what"><b>${escapeHtml(r.name)}</b><small>${meta}${
           r.pace ? `<span class="tag pace">${t('row.pace')}</span>` : ''}${
           tagOrigin && r.local ? `<span class="tag">${t('row.local')}</span>` : ''}${
