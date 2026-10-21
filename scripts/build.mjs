@@ -19,7 +19,26 @@ import { sceneFrame, pickZoom } from '../src/terrain.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
 const STATIC = ['index.html', 'routes.html', 'library.html', 'view.html', 'r.html',
-                'src', 'routes', 'brand'];
+                'src', 'brand'];
+
+/**
+ * Which of the recordings in routes/ the platform actually shows.
+ *
+ * Everything in that folder is still parsed and checked on every build, so a
+ * broken file is caught whether it is published or not — but only these reach
+ * the manifest, the library, the standalone copies and dist/. The rest stay in
+ * the repository as what they are: a personal archive, not a shop window.
+ *
+ * Keeping the unpublished ones out of dist/ is the difference between an 8 MB
+ * folder of GPX travelling inside the Android app and the four files it
+ * actually draws.
+ */
+const PUBLISHED = new Set([
+  'caminata-alto-del-toro',     // the landing page's replay: 601 m of climb
+  'unicentro-las-pinas-oct-4',
+  'ciclismo-exterior',
+  'carrera-por-la-manana',
+]);
 
 const run = promisify(execFile);
 
@@ -76,7 +95,7 @@ const files = (await readdir(join(root, 'routes')))
 
 if (!files.length) console.warn('! no .gpx files found in routes/');
 
-const routes = [];
+let routes = [];
 for (const file of files) {
   const text = await readFile(join(root, 'routes', file), 'utf8');
   try {
@@ -304,6 +323,21 @@ await mkdir(OUT, { recursive: true });
 for (const item of STATIC) {
   if (existsSync(join(root, item))) await cp(join(root, item), join(OUT, item), { recursive: true });
 }
+// Published only, from here on. Parsing above has already had its say about
+// every file in the folder.
+const unpublished = routes.filter(r => !PUBLISHED.has(r.slug));
+const routesAll = routes;
+routes = routes.filter(r => PUBLISHED.has(r.slug));
+for (const name of PUBLISHED) {
+  if (!routes.some(r => r.slug === name)) console.warn(`  ! published route "${name}" is not in routes/`);
+}
+console.log(`\n  publishing ${routes.length} of ${routesAll.length} routes`
+  + (unpublished.length ? ` · keeping back ${unpublished.map(r => r.slug).join(', ')}` : ''));
+
+// the GPX the viewer will ask for, and only those
+await mkdir(join(OUT, 'routes'), { recursive: true });
+for (const r of routes) await cp(join(root, 'routes', r.file), join(OUT, 'routes', r.file));
+
 // newest first, by the day it happened — the same order the library shows
 routes.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 
