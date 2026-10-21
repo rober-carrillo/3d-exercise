@@ -130,6 +130,9 @@ export class RouteViewer {
       demMaxTiles: 4,
       vex: 1,
       date: null,             // fallback date for a track with no time of its own
+      meshN: null,            // terrain grid resolution; null picks by capability
+      tiles: null,            // { sat, dem } specs for tiles shipped with the build
+      tileSlug: null,         // the folder those tiles live in
       inline: false,          // mounted in a box rather than over the window
       showcase: false,        // no controls: the route, flying itself, as a sample
       loop: false,            // start again at the end instead of stopping
@@ -155,6 +158,24 @@ export class RouteViewer {
   }
 
   msg(t) { const n = this.$('msg'); if (n) n.textContent = t; }
+
+  /**
+   * Hand the browser a frame.
+   *
+   * Building a route is several hundred milliseconds of solid arithmetic, and
+   * JavaScript has one thread: while it runs, nothing else does — no animation
+   * frame, no button, no scroll. On the landing page that showed up as the
+   * crowd in the background freezing solid, which is a worse first impression
+   * than no crowd at all, and it is the same stall that makes a tap feel
+   * ignored.
+   *
+   * A frame plus a macrotask, not just a microtask: awaiting a resolved
+   * promise yields to nothing, since microtasks run before the browser gets
+   * its turn back.
+   */
+  breathe() {
+    return new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+  }
 
   /**
    * Hold the loading screen and let the person choose. Resolves true if they
@@ -251,18 +272,34 @@ export class RouteViewer {
       if (cfg?.esriKey) setEsriToken(cfg.esriKey);
     } catch {}
 
+    await this.breathe();                 // the track is parsed; let the page move
     const frame = sceneFrame(track);
     // The imagery ceiling was 16 — about 2 m a pixel, so a soccer pitch drew
     // as a green smudge roughly 30 px across. Nothing changes for a route
     // that already fills the tile budget at a lower zoom.
-    const satSpec = o.imagery ? pickZoom(frame, 19, 11, o.satMaxTiles) : null;
-    const demSpec = pickZoom(frame, 14, 10, o.demMaxTiles);
+    // Tiles that came with the build, if this route has them. They are our
+    // own files on our own origin: no key, no third-party request, and no
+    // reason for the landing page's one route to bill an imagery API on every
+    // single visit. The spec was written by the build using this same
+    // arithmetic, so what is asked for is what is there.
+    const cached = o.tiles;
+    const localUrl = (kind, spec) => (z, x, y) =>
+      `./tiles/${o.tileSlug}/${kind}/${z}-${x}-${y}.${spec.ext}`;
+    const satSpec = o.imagery
+      ? (cached?.sat ? { ...cached.sat, nx: cached.sat.x1 - cached.sat.x0 + 1, ny: cached.sat.y1 - cached.sat.y0 + 1 }
+                     : pickZoom(frame, 19, 11, o.satMaxTiles))
+      : null;
+    const demSpec = cached?.dem
+      ? { ...cached.dem, nx: cached.dem.x1 - cached.dem.x0 + 1, ny: cached.dem.y1 - cached.dem.y0 + 1 }
+      : pickZoom(frame, 14, 10, o.demMaxTiles);
+    const satUrl = cached?.sat ? localUrl('sat', cached.sat) : (o.imagery ? TILES[o.imagery].url : null);
+    const demUrl = cached?.dem ? localUrl('dem', cached.dem) : TILES.terrarium.url;
     this.progress.total = (satSpec ? satSpec.nx * satSpec.ny : 0) + (demSpec ? demSpec.nx * demSpec.ny : 0) || 1;
     this.msg('fetching satellite imagery and elevation data…');
 
     let [sat, dem] = await Promise.all([
-      satSpec ? loadTiles(satSpec, TILES[o.imagery].url, () => this.tick()) : Promise.resolve({ ok: 0 }),
-      demSpec ? loadTiles(demSpec, TILES.terrarium.url, () => this.tick()) : Promise.resolve({ ok: 0 }),
+      satSpec ? loadTiles(satSpec, satUrl, () => this.tick()) : Promise.resolve({ ok: 0 }),
+      demSpec ? loadTiles(demSpec, demUrl, () => this.tick()) : Promise.resolve({ ok: 0 }),
     ]);
     let imageryLabel = o.imagery ? TILES[o.imagery].label : null;
     if (satSpec && !sat.ok && o.imagery !== 'osm') {          // imagery blocked → plain map drape
@@ -284,14 +321,14 @@ export class RouteViewer {
         if (again) {
           this.msg('fetching satellite imagery…');
           this.progress = { done: 0, total: satSpec.nx * satSpec.ny };
-          const retry = await loadTiles(satSpec, TILES[o.imagery].url, () => this.tick(), 25000, 4);
+          const retry = await loadTiles(satSpec, satUrl, () => this.tick(), 25000, 4);
           if (retry.ok > sat.ok) sat = retry;
         }
       }
     }
 
     this.msg('shaping terrain…');
-    await new Promise(r => setTimeout(r, 30));
+    await this.breathe();
     let sample = null, demReal = false;
     if (dem.ok) { const fn = demSampler(dem); if (fn) { sample = fn; demReal = true; } }
     if (!sample) sample = idwSampler(track, frame);
@@ -311,12 +348,15 @@ export class RouteViewer {
       }
     }
 
-    const g = buildGeometry({
-      track, frame, sample, sat,
-      N: renderer.caps.uint ? 352 : 224,
-      uint: renderer.caps.uint,
-    });
+    // A showcase is a few hundred pixels across and nobody is going to orbit
+    // it, so it does not need the full grid — and the grid is the expensive
+    // part. Halving it quarters the arithmetic, which is the difference
+    // between a stutter and a stall.
+    const N = o.meshN ?? (o.showcase ? 176 : renderer.caps.uint ? 352 : 224);
+    const g = buildGeometry({ track, frame, sample, sat, N, uint: renderer.caps.uint });
+    await this.breathe();
     renderer.setGeometry(g);
+    await this.breathe();
     if (sat.ok) renderer.setTexture(sat.cv);
     renderer.cam.tz = (s.ele_min + s.ele_max) / 2 - g.zRef;
     renderer.onFrame = dt => this.frame(dt);

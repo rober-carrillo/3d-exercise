@@ -383,12 +383,23 @@ if (!stageRoute) {
   const mountStage = async () => {
     try {
       const { RouteViewer } = await import('./src/viewer.js');
+      // Prefer the analysed track the build wrote down. Parsing this route's
+      // 23,000-point GPX is a second and a half of unbroken work, and a second
+      // and a half of unbroken work is a second and a half with no animation
+      // frames — the background crowd stops dead and taps go unanswered.
+      let prepared = null;
+      if (stageRoute.tiles?.track) {
+        try { prepared = await fetch(stageRoute.tiles.track).then(r => (r.ok ? r.json() : null)); } catch {}
+      }
       stage.innerHTML = '';
       new RouteViewer({
         mount: stage,
-        gpxUrl: './routes/' + stageRoute.file,
+        ...(prepared ? { track: prepared } : { gpxUrl: './routes/' + stageRoute.file }),
         name: stageRoute.name,
         date: stageRoute.date,
+        // the map for this route travels with the build; see scripts/build.mjs
+        tiles: stageRoute.tiles ?? null,
+        tileSlug: stageRoute.slug,
         showcase: true,
         loop: true,
         // A route page picks its own length, five to forty-five seconds, so a

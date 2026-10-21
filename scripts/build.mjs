@@ -14,6 +14,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename, extname } from 'node:path';
 import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
+import { sceneFrame, pickZoom } from '../src/terrain.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
@@ -115,6 +116,81 @@ for (const file of files) {
     console.error(`  ✗ ${file} — ${err.message}`);
     process.exitCode = 1;
   }
+}
+
+/**
+ * Ship the map for the route the landing page replays.
+ *
+ * That one route is drawn every time anybody opens the site, and every single
+ * one of those draws was eight fresh requests to a metered imagery API for
+ * exactly the same eight pictures. Fetching them once here and serving them
+ * from our own origin turns thousands of billable requests a month into one
+ * per deploy, and it makes the landing page work with no imagery key at all —
+ * including inside the Android app, which carries dist/ with it and is now the
+ * only copy of this route anybody needs.
+ *
+ * The zoom is chosen with the same arithmetic the viewer uses, so the tiles it
+ * asks for are the tiles that are here.
+ */
+async function cacheTiles(route, track, outDir) {
+  const frame = sceneFrame(track);
+  // These two must match the viewer's own call for the showcase exactly.
+  const specs = {
+    sat: { spec: pickZoom(frame, 19, 11, 6), ext: 'jpg', url: (z, x, y) => (process.env.ESRI_API_KEY
+      ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}?token=${process.env.ESRI_API_KEY}`
+      : `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`) },
+    dem: { spec: pickZoom(frame, 14, 10, 4), ext: 'png',
+      url: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png` },
+  };
+
+  const out = {};
+  for (const [kind, { spec, ext, url }] of Object.entries(specs)) {
+    const dir = join(outDir, 'tiles', route.slug, kind);
+    await mkdir(dir, { recursive: true });
+    let ok = 0, total = 0;
+    for (let x = spec.x0; x <= spec.x1; x++) {
+      for (let y = spec.y0; y <= spec.y1; y++) {
+        total++;
+        const file = join(dir, `${spec.z}-${x}-${y}.${ext}`);
+        if (existsSync(file)) { ok++; continue; }
+        try {
+          const res = await fetch(url(spec.z, x, y));
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          await writeFile(file, Buffer.from(await res.arrayBuffer()));
+          ok++;
+        } catch (err) {
+          console.warn(`  ! ${kind} tile ${spec.z}/${x}/${y}: ${err.message}`);
+        }
+      }
+    }
+    // Only claim a cache that is complete. A partial one would have the viewer
+    // skip the network for tiles that are not here, and draw holes.
+    if (ok === total) out[kind] = { z: spec.z, x0: spec.x0, y0: spec.y0, x1: spec.x1, y1: spec.y1, ext };
+    console.log(`  · tiles/${route.slug}/${kind}: ${ok}/${total}${ok === total ? '' : ' — incomplete, will fetch live'}`);
+  }
+
+  // The analysed track, as the viewer would have derived it anyway.
+  //
+  // This route is 23,233 GPS points, and parsing that XML and reducing it is
+  // a second and a half of unbroken arithmetic on a phone — which is a second
+  // and a half with no animation frames, no scrolling and no buttons. The
+  // build has already done exactly this work, so it writes down the answer:
+  // the same 1,400-point track, as JSON, about a twentieth of the download
+  // and none of the parsing.
+  const data = {
+    name: track.name, time: track.time ?? null, activity: track.activity ?? null,
+    stats: track.stats, bbox: track.bbox, breaks: track.breaks ?? [],
+    lat: Array.from(track.lat), lon: Array.from(track.lon),
+    ele: Array.from(track.ele), dist: Array.from(track.dist),
+    secs: track.secs ? Array.from(track.secs) : null,
+  };
+  const trackPath = join(outDir, 'tiles', route.slug, 'track.json');
+  await writeFile(trackPath, JSON.stringify(data));
+  const kb = Math.round((await stat(trackPath)).size / 1024);
+  console.log(`  · tiles/${route.slug}/track.json: ${track.lat.length} points, ${kb} kB (from ${track.stats.points.toLocaleString()} raw)`);
+  out.track = `./tiles/${route.slug}/track.json`;
+
+  return out.sat && out.dem ? out : null;
 }
 
 /**
@@ -272,6 +348,20 @@ await writeFile(join(OUT, 'config.json'), JSON.stringify({
 }));
 if (process.env.ESRI_API_KEY) console.log('  · imagery: licensed Esri endpoint (key from ESRI_API_KEY)');
 if (process.env.SUPABASE_URL) console.log('  · accounts: Supabase configured');
+
+/**
+ * The route the landing page shows, whose map travels with the build.
+ *
+ * One route, deliberately: this is about the one that is drawn on every visit,
+ * not about shipping an offline atlas.
+ */
+const CACHE_TILES_FOR = ['caminata-alto-del-toro'];
+for (const slug of CACHE_TILES_FOR) {
+  const route = routes.find(r => r.slug === slug);
+  if (!route) { console.warn(`  ! no route ${slug} to cache tiles for`); continue; }
+  const track = analyze(parseGPX(await readFile(join(root, 'routes', route.file), 'utf8')));
+  route.tiles = await cacheTiles(route, track, OUT);
+}
 
 await writeFile(join(OUT, 'routes.json'),
   JSON.stringify({ generated: new Date().toISOString(), routes }, null, 2));
