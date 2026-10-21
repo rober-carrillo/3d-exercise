@@ -154,6 +154,7 @@ import { routeDiary, escapeHtml, routeHref } from './src/cards.js';
 import { EFFORTS, ON_FOOT, personalBests, totals, clock, pace } from './src/stats.js';
 import { shareRoute, routeLink, canLink } from './src/share.js';
 import { markSVG } from './src/mark.js';
+import { lastDiag, summarise } from './src/diag.js';
 import { initTheme, themeToggle } from './src/theme.js';
 import { initLang, langToggle, t } from './src/i18n.js';
 import { startSync, onSync } from './src/sync.js';
@@ -166,6 +167,9 @@ addEventListener('salpicon:lang', () => render());
 document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
 
 const grid = document.getElementById('grid');
+// The log the recorder kept for the most recent route, if there is one.
+const diag = lastDiag();
+const diagSlug = diag?.slug ?? null;
 const toastEl = document.getElementById('toast');
 let toastTimer;
 function toast(msg) {
@@ -218,9 +222,18 @@ function actions(r) {
       r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
     }</i><span class="lbl">${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}</span></button>`);
   }
+  // The file goes with the route, wherever the route lives. This used to be
+  // offered only for a copy held in the browser, which meant that the moment
+  // a route finished uploading — the thing the app is for — the way to get
+  // the .gpx back out of it disappeared.
+  out.push(`<button class="dl gpx" data-slug="${r.slug ?? ''}" data-id="${r.id ?? ''}"><i class="ic">⤓</i><span class="lbl">${t('row.gpx')}</span></button>`);
+  // Offered only on the route the log belongs to, so it cannot be mistaken
+  // for a diagnostic of a different run.
+  if (diagSlug && (r.slug === diagSlug || r.id === diagSlug)) {
+    out.push(`<button class="dl diag" title="${t('diag.title')}"><i class="ic">🩺</i><span class="lbl">${t('row.diag')}</span></button>`);
+  }
   if (r.local) {
-    out.push(`<button class="dl gpx" data-slug="${r.slug}"><i class="ic">⤓</i><span class="lbl">${t('row.gpx')}</span></button>
-      <button class="rm" data-slug="${r.slug}" data-name="${escapeHtml(r.name)}"
+    out.push(`<button class="rm" data-slug="${r.slug}" data-name="${escapeHtml(r.name)}"
         aria-label="${t('del.yes')} ${escapeHtml(r.name)}"><i class="ic">✕</i></button>`);
   }
   return out.join('');
@@ -341,11 +354,19 @@ function render() {
   // taken back out too.
   grid.querySelectorAll('.dl.gpx').forEach(b => b.addEventListener('click', async e => {
     e.preventDefault();
-    const entry = listLocalRoutes().find(r => r.slug === b.dataset.slug);
+    let entry = all().find(r => (b.dataset.id && r.id === b.dataset.id)
+      || (b.dataset.slug && r.slug === b.dataset.slug));
     if (!entry) return toast(t('toast.gone'));
     b.disabled = true;
     try {
-      const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.track?.activity ?? 'other' });
+      // A route listed from the account carries its summary but not its
+      // points — the list query leaves those behind on purpose — so the full
+      // row is fetched before there is anything to write out.
+      if (!entry.track?.lat?.length && entry.cloud) {
+        entry = { ...(await account.routes().route(entry.id)), cloud: true };
+      }
+      if (!entry.track?.lat?.length) throw new Error(t('toast.gone'));
+      const gpx = trackToGPX(entry.track, { name: entry.name, activity: entry.activity ?? entry.track?.activity ?? 'other' });
       const how = await saveGPX(safeName(entry.name), gpx);
       // Only when the file was written somewhere. A 'shared' result means the
       // Android share sheet has already come up and been dealt with, so a
@@ -359,6 +380,30 @@ function render() {
   // These buttons are small and sit beside each other, and the route behind
   // one of them may be the only copy in existence. One stray tap is not
   // consent to destroy it.
+  /**
+   * Write the flight recorder's log out as a file.
+   *
+   * The same route out of the app as a GPX — the system share sheet — because
+   * it is the one that already works on a phone with no cable and no desktop
+   * anywhere near it.
+   */
+  grid.querySelectorAll('.dl.diag').forEach(b => b.addEventListener('click', async e => {
+    e.preventDefault();
+    const d = lastDiag();
+    if (!d) return toast(t('diag.none'));
+    b.disabled = true;
+    try {
+      const s = d.summary ?? summarise(d);
+      const stamp = (d.started || new Date().toISOString()).slice(0, 19).replace(/[:T]/g, '-');
+      const how = await saveGPX(`salpicon-diag-${stamp}.json`, JSON.stringify({ ...d, summary: s }, null, 1));
+      if (how !== 'shared') {
+        toast(t('diag.saved', { n: s?.fixes ?? 0, gap: s?.gap_max_s ?? 0, acc: Math.round(s?.accuracy_median_m ?? 0) }));
+      }
+    } catch (err) {
+      toast(t('toast.savefail', { why: err.message }));
+    } finally { b.disabled = false; }
+  }));
+
   grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
     askDelete(b.dataset.slug, b.dataset.name || '');

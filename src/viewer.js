@@ -586,6 +586,12 @@ export class RouteViewer {
 
   buildProfile() {
     const t = this.track, svg = this.$('prof');
+    // Start from an empty one. This is called twice on every route now — once
+    // from the recorded elevations and again once the terrain model has
+    // replaced them — and appending to what is already there drew the profile
+    // on top of itself, which is the two lines. The pointer handler is bound
+    // once for the same reason: a second one would scrub twice per move.
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
     const W = 1000, H = 100, pad = 6;
     const eMin = t.stats.ele_min, eSpan = Math.max(1, t.stats.ele_max - eMin);
     const total = t.stats.distance_m;
@@ -615,11 +621,14 @@ export class RouteViewer {
     this._cursorLine = mk('line', { x1: 0, y1: 0, x2: 0, y2: H, style: 'stroke:var(--ink-3)', 'stroke-width': 1 });
     this._cursorDot = mk('circle', { cx: 0, cy: 0, r: 3.6, fill: '#fff', stroke: '#138a4a', 'stroke-width': 2 });
     svg.style.cursor = 'crosshair';
-    svg.addEventListener('pointermove', e => {
-      const box = svg.getBoundingClientRect();
-      this.setPlay(false);
-      this.scrub(clamp((e.clientX - box.left) / box.width, 0, 1));
-    });
+    if (!this._profWired) {
+      this._profWired = true;
+      svg.addEventListener('pointermove', e => {
+        const box = svg.getBoundingClientRect();
+        this.setPlay(false);
+        this.scrub(clamp((e.clientX - box.left) / box.width, 0, 1));
+      });
+    }
   }
 
   /**

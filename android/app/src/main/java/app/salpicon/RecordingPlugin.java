@@ -81,7 +81,65 @@ public class RecordingPlugin extends Plugin {
         o.put("accuracy", l.hasAccuracy() ? l.getAccuracy() : 999);
         o.put("speed", l.hasSpeed() ? l.getSpeed() : null);
         o.put("t", l.getTime());
+
+        // Everything below is for working out *why* a track came out wrong,
+        // and costs nothing to carry. The question it exists to answer is
+        // whether a fix came off the satellites or was assembled from wifi and
+        // cell towers, which look identical once they are a latitude and a
+        // longitude. Three things tell them apart: the provider name, whether
+        // the fix carries a speed and a bearing — a network estimate usually
+        // carries neither, having no idea which way you are pointing — and the
+        // satellite count some providers leave in the extras.
+        o.put("provider", l.getProvider());
+        o.put("hasSpeed", l.hasSpeed());
+        o.put("hasBearing", l.hasBearing());
+        o.put("bearing", l.hasBearing() ? l.getBearing() : null);
+        o.put("hasAltitude", l.hasAltitude());
+        // Age at the moment it arrived: a fix replayed from cache is a real
+        // cause of a track that jumps and then catches up diagonally.
+        o.put("ageMs", System.currentTimeMillis() - l.getTime());
+        if (Build.VERSION.SDK_INT >= 26) {
+            o.put("vAccuracy", l.hasVerticalAccuracy() ? l.getVerticalAccuracyMeters() : null);
+            o.put("sAccuracy", l.hasSpeedAccuracy() ? l.getSpeedAccuracyMetersPerSecond() : null);
+        }
+        if (Build.VERSION.SDK_INT >= 31) o.put("mock", l.isMock());
+        try {
+            android.os.Bundle ex = l.getExtras();
+            if (ex != null && ex.containsKey("satellites")) o.put("satellites", ex.getInt("satellites"));
+        } catch (Throwable ignored) {}
         instance.notifyListeners("fix", o);
+    }
+
+    /**
+     * A raw-GPS fix, for the diagnostic log only.
+     *
+     * Sent on its own channel so there is no possibility of one of these ever
+     * reaching the recorder and ending up in somebody's route.
+     */
+    static void onShadowFix(Location l) {
+        if (instance == null) return;
+        JSObject o = new JSObject();
+        o.put("lat", l.getLatitude());
+        o.put("lon", l.getLongitude());
+        o.put("accuracy", l.hasAccuracy() ? l.getAccuracy() : 999);
+        o.put("ele", l.hasAltitude() ? l.getAltitude() : null);
+        o.put("speed", l.hasSpeed() ? l.getSpeed() : null);
+        o.put("bearing", l.hasBearing() ? l.getBearing() : null);
+        o.put("provider", l.getProvider());
+        o.put("t", l.getTime());
+        try {
+            android.os.Bundle ex = l.getExtras();
+            if (ex != null && ex.containsKey("satellites")) o.put("satellites", ex.getInt("satellites"));
+        } catch (Throwable ignored) {}
+        instance.notifyListeners("shadow", o);
+    }
+
+    /** Which provider the service actually managed to start. */
+    static void onProvider(String which) {
+        if (instance == null) return;
+        JSObject o = new JSObject();
+        o.put("provider", which);
+        instance.notifyListeners("provider", o);
     }
 
     static void onAction(String which) {

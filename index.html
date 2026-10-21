@@ -258,6 +258,7 @@ import { TrackRecorder } from './src/recorder.js';
 import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp,
          locationPrecision, requestLocationPermission, openAppSettings } from './src/geo.js';
 import { markSVG, signalFor } from './src/mark.js';
+import { startDiag, logFix, logShadow, noteProvider, note, persistDiag, summarise } from './src/diag.js';
 import { initTheme, themeToggle } from './src/theme.js';
 import { initLang, langToggle, t } from './src/i18n.js';
 import { startAmbient } from './src/ambient.js';
@@ -618,13 +619,23 @@ function drawSignal() {
 function startRecording(replaySlug) {
   rec = new TrackRecorder({ activity });
   rec.start();
+  startDiag({
+    activity,
+    presets: { maxAccuracy: rec.maxAccuracy, minMove: rec.minMove, tau: rec.tau, windowMs: rec.windowMs },
+    app: { native: nativeGeoAvailable(), ua: navigator.userAgent, v: '1.5.1' },
+  });
   const gps = document.getElementById('recgps');
   const note = document.getElementById('recnote');
   const onFix = fix => {
     const why = rec.addFix(fix);
+    logFix(fix, why, { lat: rec._pos?.lat, lon: rec._pos?.lon, points: rec.points.length });
+    // Say where it came from as well as how good it is. A fix with no bearing
+    // is very likely assembled from wifi and cell towers rather than read off
+    // satellites, and that is the difference between a route and a drawing.
+    const tag = fix.provider && fix.provider !== 'gps' ? ` · ${fix.provider}` : '';
     gps.textContent = fix.accuracy > 35
-      ? t('rec.weak', { m: Math.round(fix.accuracy) })
-      : `±${Math.round(fix.accuracy)} m` + (why === 'still' ? t('rec.still') : '');
+      ? t('rec.weak', { m: Math.round(fix.accuracy) }) + tag
+      : `±${Math.round(fix.accuracy)} m${tag}` + (why === 'still' ? t('rec.still') : '');
     gps.style.color = fix.accuracy > 35 ? 'var(--warm)' : 'var(--ink-3)';
   };
   const onError = err => {
@@ -654,6 +665,11 @@ function startRecording(replaySlug) {
   } else if (!nativeGeoAvailable() && !geoAvailable()) {
     onError(new Error(t('rec.nogps')));
   } else {
+    const plug = window.Capacitor?.Plugins?.SalpiconRecorder;
+    plug?.addListener?.('provider', e => { noteProvider(e?.provider ?? 'unknown'); });
+    // Raw GPS, heard in parallel and written only to the log. It never touches
+    // the recorder, so it cannot end up in anybody's route.
+    plug?.addListener?.('shadow', fix => logShadow(fix));
     source = pickGeo({
       onFix, onError,
       title: 'Recording a route',
@@ -823,6 +839,8 @@ document.getElementById('recstop').addEventListener('click', async () => {
   // run is the normal case, not the exception — and a route that exists only
   // in a request that did not arrive is a route somebody just lost.
   const entry = addLocalRoute(name + '.gpx', track, profile);
+  note(`finished: ${finished.points.length} points kept, ${track.stats.distance_m.toFixed(0)} m`);
+  persistDiag(entry.slug);
   paint();
 
   let href = `./view.html?local=${encodeURIComponent(entry.slug)}`;

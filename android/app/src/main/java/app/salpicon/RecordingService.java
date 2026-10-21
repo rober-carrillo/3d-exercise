@@ -70,6 +70,26 @@ public class RecordingService extends Service implements LocationListener {
     private boolean paused = false;
     private boolean foreground = false;
     private boolean warming = false;          // a warm-up, not a recording
+    private boolean shadowing = false;        // raw GPS running alongside, for the log
+
+    /**
+     * Raw GPS, subscribed in parallel with the fused provider and used for
+     * nothing except the diagnostic log.
+     *
+     * The two providers cannot be compared across different runs — weather,
+     * satellites and streets all move — so the only way to know whether fused
+     * is better or worse than what it replaced is to listen to both at once,
+     * on the same walk, and write both down. The fused one is the recording;
+     * this one is the control.
+     */
+    private final LocationListener shadowListener = new LocationListener() {
+        @Override public void onLocationChanged(Location l) {
+            if (!paused) RecordingPlugin.onShadowFix(l);
+        }
+        @Override public void onStatusChanged(String p, int st, Bundle ex) {}
+        @Override public void onProviderEnabled(String p) {}
+        @Override public void onProviderDisabled(String p) {}
+    };
     private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
     private String line1 = "Recording";
     private String line2 = "Waiting for GPS…";
@@ -180,6 +200,10 @@ public class RecordingService extends Service implements LocationListener {
             try { fused.removeLocationUpdates(fusedCallback); } catch (Throwable ignored) {}
             usingFused = false;
         }
+        if (shadowing && locations != null) {
+            try { locations.removeUpdates(shadowListener); } catch (Throwable ignored) {}
+            shadowing = false;
+        }
         if (locations != null) {
             try { locations.removeUpdates(this); } catch (SecurityException ignored) {}
         }
@@ -187,18 +211,28 @@ public class RecordingService extends Service implements LocationListener {
 
     private void startLocations() {
         stopLocations();                      // never stack two subscriptions
-        if (fused != null && startFused()) return;
+        if (fused != null && startFused()) { startShadow(); return; }
         if (locations == null) {
             RecordingPlugin.onError("This device has no location provider");
             return;
         }
         try {
             locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this);
+            RecordingPlugin.onProvider("gps");
         } catch (SecurityException e) {
             RecordingPlugin.onError("Location permission was not granted");
         } catch (IllegalArgumentException e) {
             RecordingPlugin.onError("This device has no GPS provider");
         }
+    }
+
+    /** Listen to the raw provider too, purely so the log can compare them. */
+    private void startShadow() {
+        if (locations == null || warming) return;
+        try {
+            locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, shadowListener);
+            shadowing = true;
+        } catch (Throwable ignored) { shadowing = false; }
     }
 
     private boolean startFused() {
@@ -218,6 +252,7 @@ public class RecordingService extends Service implements LocationListener {
                     .build();
             fused.requestLocationUpdates(req, fusedCallback, getMainLooper());
             usingFused = true;
+            RecordingPlugin.onProvider("fused");
             return true;
         } catch (SecurityException e) {
             RecordingPlugin.onError("Location permission was not granted");

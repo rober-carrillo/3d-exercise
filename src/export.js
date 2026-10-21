@@ -44,16 +44,23 @@ export async function saveGPX(filename, text) {
       directory: 'CACHE',
       encoding: 'utf8',
     });
+    const isDiag = /\.json$/i.test(filename);
     await plugins.Share.share({
       title: filename,
-      text: 'Route recorded with Salpicón!',
+      text: isDiag ? 'Salpicón! recording diagnostic' : 'Route recorded with Salpicón!',
       url: uri,
-      dialogTitle: 'Send this route',
+      dialogTitle: isDiag ? 'Send this diagnostic' : 'Send this route',
     });
     return 'shared';
   }
 
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/gpx+xml' }));
+  // The type follows the name. This writes out a diagnostic log as well as a
+  // route now, and a .json labelled as GPX is the sort of thing that opens in
+  // the wrong application for no reason anybody can see.
+  const type = /\.json$/i.test(filename) ? 'application/json'
+    : /\.gpx$/i.test(filename) ? 'application/gpx+xml'
+    : 'text/plain';
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
