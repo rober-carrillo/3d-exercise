@@ -54,7 +54,7 @@ const TEMPLATE = `
 <canvas class="rv-gl"></canvas>
 
 <div class="rv-panel rv-title" data-open="1">
-  <a class="rv-back" hidden data-i18n="nav.back">← Volver</a>
+  <a class="rv-back" hidden data-i18n="nav.back">Volver</a>
   <button class="rv-titlebtn" aria-expanded="true">
     <h1 class="rv-name">—</h1><span class="rv-caret">▾</span>
   </button>

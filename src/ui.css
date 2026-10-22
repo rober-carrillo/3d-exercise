@@ -76,8 +76,19 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-gl.dragging{cursor:grabbing}
 
 .rv-title{position:fixed;top:16px;left:16px;padding:14px 18px 13px;max-width:min(46vw,420px);z-index:5}
-.rv-back{display:inline-block;margin-bottom:8px;font-size:11px;color:var(--ink-3);text-decoration:none;letter-spacing:.03em}
-.rv-back:hover{color:var(--accent)}
+/* The way out. It was 11px of the faintest grey in the palette, tucked above
+   a route name that is itself a button — three things to aim at in the corner
+   of a map, the smallest and palest of which is the one people actually want.
+   It is now a real control: accent coloured, on its own ground, and over the
+   44px minimum a thumb needs. */
+.rv-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:11px;
+  min-height:38px;padding:0 14px 0 11px;border-radius:10px;
+  font-size:13px;font-weight:580;letter-spacing:.01em;text-decoration:none;
+  color:var(--on-accent);background:var(--accent);border:1px solid var(--accent);
+  transition:background .15s}
+.rv-back:hover{background:var(--accent-2)}
+.rv-back:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.rv-back::before{content:"←";font-size:15px;line-height:1}
 .rv-titlebtn{display:flex;align-items:center;gap:10px;width:100%;padding:0;border:0;background:none;
   color:inherit;font:inherit;text-align:left;cursor:pointer}
 .rv-title h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em;line-height:1.25;flex:1}

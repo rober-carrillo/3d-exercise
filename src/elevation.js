@@ -33,6 +33,12 @@ import { TILES, sceneFrame, pickZoom, loadTiles, demSampler } from './terrain.js
 /**
  * Recompute ascent and descent over a set of elevations.
  *
+ * Give it RAW elevations. analyze() stores the smoothed series in `track.ele`,
+ * so passing that back in here smooths a second time and reports about half
+ * the climb — a real measurement on a flat run came out 10.1 m one way and
+ * 5.0 m the other, which looks exactly like something being double-counted
+ * and is the opposite.
+ *
  * Deliberately the same arithmetic as `analyze()` in gpx.js — thirty-one
  * samples of smoothing and a five metre threshold — so a corrected route and
  * an uncorrected one are measured the same way and the numbers can be
@@ -52,7 +58,10 @@ export function gainLoss(ele, breaks = [], { smoothWindow = 31, gainThreshold = 
     const d = sm[i] - ref;
     if (Math.abs(d) >= gainThreshold) { d > 0 ? gain += d : loss -= d; ref = sm[i]; }
   }
-  return { gain, loss };
+  // The smoothed series comes back too: it is what the caller should store,
+  // and recomputing it there would be the same work done twice and a second
+  // place for the window size to drift.
+  return { gain, loss, smoothed: sm };
 }
 
 /**
@@ -65,13 +74,19 @@ export function gainLoss(ele, breaks = [], { smoothWindow = 31, gainThreshold = 
  * @param {(lat:number, lon:number) => number} sample  metres above sea level
  */
 export function applyGround(track, sample) {
-  const ele = new Float32Array(track.lat.length);
-  for (let i = 0; i < track.lat.length; i++) ele[i] = sample(track.lat[i], track.lon[i]);
+  const raw = new Array(track.lat.length);
+  for (let i = 0; i < track.lat.length; i++) raw[i] = sample(track.lat[i], track.lon[i]);
 
-  const plain = Array.from(ele);
-  const { gain, loss } = gainLoss(plain, track.breaks ?? []);
+  const { gain, loss, smoothed } = gainLoss(raw, track.breaks ?? []);
+  // Stored smoothed, because that is what analyze() stores and what the
+  // profile, the ribbon colours and the legend are all drawn from. Handing
+  // back the raw samples instead would make a corrected route's profile a
+  // slightly different kind of line from every other route's — and would make
+  // its ascent incomparable with the figure it replaced, which is measured
+  // over the smoothed series.
+  const ele = Float32Array.from(smoothed);
   let min = Infinity, max = -Infinity;
-  for (const e of plain) { if (e < min) min = e; if (e > max) max = e; }
+  for (const e of smoothed) { if (e < min) min = e; if (e > max) max = e; }
 
   return {
     ...track,

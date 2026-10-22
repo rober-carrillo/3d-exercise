@@ -15,6 +15,7 @@
 import { createClient } from './supabase.js';
 import { createCloud } from './cloud.js';
 import { t } from './i18n.js';
+import { setSite, siteOrigin } from './site.js';
 
 let client = null, cloud = null, config = null, loaded = null, returned = null;
 
@@ -30,6 +31,10 @@ export function ready() {
     try {
       config = await fetch('./config.json').then(r => (r.ok ? r.json() : null));
     } catch { config = null; }
+    // Before anything builds a link or a redirect. In the Android build this
+    // is the difference between an address somebody else can open and one
+    // that resolves to the phone it was copied from.
+    setSite(config?.siteUrl);
     if (config?.supabaseUrl && config?.supabaseKey) {
       try {
         client = createClient(config.supabaseUrl, config.supabaseKey);
@@ -62,7 +67,7 @@ export const enabled = () => !!client;
 export const arrivedFromEmail = () => returned;
 
 /** Where a confirmation email should send somebody back to. */
-export const returnUrl = () => `${location.origin}/`;
+export const returnUrl = () => `${siteOrigin()}/`;
 export const user = () => client?.auth.user() ?? null;
 export const onChange = fn => (client ? client.auth.onChange(fn) : (fn(null), () => {}));
 export const routes = () => cloud;

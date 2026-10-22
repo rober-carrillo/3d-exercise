@@ -34,7 +34,7 @@ const DICT = {
     'nav.record': 'Grabar',
     'nav.add': '＋ Añadir un GPX',
     'nav.home': '← Inicio',
-    'nav.back': '← Volver',
+    'nav.back': 'Volver',
 
     'hero.title': 'Comparte y revive tus rutas',
     'hero.lede': 'Graba una carrera, una salida en bici o una caminata — o trae una que ya tengas — y '
@@ -314,7 +314,7 @@ const DICT = {
     'nav.record': 'Record',
     'nav.add': '＋ Add a GPX',
     'nav.home': '← Home',
-    'nav.back': '← Back',
+    'nav.back': 'Back',
 
     'hero.title': 'Share and replay your routes',
     'hero.lede': 'Record a run, a ride or a walk — or bring one you already have — and watch it played back '

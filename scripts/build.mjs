@@ -376,6 +376,19 @@ await writeFile(join(OUT, 'config.json'), JSON.stringify({
   // deliberately not among them and never will be: it bypasses row-level
   // security entirely, and this file is served to every browser that opens
   // the app.
+  // Where the app answers on the public internet, as opposed to wherever it
+  // happens to be running. The Android build serves from https://localhost, so
+  // without this a share link made on a phone addressed itself to that phone.
+  // Vercel supplies the production hostname to its own builds; a local build
+  // falls back to the deployed site, since that is where a link has to point
+  // whatever machine made it.
+  siteUrl: (() => {
+    const explicit = firstOf('SITE_URL', 'PUBLIC_SITE_URL');
+    if (explicit) return explicit.replace(/\/+$/, '');
+    const vercel = firstOf('VERCEL_PROJECT_PRODUCTION_URL', 'VERCEL_URL');
+    return vercel ? `https://${vercel.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`
+                  : 'https://salpicon.vercel.app';
+  })(),
   supabaseUrl: firstOf('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'VITE_SUPABASE_URL'),
   supabaseKey: firstOf('SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY',
                        'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),

@@ -14,12 +14,13 @@
  */
 
 import { t } from './i18n.js';
+import { siteOrigin } from './site.js';
 
 /** Is there a link to be had at all? */
 export const canLink = r => !!(r?.cloud || (r && !r.cloud && !r.local));
 
 /** The link for a route that is already shareable, or null if it is not yet. */
-export function routeLink(r, origin = location.origin) {
+export function routeLink(r, origin = siteOrigin()) {
   if (!r) return null;
   if (r.cloud) return r.shareToken && r.visibility !== 'private' ? `${origin}/r/${r.shareToken}` : null;
   if (r.local) return null;
