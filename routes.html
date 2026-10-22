@@ -209,33 +209,51 @@ const all = () => [...cloudRoutes, ...listLocalRoutes()];
  * point of keeping a route is being able to show it to somebody. The rest is
  * housekeeping: who can see it, a copy of the file back out, and removal.
  */
+/**
+ * The buttons at the right-hand end of a row.
+ *
+ * Icons alone. Four labelled buttons in a row was most of the row's width
+ * spent restating what a padlock and a down-arrow already say, and it pushed
+ * the route's own name into an ellipsis on a phone. Each one keeps a title and
+ * an aria-label, so the name is there for a hover, a screen reader and a long
+ * press — just not permanently, in words, four times over.
+ */
 function actions(r) {
   const out = [];
+  const btn = (cls, data, icon, label) =>
+    `<button class="dl ${cls}" ${data} title="${label}" aria-label="${label}"><i class="ic">${icon}</i></button>`;
+
   // On every row, including the browser-only ones. A route with nowhere to
   // live cannot be linked to, and the button saying so when it is pressed
   // teaches that in the moment somebody wants it — which is a better place to
   // learn it than a paragraph nobody read on the way in.
-  out.push(`<button class="dl copy" data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"
-    title="${canLink(r) ? t('share.viewer') : t('share.local')}"><i class="ic">🔗</i><span class="lbl">${t('row.copy')}</span></button>`);
+  out.push(btn('copy', `data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"`, '🔗',
+    canLink(r) ? t('share.viewer') : t('share.local')));
+
   if (r.cloud) {
-    out.push(`<button class="dl share" data-id="${r.id}" title="${t('share.title')}"><i class="ic">${
-      r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗'
-    }</i><span class="lbl">${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}</span></button>`);
+    const icon = r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗';
+    out.push(btn('share', `data-id="${r.id}"`, icon,
+      `${t('share.title')} — ${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}`));
   }
+
   // The file goes with the route, wherever the route lives. This used to be
   // offered only for a copy held in the browser, which meant that the moment
   // a route finished uploading — the thing the app is for — the way to get
   // the .gpx back out of it disappeared.
-  out.push(`<button class="dl gpx" data-slug="${r.slug ?? ''}" data-id="${r.id ?? ''}"><i class="ic">⤓</i><span class="lbl">${t('row.gpx')}</span></button>`);
+  out.push(btn('gpx', `data-slug="${r.slug ?? ''}" data-id="${r.id ?? ''}"`, '⤓', t('row.gpx.hint')));
+
   // Offered only on the route the log belongs to, so it cannot be mistaken
   // for a diagnostic of a different run.
   if (diagSlug && (r.slug === diagSlug || r.id === diagSlug)) {
-    out.push(`<button class="dl diag" title="${t('diag.title')}"><i class="ic">🩺</i><span class="lbl">${t('row.diag')}</span></button>`);
+    out.push(btn('diag', '', '🩺', t('diag.title')));
   }
-  if (r.local) {
-    out.push(`<button class="rm" data-slug="${r.slug}" data-name="${escapeHtml(r.name)}"
-        aria-label="${t('del.yes')} ${escapeHtml(r.name)}"><i class="ic">✕</i></button>`);
-  }
+  // On every row too. It used to appear only for a copy held in the browser,
+  // so the moment a route finished uploading there was no way left to get rid
+  // of it — the same shape of bug as the missing GPX button, from the same
+  // assumption that "local" and "deletable" were the same thing.
+  out.push(`<button class="rm" data-slug="${r.slug ?? ''}" data-id="${r.id ?? ''}"
+      data-name="${escapeHtml(r.name)}" title="${t('del.yes')}"
+      aria-label="${t('del.yes')}: ${escapeHtml(r.name)}"><i class="ic">🗑</i></button>`);
   return out.join('');
 }
 
@@ -406,34 +424,57 @@ function render() {
 
   grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
-    askDelete(b.dataset.slug, b.dataset.name || '');
+    askDelete({ slug: b.dataset.slug, id: b.dataset.id, name: b.dataset.name || '' });
   }));
 }
 
 /* ---------- deleting one ---------- */
 const askEl = document.getElementById('ask');
-let askSlug = null;
+let askTarget = null;
 
-function askDelete(slug, name) {
-  askSlug = slug;
-  // A route held only here has no copy anywhere, and the warning says so
-  // rather than offering the same sentence for both situations.
-  const entry = all().find(r => r.slug === slug);
-  document.getElementById('ask-body').innerHTML =
-    t(entry?.local ? 'del.body.only' : 'del.body', { name: escapeHtml(name || entry?.name || '') });
+function askDelete({ slug, id, name }) {
+  const entry = all().find(r => (id && r.id === id) || (slug && r.slug === slug));
+  if (!entry) return toast(t('toast.gone'));
+  askTarget = entry;
+  // Three different situations, three different warnings. A route in the
+  // account disappears from every device at once; one held only here has no
+  // copy anywhere; saying the same sentence for both would understate one and
+  // overstate the other.
+  document.getElementById('ask-body').innerHTML = t(
+    entry.cloud ? 'del.body.cloud' : entry.local ? 'del.body.only' : 'del.body',
+    { name: escapeHtml(name || entry.name || '') });
   askEl.classList.add('on');
   document.getElementById('ask-no').focus();
 }
-const closeAsk = () => { askEl.classList.remove('on'); askSlug = null; };
+const closeAsk = () => { askEl.classList.remove('on'); askTarget = null; };
 document.getElementById('ask-no').addEventListener('click', closeAsk);
 askEl.addEventListener('click', e => { if (e.target === askEl) closeAsk(); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && askEl.classList.contains('on')) closeAsk(); });
-document.getElementById('ask-yes').addEventListener('click', () => {
-  if (!askSlug) return;
-  removeLocalRoute(askSlug);
-  closeAsk();
-  render();
-  toast(t('del.done'));
+document.getElementById('ask-yes').addEventListener('click', async () => {
+  if (!askTarget) return;
+  const target = askTarget;
+  const yes = document.getElementById('ask-yes');
+  yes.disabled = true;
+  const was = yes.textContent;
+  yes.textContent = t('del.working');
+  try {
+    if (target.cloud) {
+      await account.routes().remove(target.id);
+      cloudRoutes = cloudRoutes.filter(r => r.id !== target.id);
+    }
+    // A route that was uploaded may still have a copy here; take both.
+    if (target.slug) removeLocalRoute(target.slug);
+    closeAsk();
+    render();
+    toast(t('del.done'));
+  } catch (err) {
+    // Left on screen on purpose: a delete that failed and closed quietly looks
+    // exactly like one that worked, right up until the route reappears.
+    toast(t('del.failed', { why: err?.message || err }));
+  } finally {
+    yes.disabled = false;
+    yes.textContent = was;
+  }
 });
 
 /* ---------- adding files ---------- */

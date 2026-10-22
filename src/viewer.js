@@ -437,7 +437,11 @@ export class RouteViewer {
       this.setPlay(starting);
     });
     this.$('speed').addEventListener('click', () => {
-      const steps = [0.5, 1, 2, 4];
+      // Starts where it is and offers the two anybody reaches for: slower to
+      // watch a corner, faster to get on with it. 4x was in the cycle and
+      // nowhere near useful — at that rate a route is a blur, and its only
+      // real effect was standing between 2x and getting back to 1x.
+      const steps = [1, 0.5, 2];
       this.speed = steps[(steps.indexOf(this.speed) + 1) % steps.length];
       this.$('speed').textContent = this.speed + '×';
       r.walkRate = this.speed;
