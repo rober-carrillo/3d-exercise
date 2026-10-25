@@ -10,8 +10,16 @@
 <link rel="apple-touch-icon" href="./brand/apple-touch-icon.png">
 <link rel="stylesheet" href="./src/ui.css">
 <style>html,body{height:100%;overflow:hidden}
-.msg{font:14px/1.6 system-ui;color:var(--ink-2);padding:40px;max-width:60ch}
-.msg a{color:var(--accent)}</style>
+/* When a route cannot be opened. This page is only ever one route, so there is
+   no chrome to keep — but a bare sentence on an empty page reads as a crash,
+   and the thing somebody needs most at that moment is the way back. */
+.msg{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:14px;padding:32px;text-align:center;background:var(--bg)}
+.msg h1{margin:0;font:600 19px/1.3 var(--font);color:var(--ink)}
+.msg p{margin:0;max-width:44ch;font:15px/1.6 var(--font);color:var(--ink-2)}
+.msg a.back{display:inline-flex;align-items:center;gap:8px;margin-top:6px;font:600 15px/1 var(--font);
+  padding:12px 20px;border-radius:10px;background:var(--accent);color:var(--on-accent);text-decoration:none}
+.msg a.back:hover{background:var(--accent-2)}</style>
 </head>
 <body>
 <script type="module">
@@ -19,7 +27,7 @@ import { RouteViewer } from './src/viewer.js';
 import { getLocalRoute } from './src/library.js';
 import { shareRoute } from './src/share.js';
 import { initTheme } from './src/theme.js';
-import { initLang } from './src/i18n.js';
+import { initLang, t } from './src/i18n.js';
 
 initTheme();
 initLang();
@@ -37,7 +45,14 @@ const sharer = (route, cloud = null) => () => shareRoute(route, { cloud });
 const params = new URLSearchParams(location.search);
 const localSlug = params.get('local');
 const cloudId = params.get('cloud');
-const fail = html => { document.body.innerHTML = `<p class="msg">${html}</p>`; };
+const fail = (title, body, href = './routes.html') => {
+  document.body.innerHTML = `<div class="msg"><h1></h1><p></p>`
+    + `<a class="back" href="${href}">← ${t('nav.back')}</a></div>`;
+  // set as text, not markup: these carry a route's name and an error from the
+  // server, neither of which is ours to trust as HTML
+  document.querySelector('.msg h1').textContent = title;
+  document.querySelector('.msg p').textContent = body;
+};
 
 if (cloudId) {
   // a route that lives in the account; row-level security decides whether this
@@ -45,7 +60,7 @@ if (cloudId) {
   const { ready, enabled, routes } = await import('./src/account.js');
   await ready();
   if (!enabled()) {
-    fail('This copy of the app has no account database behind it.');
+    fail(t('view.noaccount.title'), t('view.noaccount.body'), './');
   } else {
     try {
       const entry = await routes().route(cloudId);
@@ -56,16 +71,14 @@ if (cloudId) {
         date: entry.date, onShare: sharer(entry, routes()),
       });
     } catch (err) {
-      fail(`That route could not be opened. It may have been deleted, or you may need to
-        <a href="./">sign in</a> again.`);
+      fail(t('view.nocloud.title'), t('view.nocloud.body'), './routes.html');
     }
   }
 } else if (localSlug) {
   // a route this browser added — its data lives in localStorage, not the build
   const entry = getLocalRoute(localSlug);
   if (!entry) {
-    fail(`That route isn’t in this browser any more. Routes you add are stored locally,
-      so they don’t travel between browsers or devices. <a href="./">Back to the library</a>.`);
+    fail(t('view.nolocal.title'), t('view.nolocal.body'), './routes.html');
   } else {
     document.title = entry.name + ' · Salpicón!';
     window.viewer = new RouteViewer({
@@ -77,8 +90,7 @@ if (cloudId) {
   const manifest = await fetch('./routes.json').then(r => r.json()).catch(() => ({ routes: [] }));
   const entry = manifest.routes.find(r => r.slug === params.get('route')) || manifest.routes[0];
   if (!entry) {
-    fail(`No routes found. Drop a .gpx file on the <a href="./">library page</a>, or commit one
-      to <code>routes/</code> and rebuild.`);
+    fail(t('view.nonone.title'), t('view.nonone.body'), './');
   } else {
     document.title = entry.name + ' · Salpicón!';
     window.viewer = new RouteViewer({

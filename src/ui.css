@@ -424,6 +424,15 @@ footer a{color:var(--ink-2)}
    depends on where the row is on the page.
    --------------------------------------------------------------------------- */
 .more { position: relative; display: inline-flex; }
+/* Lift the whole row's buttons while its menu is open.
+   `.acts` is positioned and has a z-index, so each row's buttons are their own
+   stacking context — and sibling contexts at the same z-index paint in
+   document order, which puts every *later* row on top of an earlier row's open
+   menu. The menu looked right and the link and dots buttons of the two rows
+   below it were still the things being clicked. Raising the open row above its
+   siblings is what actually decides this; the sheet's own z-index only orders
+   it within the row. */
+.acts.open { z-index: 50; }
 .more .dots {
   font: inherit;
   font-size: 1.15rem;

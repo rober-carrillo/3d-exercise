@@ -28,16 +28,41 @@ const KEY = 'salpicon.local.v1';
  * keeping those routes when you finally do is the whole point of working
  * signed out, and a route made by nobody has no one else to belong to.
  */
-let owner = null;
+/**
+ * Who that is, which has to be answerable without waiting for anything.
+ *
+ * It was set by account.js on sign-in, which made it depend on account.js
+ * having loaded — and view.html opens a local route without importing
+ * account.js at all. So the owner was still null there while the entry
+ * carried a real id, every route saved while signed in failed the test, and
+ * the viewer told people their own route was "not in this browser any more".
+ *
+ * The session is already in localStorage and can simply be read. That makes
+ * the answer correct on the first call from any page, in any order, with no
+ * rule for future pages to remember. setLocalOwner still overrides it, because
+ * on a sign-in or sign-out account.js knows before storage does.
+ */
+const SESSION_KEY = 'salpicon.session.v1';    // written by src/supabase.js
+
+let owner;                                    // undefined until first asked
+
+function currentOwner() {
+  if (owner !== undefined) return owner;
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** Called by account.js whenever the signed-in person changes. */
 export function setLocalOwner(id) { owner = id ?? null; }
-export const localOwner = () => owner;
+export const localOwner = () => currentOwner();
 
 /** Is this entry ours to show, upload and delete? */
 const mine = e => {
   const o = e?.owner ?? null;
-  return o === null || o === owner;
+  return o === null || o === currentOwner();
 };
 const LEGACY_KEYS = ['route3d.local.v1'];
 
@@ -85,7 +110,7 @@ export function addLocalRoute(fileName, track, profile) {
     local: true,
     // Who was signed in when this arrived. Null means nobody was, and a route
     // that belongs to nobody is claimable by whoever signs in next.
-    owner,
+    owner: currentOwner(),
     name: track.name && track.name !== 'Untitled route' ? track.name : fileName.replace(/\.gpx$/i, ''),
     added: new Date().toISOString(),
     // the day it was recorded, or — for a file that never carried a time —

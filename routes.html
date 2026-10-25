@@ -348,6 +348,7 @@ function render() {
     if (m === except) return;
     m.querySelector('.sheet').hidden = true;
     m.querySelector('.dots').setAttribute('aria-expanded', 'false');
+    m.closest('.acts')?.classList.remove('open');
   });
   grid.querySelectorAll('.more').forEach(m => {
     const dots = m.querySelector('.dots'), sheet = m.querySelector('.sheet');
@@ -358,6 +359,9 @@ function render() {
       closeMenus(m);
       sheet.hidden = !open;
       dots.setAttribute('aria-expanded', String(open));
+      // see .acts.open in ui.css: this is what puts the menu above the rows
+      // under it, rather than merely in front of its own row
+      m.closest('.acts')?.classList.toggle('open', open);
       // Flip upwards near the bottom of the window, so the last row's menu
       // does not open off the end of the page where it cannot be reached.
       if (open) {
@@ -630,6 +634,7 @@ document.getElementById('acctbtn').addEventListener('click', () => { location.hr
 const shutMenus = () => document.querySelectorAll('.more .sheet:not([hidden])').forEach(sh => {
   sh.hidden = true;
   sh.parentElement.querySelector('.dots')?.setAttribute('aria-expanded', 'false');
+  sh.closest('.acts')?.classList.remove('open');
 });
 document.addEventListener('click', shutMenus);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') shutMenus(); });
