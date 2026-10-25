@@ -19,15 +19,30 @@ import {
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /** How long the replay should last, in seconds at 1x. */
-const FLY = { min: 5, max: 45, short_s: 5 * 60, long_s: 60 * 60 };
+const FLY = { min: 7.5, max: 45, short_s: 5 * 60, long_s: 60 * 60 };
+
+/**
+ * How hard the replay leans on pace.
+ *
+ * The flight's seconds are spent where the outing's seconds were spent, but
+ * spending them in exact proportion under-sells the difference: a stretch run
+ * at twice the speed of another only passes twice as fast, and against a
+ * moving camera and changing ground that is hard to see. Raising each speed to
+ * this power widens every ratio between them by the same 30% — a stretch twice
+ * as fast now passes 2^1.3 ≈ 2.46 times as fast — without changing the order
+ * of anything or the length of the flight, which is still normalised to
+ * `flyDuration`.
+ */
+const PACE_EMPHASIS = 1.3;
 
 /**
  * A fixed forty-five seconds suited a long hike and made nonsense of a short
  * one: twenty minutes round a park took as long to watch as a day in the
  * mountains, so the figure crawled. The replay now lasts somewhere between
- * five and forty-five seconds depending on how long the outing took — the
- * floor for anything under five minutes, the ceiling for anything over an
- * hour, and a straight line between.
+ * seven and a half and forty-five seconds depending on how long the outing
+ * took — the floor for anything under five minutes, the ceiling for anything
+ * over an hour, and a straight line between. The floor started at five, which
+ * flicked a lap of a park past before there was anything to look at.
  *
  * It is the *moving* time that counts where there is one, since the replay
  * skips pauses rather than sitting through them. A track with no timestamps
@@ -577,7 +592,7 @@ export class RouteViewer {
     for (let i = 1; i < n; i++) {
       const ds = t.dist[i] - t.dist[i - 1], dt = t.secs[i] - t.secs[i - 1];
       const v = dt > 0 ? ds / dt : 0;
-      clock[i] = clock[i - 1] + ds / Math.max(v, STILL);
+      clock[i] = clock[i - 1] + ds / Math.pow(Math.max(v, STILL), PACE_EMPHASIS);
     }
     const span = clock[n - 1];                           // ≈ time spent actually moving
     if (!(span > 0)) return;
@@ -625,7 +640,10 @@ export class RouteViewer {
     const r = this.renderer, pc = this._pace;
     if (!pc || !r.state.pace) { r.walkRate = this.speed; return; }
     const v = pc.vel[clamp(Math.round(this._idx || 0), 0, pc.vel.length - 1)];
-    r.walkRate = this.speed * clamp(v / pc.ref, 0, 3);
+    // The same emphasis the clock uses. Her legs have to agree with the ground
+    // going past her: exaggerate one and not the other and she moonwalks
+    // through the quick stretches.
+    r.walkRate = this.speed * clamp(Math.pow(v / pc.ref, PACE_EMPHASIS), 0, 3);
   }
 
   buildProfile() {

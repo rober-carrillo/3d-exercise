@@ -100,6 +100,51 @@ function spark(r) {
     </svg>`;
 }
 
+
+/* ---------------------------------------------------------------------------
+   The two facts a row carries about a route, drawn rather than spelled out.
+
+   They were words: "ritmo grabado", "este navegador", "solo en este teléfono".
+   Three of them on one row, in Spanish, on a phone held upright, and the
+   route's own name — the only part anybody scans for — was an ellipsis. A mark
+   says the same thing in a tenth of the width and reads the same in both
+   languages.
+
+   Both follow the same convention, so one of them teaches the other: the plain
+   outline is the good case, the struck-through outline is its absence. A cloud
+   means the route is in the account and safe; a struck cloud means it exists on
+   this device only. A stopwatch means the route carries real timing; a struck
+   stopwatch means it has no pace to show. Each keeps a title and an aria-label,
+   so hovering, long-pressing or listening still gives the words.
+   --------------------------------------------------------------------------- */
+
+/** A route's marks, as inline SVG. */
+function marks(r, { tagOrigin = true } = {}) {
+  const out = [];
+  const icon = (name, on, label) => {
+    const body = name === 'cloud'
+      ? '<path d="M17.6 19.2a4.4 4.4 0 0 0 .2-8.8 6 6 0 0 0-11.4 1.5 3.9 3.9 0 0 0 .1 7.3Z"/>'
+      : '<circle cx="12" cy="14.2" r="7.3"/><path d="M12 14.2V10"/>'
+        + '<path d="M9.6 3.4h4.8"/><path d="M12 3.4v2.9"/>';
+    // The strike is a separate stroke in the page's own background colour
+    // underneath the visible one, so it stays legible over the row's fill in
+    // either theme instead of blending into whatever is behind it.
+    const strike = on ? '' : '<path class="ko" d="M4.4 20.4 19.6 4.2"/>';
+    return `<span class="mk${on ? '' : ' off'}" title="${label}" aria-label="${label}" role="img">`
+      + `<svg viewBox="0 0 24 24" aria-hidden="true">${body}${strike}</svg></span>`;
+  };
+
+  // Where it lives. Not shown for the samples built into the site: they are
+  // neither in an account nor in this browser, and a mark for a third state
+  // nobody can act on is just a third thing to decipher.
+  if (tagOrigin && (r.cloud || r.local)) {
+    out.push(icon('cloud', !!r.cloud, t(r.cloud ? 'row.incloud' : 'row.onlyhere')));
+  }
+  out.push(icon('watch', !!r.pace, t(r.pace ? 'row.pace' : 'row.nopace')));
+  if (tagOrigin && !r.cloud && !r.local) out.push(`<span class="tag">${t('row.example')}</span>`);
+  return out.join('');
+}
+
 /**
  * One row.
  * @param {object} r        a route, from the manifest, the account or this browser
@@ -117,10 +162,7 @@ export function routeRow(r, { actions = () => '', tagOrigin = true } = {}) {
       <a class="go" href="${routeHref(r)}">
         <span class="day"><b>${dayOf(d).day}</b><small>${dayOf(d).weekday}</small></span>
         <span class="what"><b>${escapeHtml(r.name)}</b><small>${meta}${
-          r.pace ? `<span class="tag pace">${t('row.pace')}</span>` : ''}${
-          tagOrigin && r.local ? `<span class="tag">${t('row.local')}</span>` : ''}${
-          tagOrigin && !r.cloud && !r.local ? `<span class="tag">${t('row.example')}</span>` : ''
-        }</small></span>
+          marks(r, { tagOrigin })}</small></span>
         ${spark(r)}
         <span class="num"><b>${(r.stats.distance_m / 1000).toFixed(2)} km</b><small>↑ ${fmt(r.stats.gain_m)} m</small></span>
       </a>

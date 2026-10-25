@@ -212,6 +212,12 @@
 <div id="rec">
   <div class="rec-card rv-panel">
     <div class="signal-box"><div id="recmark"></div></div>
+    <div class="rec-off" id="recoff" hidden>
+      <b data-i18n="rec.off.title">El GPS está apagado</b>
+      <span data-i18n="rec.off.body">Enciende la ubicación en el teléfono para poder grabar la ruta.
+        Esta pantalla se dará cuenta sola en cuanto la enciendas.</span>
+      <button type="button" id="recoffbtn" data-i18n="rec.off.open">Abrir ajustes de ubicación</button>
+    </div>
     <div class="rec-live">
       <span class="rec-state" id="recstate" data-i18n="rec.recording">grabando</span>
       <span class="rec-gps" id="recgps" data-i18n="rec.gps">esperando al GPS…</span>
@@ -256,8 +262,10 @@
 <script type="module">
 import { parseGPX, analyze, profileSamples } from './src/gpx.js';
 import * as account from './src/account.js';
-import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
+import { addLocalRoute, updateLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
+import { correctElevation } from './src/elevation.js';
+import { locationServices, openLocationSettings } from './src/geo.js';
 import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp,
          locationPrecision, requestLocationPermission, openAppSettings } from './src/geo.js';
 import { markSVG, signalFor } from './src/mark.js';
@@ -630,6 +638,30 @@ function drawSignal() {
   if (html !== signal.last) document.getElementById('recmark').innerHTML = signal.last = html;
 }
 
+/**
+ * Show or hide the "GPS is turned off" panel.
+ *
+ * Called once before a recording starts and again on every change the service
+ * broadcasts, so the panel tracks the phone's setting rather than a snapshot
+ * taken at the worst possible moment. Coming back on puts the status line
+ * into "looking for satellites" instead of leaving the old complaint.
+ */
+function showLocationOff(off, { gps = document.getElementById('recgps') } = {}) {
+  const box = document.getElementById('recoff');
+  if (!box) return;
+  box.hidden = !off;
+  if (off) {
+    gps.textContent = t('rec.off.title');
+    gps.style.color = 'var(--hot)';
+  } else if (box.dataset.was === '1') {
+    gps.textContent = t('rec.off.back');
+    gps.style.color = 'var(--ink-3)';
+  }
+  box.dataset.was = off ? '1' : '0';
+}
+
+document.getElementById('recoffbtn')?.addEventListener('click', () => openLocationSettings());
+
 function startRecording(replaySlug) {
   rec = new TrackRecorder({ activity });
   rec.start();
@@ -684,8 +716,13 @@ function startRecording(replaySlug) {
     // Raw GPS, heard in parallel and written only to the log. It never touches
     // the recorder, so it cannot end up in anybody's route.
     plug?.addListener?.('shadow', fix => logShadow(fix));
+    // Ask before waiting. A recording started with location off used to sit on
+    // "waiting for GPS" indefinitely, with nothing on screen to say that the
+    // fix was a setting rather than the sky.
+    locationServices().then(st => { if (st) showLocationOff(!st.enabled, { gps }); });
     source = pickGeo({
       onFix, onError,
+      onLocationState: st => showLocationOff(!st.enabled, { gps }),
       title: 'Recording a route',
       text: 'Waiting for GPS…',
       // pressing a button in the shade runs exactly the same code as pressing
@@ -847,8 +884,8 @@ document.getElementById('recstop').addEventListener('click', async () => {
   const name = `${activity[0].toUpperCase() + activity.slice(1)} · ${when.toLocaleDateString('en-US',
     { day: 'numeric', month: 'short' })}`;
   const gpx = rec.toGPX(name, { activity });
-  const track = analyze(parseGPX(gpx));
-  const profile = profileSamples(track, 96);
+  let track = analyze(parseGPX(gpx));
+  let profile = profileSamples(track, 96);
   // Saved here first, always. The upload can fail — no signal at the end of a
   // run is the normal case, not the exception — and a route that exists only
   // in a request that did not arrive is a route somebody just lost.
@@ -856,6 +893,30 @@ document.getElementById('recstop').addEventListener('click', async () => {
   note(`finished: ${finished.points.length} points kept, ${track.stats.distance_m.toFixed(0)} m`);
   persistDiag(entry.slug);
   paint();
+
+  // Take the elevations off the terrain model before anything keeps them.
+  //
+  // A phone's GNSS altitude is its worst number by a wide margin: over eleven
+  // minutes on flat ground one recording drifted from −17 m to +19 m and
+  // reported 42 m of ascent where there were 7. The drift is slow and smooth,
+  // so no filter catches it — each step looks reasonable and the sum does not.
+  // The viewer has always corrected this on the way to the screen, which left
+  // the stored figures and the exported .gpx carrying the raw numbers and
+  // disagreeing with what the route looked like.
+  //
+  // Deliberately after the local save, never before it: this fetches tiles,
+  // and the end of a run is exactly where there is no signal. If it fails the
+  // route keeps the elevations it recorded, which is what used to happen to
+  // all of them.
+  const corrected = await correctElevation(track);
+  if (corrected) {
+    track = corrected;
+    profile = profileSamples(track, 96);
+    updateLocalRoute(entry.slug, track, profile);
+    note(`ground: ${Math.round(track.stats.gain_m)} m up `
+      + `(GPS said ${Math.round(track.stats.gps_gain_m)} m)`);
+    paint();
+  }
 
   let href = `./view.html?local=${encodeURIComponent(entry.slug)}`;
   if (account.enabled() && account.user()) {

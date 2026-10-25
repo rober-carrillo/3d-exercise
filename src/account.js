@@ -16,6 +16,7 @@ import { createClient } from './supabase.js';
 import { createCloud } from './cloud.js';
 import { t } from './i18n.js';
 import { setSite, siteOrigin } from './site.js';
+import { setLocalOwner } from './library.js';
 
 let client = null, cloud = null, config = null, loaded = null, returned = null;
 
@@ -42,6 +43,10 @@ export function ready() {
         // Somebody arriving from a confirmation email has their session in the
         // URL and nowhere else. Reading it here, before any page paints, is
         // what makes them arrive signed in rather than apparently rejected.
+        // Before any list is drawn or any upload is attempted: the routes in
+        // this browser have to know whose they are first.
+        setLocalOwner(client.auth.user()?.id ?? null);
+        client.auth.onChange(u => setLocalOwner(u?.id ?? null));
         returned = client.auth.fromUrl();
         if (returned?.state === 'signed-in') {
           // Confirm the tokens are real before telling anybody they are in.
@@ -139,10 +144,14 @@ export async function signOut() {
  *
  * Routes recorded before signing up live only in localStorage, and losing them
  * at the moment somebody finally makes an account would be the worst possible
- * introduction. Local copies are kept, not deleted: a duplicate can be removed
- * later, a route that exists nowhere cannot be recovered.
+ * introduction. Each local copy is dropped only once the database has
+ * confirmed that route, never before.
  */
 export async function uploadLocal(entries, onProgress) {
   if (!cloud) throw new Error('Accounts are not configured in this build');
-  return cloud.importLocal(entries, { onProgress });
+  const { removeLocalRoute } = await import('./library.js');
+  return cloud.importLocal(entries, {
+    onProgress,
+    onSaved: e => removeLocalRoute(e.slug),
+  });
 }

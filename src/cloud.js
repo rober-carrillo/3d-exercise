@@ -160,7 +160,7 @@ export function createCloud(db) {
      * copy is left alone: a duplicate is recoverable, a route that exists in
      * neither place is not.
      */
-    async importLocal(entries, { onProgress } = {}) {
+    async importLocal(entries, { onProgress, onSaved } = {}) {
       const done = [], failed = [];
       for (const [i, e] of entries.entries()) {
         try {
@@ -170,6 +170,12 @@ export function createCloud(db) {
             source: e.source ?? 'import',
             profile: e.profile ?? null,
           }));
+          // The local copy goes once the database has confirmed the route.
+          // It used to be kept, on the reasoning that a duplicate is
+          // recoverable and a route in neither place is not — which is true,
+          // and was the wrong trade: the copy left behind is what the upload
+          // queue finds later and sends to whoever is signed in by then.
+          onSaved?.(e);
         } catch (error) {
           failed.push({ entry: e, error });
         }

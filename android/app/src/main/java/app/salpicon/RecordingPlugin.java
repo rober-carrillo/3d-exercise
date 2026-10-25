@@ -149,6 +149,21 @@ public class RecordingPlugin extends Plugin {
         instance.notifyListeners("action", o);
     }
 
+    /**
+     * Location switched on or off for the whole device.
+     *
+     * Separate from an error: an error is something that went wrong, and this
+     * is a setting the person can change in two taps once they know it is the
+     * problem. The web layer shows it as a state, not a failure.
+     */
+    static void onLocationState(boolean enabled, boolean gps) {
+        if (instance == null) return;
+        JSObject o = new JSObject();
+        o.put("enabled", enabled);
+        o.put("gps", gps);
+        instance.notifyListeners("locationState", o);
+    }
+
     static void onError(String message) {
         if (instance == null) return;
         JSObject o = new JSObject();
@@ -289,6 +304,51 @@ public class RecordingPlugin extends Plugin {
             call.resolve();
         } catch (Throwable t) {
             call.reject("Could not open settings");
+        }
+    }
+
+    /**
+     * Is the phone's location setting on, right now?
+     *
+     * Asked before a recording starts, so the answer can be "turn on
+     * location" instead of a spinner that never resolves.
+     */
+    @PluginMethod
+    public void locationState(PluginCall call) {
+        JSObject res = new JSObject();
+        android.location.LocationManager lm = (android.location.LocationManager)
+            getContext().getSystemService(android.content.Context.LOCATION_SERVICE);
+        boolean enabled = true, gps = false;
+        try {
+            if (lm != null) {
+                gps = lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER);
+                enabled = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P
+                    ? lm.isLocationEnabled()
+                    : gps || lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER);
+            }
+        } catch (Throwable ignored) {}
+        res.put("enabled", enabled);
+        res.put("gps", gps);
+        call.resolve(res);
+    }
+
+    /**
+     * The phone's location settings — a different page from the app's own.
+     *
+     * ACTION_LOCATION_SOURCE_SETTINGS is the system toggle; the app details
+     * page reached by openAppSettings only governs this app's permission.
+     * Offering the wrong one sends somebody looking for a switch that is not
+     * on the screen they were given.
+     */
+    @PluginMethod
+    public void openLocationSettings(PluginCall call) {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Throwable t) {
+            call.reject("Could not open location settings");
         }
     }
 

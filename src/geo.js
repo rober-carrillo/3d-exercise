@@ -163,6 +163,27 @@ export async function requestLocationPermission() {
   try { return await plugin.requestLocation(); } catch { return null; }
 }
 
+/**
+ * Is the phone's location setting switched on?
+ *
+ * The question the app failed to ask. A recording was started with location
+ * off, both providers had nothing to give, and the screen said "waiting for
+ * GPS" for half an hour — true, and useless, because what was needed was two
+ * taps in Settings. Returns `{ enabled, gps }`, or null in a browser, where
+ * there is no such toggle to read.
+ */
+export async function locationServices() {
+  const plugin = recorderPlugin();
+  if (!plugin?.locationState) return null;
+  try { return await plugin.locationState(); } catch { return null; }
+}
+
+/** The phone's location settings — the system toggle, not this app's page. */
+export async function openLocationSettings() {
+  const plugin = recorderPlugin();
+  try { await plugin?.openLocationSettings?.(); return true; } catch { return false; }
+}
+
 /** The app's own settings page — the only way to upgrade approximate to precise. */
 export async function openAppSettings() {
   const plugin = recorderPlugin();
@@ -193,7 +214,8 @@ export async function locationPrecision() {
  * and Android offers no way to ask whether they survived. So nothing depends
  * on them — they are a shortcut to controls that also exist on the screen.
  */
-export function nativeGeo({ onFix, onError, onAction, title = 'Recording a route', text = 'Waiting for GPS…' }) {
+export function nativeGeo({ onFix, onError, onAction, onLocationState,
+                            title = 'Recording a route', text = 'Waiting for GPS…' }) {
   const plugin = recorderPlugin();
   let handles = [];
   return {
@@ -208,6 +230,10 @@ export function nativeGeo({ onFix, onError, onAction, title = 'Recording a route
         handles.push(await plugin.addListener('action', e => onAction?.(e.action)));
         handles.push(await plugin.addListener('recordingError', e =>
           onError?.(new Error(e.message || 'recording error'))));
+        // Switched on or off mid-recording. The service resubscribes on its
+        // own; this is only so the screen stops lying about why it is waiting.
+        handles.push(await plugin.addListener('locationState', e =>
+          onLocationState?.({ enabled: !!e?.enabled, gps: !!e?.gps })));
         const res = await plugin.start({ title, text });
         return res;
       } catch (err) {

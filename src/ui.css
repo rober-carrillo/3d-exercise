@@ -338,3 +338,140 @@ footer a{color:var(--ink-2)}
 .linky{align-self:flex-start;margin-top:10px;font:inherit;font-size:12px;color:var(--ink-3);
   background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
 .linky:hover{color:var(--accent)}
+
+
+/* ---------------------------------------------------------------------------
+   Location switched off.
+
+   Loud on purpose. The failure it replaces was a recording that waited
+   silently for half a run, so this has to read as a thing to act on rather
+   than another line of status: full width, warm border, and the one button
+   that fixes it. It is removed the instant location comes back, by the
+   service's own mode-change broadcast, so it can never be left stale.
+   --------------------------------------------------------------------------- */
+.rec-off {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  width: 100%;
+  margin: 0 0 .75rem;
+  padding: .85rem .95rem;
+  border: 1.5px solid var(--hot);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--hot) 10%, transparent);
+  text-align: left;
+}
+.rec-off b { color: var(--hot); font-size: 1.02rem; }
+.rec-off span { color: var(--ink-2); font-size: .9rem; line-height: 1.4; }
+.rec-off button {
+  align-self: flex-start;
+  font: inherit;
+  font-size: .9rem;
+  padding: .45rem .8rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hot);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   A route's marks: in the cloud or not, timed or not.
+
+   Sized off the surrounding text rather than in pixels, so they sit on the
+   same line as the activity and the date without being measured against them.
+   `currentColor` keeps them in step with the muted colour that line already
+   uses, in both themes, for free.
+   --------------------------------------------------------------------------- */
+.mk {
+  display: inline-flex;
+  vertical-align: -.16em;
+  margin-left: .42em;
+  color: var(--ink-3);
+}
+.mk svg {
+  width: 1.08em;
+  height: 1.08em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+/* The good case reads a shade stronger than the row's small print, the absent
+   case a shade weaker: the difference is legible before the glyph itself is. */
+.mk:not(.off) { color: var(--ink-2); }
+.mk.off { color: var(--ink-3); opacity: .72; }
+.mk.off svg { stroke-dasharray: 3.4 2.4; }
+/* The strike is solid even where the shape it crosses is dashed, and it is
+   drawn with a casing in the page background so it stays readable crossing
+   the shape rather than merging into it. */
+.mk .ko {
+  stroke-dasharray: none;
+  stroke-width: 2.1;
+  paint-order: stroke;
+  stroke: currentColor;
+}
+.mk.off svg .ko { stroke-dasharray: none; }
+
+/* ---------------------------------------------------------------------------
+   The dots menu on a row.
+
+   Anchored to the button, not the row, so it opens under the dots wherever
+   those have ended up at this width. `.up` is set by script when there is not
+   enough room below — measured rather than guessed, because the amount of room
+   depends on where the row is on the page.
+   --------------------------------------------------------------------------- */
+.more { position: relative; display: inline-flex; }
+.more .dots {
+  font: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  letter-spacing: .04em;
+  padding: .3rem .42rem;
+  min-width: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.more .dots:hover { color: var(--ink); border-color: var(--line-2); }
+.more .sheet {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 13.5rem;
+  padding: .3rem;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--bg-hi);
+  box-shadow: var(--shadow-lift);
+}
+.more.up .sheet { top: auto; bottom: calc(100% + 6px); }
+.more .sheet button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .6rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  font: inherit;
+  font-size: .92rem;
+  text-align: left;
+  padding: .52rem .6rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.more .sheet button:hover { background: var(--fill); }
+.more .sheet button .ic { font-size: 16px; font-style: normal; width: 1.25rem; text-align: center; }
+.more .sheet button.danger { color: var(--hot); }
+.more .sheet button.danger:hover { background: color-mix(in srgb, var(--hot) 14%, transparent); }

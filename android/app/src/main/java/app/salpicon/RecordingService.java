@@ -50,6 +50,34 @@ public class RecordingService extends Service implements LocationListener {
     private com.google.android.gms.location.FusedLocationProviderClient fused;
     private boolean usingFused = false;
 
+    /** What we last told the web layer, so a change is only reported once. */
+    private Boolean lastEnabled = null;
+
+    /**
+     * Location being switched on or off, system-wide.
+     *
+     * This is the fix for a recording that sat on "waiting for GPS" for half a
+     * run. Location was off at the start, so neither provider had anything to
+     * deliver and nothing in the app was watching for the reason; switching it
+     * on mid-recording changed nothing either, because a subscription made
+     * while location was off stays dead — Play Services does not revive it.
+     * So: hear the change, say so, and subscribe again from scratch.
+     */
+    private final android.content.BroadcastReceiver modeChange =
+        new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) {
+                boolean on = locationEnabled();
+                reportLocationState();
+                if (on && (foreground || warming)) {
+                    // Came back on. The old subscription is dead; start over.
+                    startLocations();
+                    line2 = "Looking for satellites…";
+                    if (foreground) showNotification();
+                }
+            }
+        };
+
     /** Fixes from the fused provider arrive here instead of onLocationChanged. */
     private final com.google.android.gms.location.LocationCallback fusedCallback =
         new com.google.android.gms.location.LocationCallback() {
@@ -63,7 +91,10 @@ public class RecordingService extends Service implements LocationListener {
             @Override
             public void onLocationAvailability(com.google.android.gms.location.LocationAvailability a) {
                 if (!a.isLocationAvailable() && !warming) {
-                    RecordingPlugin.onError("No position available — check that location is switched on");
+                    // Why it is unavailable decides what the person can do
+                    // about it, so report the toggle rather than a guess.
+                    if (!locationEnabled()) reportLocationState();
+                    else RecordingPlugin.onError("No position available here yet — trying");
                 }
             }
         };
@@ -119,6 +150,10 @@ public class RecordingService extends Service implements LocationListener {
             nm.createNotificationChannel(channel);
         }
         locations = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        try {
+            registerReceiver(modeChange,
+                new android.content.IntentFilter(LocationManager.MODE_CHANGED_ACTION));
+        } catch (Throwable ignored) {}
         try {
             fused = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this);
         } catch (Throwable t) {
@@ -209,8 +244,41 @@ public class RecordingService extends Service implements LocationListener {
         }
     }
 
+    /**
+     * Is location switched on for the whole device?
+     *
+     * Distinct from the app's permission, and the distinction matters: the app
+     * can hold precise location and still receive nothing because the phone's
+     * location toggle is off. The two failures look identical on screen and
+     * have completely different fixes, so they are reported separately.
+     */
+    private boolean locationEnabled() {
+        if (locations == null) return false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return locations.isLocationEnabled();
+            return locations.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                || locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        } catch (Throwable t) {
+            return true;      // unknown is better treated as on than as a false alarm
+        }
+    }
+
+    /** Tell the web layer the location toggle's state, when it has changed. */
+    private void reportLocationState() {
+        boolean on = locationEnabled();
+        if (lastEnabled != null && lastEnabled == on) return;
+        lastEnabled = on;
+        RecordingPlugin.onLocationState(on, gpsEnabled());
+    }
+
+    private boolean gpsEnabled() {
+        try { return locations != null && locations.isProviderEnabled(LocationManager.GPS_PROVIDER); }
+        catch (Throwable t) { return false; }
+    }
+
     private void startLocations() {
         stopLocations();                      // never stack two subscriptions
+        reportLocationState();
         if (fused != null && startFused()) { startShadow(); return; }
         if (locations == null) {
             RecordingPlugin.onError("This device has no location provider");
@@ -327,13 +395,12 @@ public class RecordingService extends Service implements LocationListener {
 
     // Required by LocationListener on older platforms; harmless on newer ones.
     @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-    @Override public void onProviderEnabled(String provider) {}
-    @Override public void onProviderDisabled(String provider) {
-        RecordingPlugin.onError("Location is switched off on this device");
-    }
+    @Override public void onProviderEnabled(String provider) { reportLocationState(); }
+    @Override public void onProviderDisabled(String provider) { reportLocationState(); }
 
     @Override
     public void onDestroy() {
+        try { unregisterReceiver(modeChange); } catch (Throwable ignored) {}
         handler.removeCallbacksAndMessages(null);
         stopLocations();
         warming = false;

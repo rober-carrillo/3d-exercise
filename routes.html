@@ -205,56 +205,54 @@ const all = () => [...cloudRoutes, ...listLocalRoutes()];
 /**
  * The buttons at the right-hand end of a row.
  *
- * "Copy link" is first because it is the one anybody reaches for — the whole
- * point of keeping a route is being able to show it to somebody. The rest is
- * housekeeping: who can see it, a copy of the file back out, and removal.
- */
-/**
- * The buttons at the right-hand end of a row.
- *
- * Icons alone. Four labelled buttons in a row was most of the row's width
- * spent restating what a padlock and a down-arrow already say, and it pushed
- * the route's own name into an ellipsis on a phone. Each one keeps a title and
- * an aria-label, so the name is there for a hover, a screen reader and a long
- * press — just not permanently, in words, four times over.
+ * One button and a menu. Sharing is the reason anybody keeps a route, so the
+ * link stays where a thumb can reach it; the other four are housekeeping and
+ * live behind the dots, where they can afford to say what they do in words
+ * instead of being four more glyphs to decode.
  */
 function actions(r) {
-  const out = [];
-  const btn = (cls, data, icon, label) =>
-    `<button class="dl ${cls}" ${data} title="${label}" aria-label="${label}"><i class="ic">${icon}</i></button>`;
+  const ident = `data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"`;
 
-  // On every row, including the browser-only ones. A route with nowhere to
-  // live cannot be linked to, and the button saying so when it is pressed
-  // teaches that in the moment somebody wants it — which is a better place to
-  // learn it than a paragraph nobody read on the way in.
-  out.push(btn('copy', `data-id="${r.id ?? ''}" data-slug="${r.slug ?? ''}"`, '🔗',
-    canLink(r) ? t('share.viewer') : t('share.local')));
+  // The link button stays out on its own, because it is the one anybody
+  // presses. Tapping it on a private route opens that route to its link and
+  // copies it in the same action — sharing is what the button is for, so
+  // asking first and then making somebody find the setting was two steps for
+  // a decision they had already made by pressing it.
+  const link = `<button class="dl copy" ${ident} title="${canLink(r) ? t('share.viewer') : t('share.local')}"
+      aria-label="${canLink(r) ? t('share.viewer') : t('share.local')}"><i class="ic">🔗</i></button>`;
 
+  // Everything else behind the dots. Five buttons abreast fitted a laptop and
+  // nothing else: upright on a phone the row is about 150 px wide once the
+  // date, the sparkline and the distance have had their share, and the name
+  // was losing to buttons that get pressed once a month.
+  const items = [];
   if (r.cloud) {
-    const icon = r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗';
-    out.push(btn('share', `data-id="${r.id}"`, icon,
-      `${t('share.title')} — ${t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility))}`));
+    const state = t('row.' + (r.visibility === 'link' ? 'shared' : r.visibility));
+    items.push(item('share', `data-id="${r.id}"`,
+      r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗',
+      `${t('row.menu.share')} — ${state}`));
   }
-
-  // The file goes with the route, wherever the route lives. This used to be
-  // offered only for a copy held in the browser, which meant that the moment
-  // a route finished uploading — the thing the app is for — the way to get
-  // the .gpx back out of it disappeared.
-  out.push(btn('gpx', `data-slug="${r.slug ?? ''}" data-id="${r.id ?? ''}"`, '⤓', t('row.gpx.hint')));
-
-  // Offered only on the route the log belongs to, so it cannot be mistaken
-  // for a diagnostic of a different run.
+  items.push(item('gpx', ident, '⤓', t('row.menu.gpx')));
+  // Only on the route the log belongs to. A menu entry that downloads another
+  // run's diagnostic, or nothing at all, is worse than no entry.
   if (diagSlug && (r.slug === diagSlug || r.id === diagSlug)) {
-    out.push(btn('diag', '', '🩺', t('diag.title')));
+    items.push(item('diag', '', '🩺', t('row.menu.diag')));
   }
-  // On every row too. It used to appear only for a copy held in the browser,
-  // so the moment a route finished uploading there was no way left to get rid
-  // of it — the same shape of bug as the missing GPX button, from the same
-  // assumption that "local" and "deletable" were the same thing.
-  out.push(`<button class="rm" data-slug="${r.slug ?? ''}" data-id="${r.id ?? ''}"
-      data-name="${escapeHtml(r.name)}" title="${t('del.yes')}"
-      aria-label="${t('del.yes')}: ${escapeHtml(r.name)}"><i class="ic">🗑</i></button>`);
-  return out.join('');
+  items.push(item('rm', `${ident} data-name="${escapeHtml(r.name)}"`, '🗑',
+    t('row.menu.del'), 'danger'));
+
+  return link + `
+    <span class="more">
+      <button type="button" class="dots" aria-haspopup="true" aria-expanded="false"
+        title="${t('row.more')}" aria-label="${t('row.more')}">⋯</button>
+      <span class="sheet" role="menu" hidden>${items.join('')}</span>
+    </span>`;
+}
+
+/** One line in a row's dots menu: an icon, and the words a menu can afford. */
+function item(cls, data, icon, label, extra = '') {
+  return `<button type="button" role="menuitem" class="${cls === 'rm' ? 'rm' : 'dl ' + cls} ${extra}" ${data}>`
+    + `<i class="ic">${icon}</i><span>${label}</span></button>`;
 }
 
 /* ---------- the figures ----------
@@ -337,6 +335,38 @@ function render() {
 
   paintFigures();
   grid.innerHTML = routeDiary(routes, { actions });
+
+  /**
+   * The dots menus.
+   *
+   * One open at a time, closed by a press anywhere else, by Escape, and by
+   * choosing something from it. The last of those matters most: every item in
+   * here either opens a dialog or starts a download, and a menu still hanging
+   * over the dialog it opened is the kind of thing that gets tapped twice.
+   */
+  const closeMenus = except => grid.querySelectorAll('.more').forEach(m => {
+    if (m === except) return;
+    m.querySelector('.sheet').hidden = true;
+    m.querySelector('.dots').setAttribute('aria-expanded', 'false');
+  });
+  grid.querySelectorAll('.more').forEach(m => {
+    const dots = m.querySelector('.dots'), sheet = m.querySelector('.sheet');
+    dots.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = sheet.hidden;
+      closeMenus(m);
+      sheet.hidden = !open;
+      dots.setAttribute('aria-expanded', String(open));
+      // Flip upwards near the bottom of the window, so the last row's menu
+      // does not open off the end of the page where it cannot be reached.
+      if (open) {
+        const room = window.innerHeight - dots.getBoundingClientRect().bottom;
+        m.classList.toggle('up', room < sheet.scrollHeight + 24);
+      }
+    });
+    sheet.addEventListener('click', () => closeMenus(null));
+  });
 
   grid.querySelectorAll('.dl.share').forEach(b =>
     b.addEventListener('click', e => { e.preventDefault(); openShare(b.dataset.id); }));
@@ -593,6 +623,17 @@ for (const [id, mode] of [['nowt-up', 'up'], ['nowt-in', 'in']]) {
 await account.ready();
 document.getElementById('acctbtn').hidden = !account.enabled();
 document.getElementById('acctbtn').addEventListener('click', () => { location.href = './?signin=in'; });
+
+// Dismissing an open dots menu. Registered once, on the document, because the
+// rows themselves are replaced on every repaint and a listener attached to
+// them would be lost with them.
+const shutMenus = () => document.querySelectorAll('.more .sheet:not([hidden])').forEach(sh => {
+  sh.hidden = true;
+  sh.parentElement.querySelector('.dots')?.setAttribute('aria-expanded', 'false');
+});
+document.addEventListener('click', shutMenus);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') shutMenus(); });
+window.addEventListener('scroll', shutMenus, { passive: true });
 account.onChange(user => {
   const btn = document.getElementById('acctbtn');
   btn.hidden = !account.enabled();
