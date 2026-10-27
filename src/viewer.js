@@ -13,7 +13,7 @@ import { Renderer } from './renderer.js';
 import { t, lang, applyI18n } from './i18n.js';
 import { correctElevation } from './elevation.js';
 import {
-  TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, rampCss, clamp, setEsriToken,
+  TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, ramp, rampCss, clamp, setEsriToken,
 } from './terrain.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -58,6 +58,19 @@ function flyDurationFor(track) {
   return FLY.min + (FLY.max - FLY.min) * t;
 }
 const fmt = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+/**
+ * A speed as minutes per kilometre, which is how a pace is read on foot.
+ *
+ * Standing still has no pace — dividing by it gives an hour per kilometre and
+ * a readout full of nonsense — so anything slower than a crawl says so instead.
+ */
+function paceLabel(ms) {
+  if (!(ms > 0.35)) return '—';
+  const secPerKm = 1000 / ms;
+  const m = Math.floor(secPerKm / 60), sec = Math.round(secPerKm % 60);
+  return `${sec === 60 ? m + 1 : m}:${String(sec === 60 ? 0 : sec).padStart(2, '0')} /km`;
+}
 /** first index whose value reaches `v`, in a non-decreasing array */
 const bisect = (arr, v) => {
   let lo = 0, hi = arr.length - 1;
@@ -109,11 +122,17 @@ const TEMPLATE = `
 
 <div class="rv-fabs">
   <button class="rv-fab rv-fab-play" title="Fly route" aria-label="Fly route">▶</button>
+  <button class="rv-fab rv-fab-pan" title="Grab and move" aria-label="Grab and move"
+    aria-pressed="false">✋</button>
   <button class="rv-fab rv-fab-set" title="Settings" aria-label="Settings" aria-expanded="false">☰</button>
 </div>
 
 <div class="rv-panel rv-legend">
-  Elevation
+  <div class="rv-lgtop">
+    <span class="rv-lg-cap">Elevation</span>
+    <button type="button" class="rv-metric" hidden aria-pressed="false"
+      title="Colour by pace instead">pace</button>
+  </div>
   <div class="rv-ramp"></div>
   <div class="rv-lgrow"><span class="rv-lg-lo">—</span><span class="rv-lg-hi">—</span></div>
 </div>
@@ -126,7 +145,7 @@ const TEMPLATE = `
   <svg class="rv-prof" preserveAspectRatio="none"></svg>
 </div>
 
-<div class="rv-hint">drag to orbit · scroll to zoom · shift-drag to pan</div>
+<div class="rv-hint">drag to orbit · scroll to zoom · shift-drag or ✋ to move</div>
 
 <div class="rv-load">
   <div class="rv-ttl">Building 3D terrain</div>
@@ -168,6 +187,7 @@ export class RouteViewer {
     this.play = false;
     this.playT = 0;
     this.speed = 1;
+    this.metric = 'ele';       // 'ele' | 'pace' — what the colours stand for
     this.progress = { done: 0, total: 1 };
     this.boot().catch(err => this.fail(err));
   }
@@ -264,14 +284,14 @@ export class RouteViewer {
       this.$('s-gain').innerHTML = fmt(st.gain_m) + '<small>m</small>';
       this.$('s-loss').innerHTML = fmt(st.loss_m) + '<small>m</small>';
       this.$('s-max').innerHTML = fmt(st.ele_max) + '<small>m</small>';
-      this.$('lg-lo').textContent = fmt(st.ele_min) + ' m';
-      this.$('lg-hi').textContent = fmt(st.ele_max) + ' m';
+      this.paintLegend();
     };
     paintStats();
     if (o.backHref) { const b = this.$('back'); b.href = o.backHref; b.hidden = false; }
     this.flyDuration = o.flyDuration ?? flyDurationFor(track);
     this.buildProfile();
     this.buildPace();
+    this.buildSpeed();
 
     const renderer = this.renderer = new Renderer(this.$('gl'));
     renderer.onChaseRelease = () =>
@@ -359,6 +379,7 @@ export class RouteViewer {
       if (fixed) {
         track = this.track = fixed;
         this.buildProfile();
+        if (this.metric === 'pace') this.setMetric('pace');
         paintStats();
       }
     }
@@ -487,6 +508,39 @@ export class RouteViewer {
     };
     setBtn.addEventListener('click', () => setPanel(!panel.classList.contains('rv-open')));
     this.$('fab-play').addEventListener('click', () => this.$('play').click());
+
+    /**
+     * Grab and move.
+     *
+     * A mode rather than a modifier, because the modifiers that already panned
+     * — a right button, a held shift — are things a phone does not have. On it
+     * the whole of panning was unreachable, so zooming into one corner of a
+     * route meant orbiting until that corner happened to come round.
+     *
+     * Chase is turned off when it goes on: chase decides where the camera
+     * looks every frame, so panning under it slides the ground back under
+     * itself and nothing appears to happen.
+     */
+    const panBtn = this.$('fab-pan');
+    const setPan = on => {
+      this.renderer.panMode = on;
+      panBtn.classList.toggle('on', on);
+      panBtn.setAttribute('aria-pressed', String(on));
+      this.$('gl').classList.toggle('panning', on);
+      const chase = this.mount.querySelector('.rv-sw[data-key="chase"]');
+      if (on && this.renderer.state.chase) chase?.click();
+    };
+    panBtn.addEventListener('click', () => setPan(!this.renderer.panMode));
+    this._setPan = setPan;
+
+    // Colour by pace. Offered only where there is pace to colour by: a .gpx
+    // with no timestamps has no speed, and a button that explains why it
+    // cannot do anything is worse than no button.
+    const metricBtn = this.$('metric');
+    metricBtn.hidden = !this.hasSpeed;
+    metricBtn.textContent = t('rv.metric.pace');
+    metricBtn.addEventListener('click', () =>
+      this.setMetric(this.metric === 'pace' ? 'ele' : 'pace'));
     // touching the scene puts the settings away again
     this.$('gl').addEventListener('pointerdown', () => { if (this.narrow()) setPanel(false); });
     // Only the viewer that *is* the page may claim the keyboard. One embedded
@@ -646,6 +700,114 @@ export class RouteViewer {
     r.walkRate = this.speed * clamp(Math.pow(v / pc.ref, PACE_EMPHASIS), 0, 3);
   }
 
+  /**
+   * The scale's caption and its two ends, for whichever metric is showing.
+   *
+   * Pace is deliberately written the way the ramp reads rather than the way a
+   * clock does: green is the slow end and red the fast one, matching low and
+   * high ground, so the colours keep one meaning across both modes — the
+   * bright end is always "more of it".
+   */
+  paintLegend() {
+    const st = this.track.stats, pace = this.metric === 'pace' && this.hasSpeed;
+    this.$('lg-cap').textContent = t(pace ? 'rv.pace' : 'rv.elevation');
+    this.$('cap').textContent = t(pace ? 'rv.paceprof' : 'rv.eleprof');
+    if (pace) {
+      this.$('lg-lo').textContent = paceLabel(this._speed.lo);
+      this.$('lg-hi').textContent = paceLabel(this._speed.hi);
+    } else {
+      this.$('lg-lo').textContent = fmt(st.ele_min) + ' m';
+      this.$('lg-hi').textContent = fmt(st.ele_max) + ' m';
+    }
+  }
+
+  /**
+   * Switch what the colours mean, everywhere at once.
+   *
+   * The ribbon, the curtain, the profile curve, the scale and the readout all
+   * have to change together or the picture contradicts itself, so they are all
+   * driven from this one place rather than each watching the flag.
+   */
+  setMetric(which) {
+    const pace = which === 'pace' && this.hasSpeed;
+    this.metric = pace ? 'pace' : 'ele';
+    const t2 = this.track;
+    const eMin = t2.stats.ele_min, eSpan = Math.max(1, t2.stats.ele_max - eMin);
+    const norm = new Float32Array(t2.lat.length);
+    for (let i = 0; i < norm.length; i++) {
+      norm[i] = pace ? this.speedNorm(i) : clamp((t2.ele[i] - eMin) / eSpan, 0, 1);
+    }
+    this.renderer.recolourRoute(norm, ramp);
+    this.buildProfile();
+    this.paintLegend();
+    const btn = this.$('metric');
+    btn.classList.toggle('on', pace);
+    btn.setAttribute('aria-pressed', String(pace));
+    btn.textContent = t(pace ? 'rv.metric.ele' : 'rv.metric.pace');
+    this.scrub(this.distFrac(this.playT), true);
+  }
+
+  /**
+   * Speed along the route, and the band of it worth colouring.
+   *
+   * Three decisions, and the first is not to cut the route into segments at
+   * all. Fixed segments — every 400 m, every minute — have to put their edges
+   * somewhere, and wherever they go they will sooner or later fall across the
+   * middle of a sprint and average half of it away with the jog either side.
+   * There is no segment length that cannot be defeated by an effort shorter
+   * than it. Colouring is per sample, so nothing has an edge to be cut by;
+   * picking out *named* efforts ("fastest kilometre") is a different question
+   * and already has its own answer in stats.js.
+   *
+   * Second: the smoothing window is in **seconds**, not samples and not
+   * metres. Samples would make the window mean different things on a phone
+   * recording at 1 Hz and one dropping to 0.3 Hz. Metres would make it mean
+   * different things at different speeds — 50 m is eight seconds of jogging
+   * and four of sprinting, so the faster you went the less the window would
+   * smooth, which is backwards. Ten seconds is short enough that a twenty
+   * second sprint still reads as a sprint and long enough to flatten the
+   * second-to-second noise in GPS speed.
+   *
+   * Third: the ends of the scale are percentiles of this route, not absolute
+   * speeds. A scale running from nothing to world record would paint every
+   * ordinary run the same shade of middling. Taking the 5th and 95th
+   * percentile spends the whole ramp on the range actually covered, and
+   * ignores the one bad fix at either end that would otherwise own it.
+   */
+  buildSpeed() {
+    const t = this.track;
+    this._speed = null;
+    const n = t.secs ? t.secs.length : 0;
+    if (n < 3 || n !== t.dist.length) return;          // no timing in this file
+
+    const WINDOW_S = 10;
+    const v = new Float32Array(n);
+    let a = 0, b = 0;
+    for (let i = 0; i < n; i++) {
+      // widen a window centred on i until it spans WINDOW_S, then read the
+      // average speed across it: distance over time, both measured, no
+      // assumptions about how evenly the samples are spaced
+      while (a < i && t.secs[i] - t.secs[a] > WINDOW_S / 2) a++;
+      while (b < n - 1 && t.secs[b] - t.secs[i] < WINDOW_S / 2) b++;
+      const dt = t.secs[b] - t.secs[a];
+      v[i] = dt > 0 ? (t.dist[b] - t.dist[a]) / dt : 0;
+    }
+    const sorted = Float32Array.from(v).sort();
+    const at = q => sorted[Math.min(n - 1, Math.max(0, Math.round(q * (n - 1))))];
+    const lo = at(0.05), hi = at(0.95);
+    if (!(hi > lo)) return;                            // stood still throughout
+    this._speed = { v, lo, hi, span: hi - lo };
+  }
+
+  /** Is there pace to colour by? */
+  get hasSpeed() { return !!this._speed; }
+
+  /** Sample i as 0…1 across this route's own range of speed. */
+  speedNorm(i) {
+    const s = this._speed;
+    return s ? clamp((s.v[i] - s.lo) / s.span, 0, 1) : 0;
+  }
+
   buildProfile() {
     const t = this.track, svg = this.$('prof');
     // Start from an empty one. This is called twice on every route now — once
@@ -659,14 +821,18 @@ export class RouteViewer {
     const total = t.stats.distance_m;
     this._prof = { W, H, pad, eMin, eSpan, total };
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    // Whichever metric is on, the curve and the colours come from the same
+    // number — so the shape and the shading can never tell different stories.
+    const pace = this.metric === 'pace' && this.hasSpeed;
+    const val = i => pace ? this.speedNorm(i) : (t.ele[i] - eMin) / eSpan;
     const X = i => t.dist[i] / total * W;
-    const Y = i => H - pad - ((t.ele[i] - eMin) / eSpan) * (H - pad * 2 - 8);
+    const Y = i => H - pad - val(i) * (H - pad * 2 - 8);
     let d = '';
     for (let i = 0; i < t.lat.length; i++) d += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(i).toFixed(1);
     let stops = '';
     for (let s = 0; s <= 20; s++) {
       const i = Math.round(s / 20 * (t.lat.length - 1));
-      stops += `<stop offset="${s * 5}%" stop-color="${rampCss((t.ele[i] - eMin) / eSpan)}"/>`;
+      stops += `<stop offset="${s * 5}%" stop-color="${rampCss(val(i))}"/>`;
     }
     const defs = document.createElementNS(SVGNS, 'defs');
     defs.innerHTML = `<linearGradient id="rv-pg" x1="0" x2="1">${stops}</linearGradient>
@@ -685,11 +851,43 @@ export class RouteViewer {
     svg.style.cursor = 'crosshair';
     if (!this._profWired) {
       this._profWired = true;
-      svg.addEventListener('pointermove', e => {
+      /**
+       * Dragging the profile.
+       *
+       * A mouse scrubs on hover, which is the nicest thing about this control
+       * on a laptop and costs nothing. A finger cannot hover, so touch has to
+       * press first — and then the pointer is captured, so the scrub carries
+       * on when the finger wanders off the strip instead of stopping dead at
+       * the edge, which is most of what "it moves in big steps" was.
+       *
+       * The rest of it was the browser: see touch-action on .rv-prof. With the
+       * gesture ours, `getCoalescedEvents` hands back the positions the OS
+       * sampled between frames, so a fast drag follows the finger instead of
+       * skipping to wherever it was when the frame landed.
+       */
+      let held = false;
+      const at = e => {
         const box = svg.getBoundingClientRect();
-        this.setPlay(false);
         this.scrub(clamp((e.clientX - box.left) / box.width, 0, 1));
+      };
+      svg.addEventListener('pointerdown', e => {
+        held = true;
+        try { svg.setPointerCapture(e.pointerId); } catch {}
+        this.setPlay(false);
+        at(e);
       });
+      svg.addEventListener('pointermove', e => {
+        if (!held && e.pointerType !== 'mouse') return;
+        this.setPlay(false);
+        const fine = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+        at(fine && fine.length ? fine[fine.length - 1] : e);
+      });
+      const release = e => {
+        held = false;
+        try { svg.releasePointerCapture(e.pointerId); } catch {}
+      };
+      svg.addEventListener('pointerup', release);
+      svg.addEventListener('pointercancel', release);
     }
   }
 
@@ -718,10 +916,14 @@ export class RouteViewer {
     this.renderer.setCursor(idx);
     this._idx = idx;                       // the cadence reads the speed here
     const x = d / p.total * p.W;
-    const y = p.H - p.pad - ((ele - p.eMin) / p.eSpan) * (p.H - p.pad * 2 - 8);
+    const yv = this.metric === 'pace' && this.hasSpeed
+      ? this.speedNorm(Math.round(idx)) : (ele - p.eMin) / p.eSpan;
+    const y = p.H - p.pad - yv * (p.H - p.pad * 2 - 8);
     this._cursorLine.setAttribute('x1', x); this._cursorLine.setAttribute('x2', x);
     this._cursorDot.setAttribute('cx', x); this._cursorDot.setAttribute('cy', y);
-    this.$('readout').innerHTML =
-      `<b>${(d / 1000).toFixed(2)}</b> km &nbsp;·&nbsp; <b>${fmt(ele)}</b> m`;
+    const tail = this.metric === 'pace' && this.hasSpeed
+      ? `<b>${paceLabel(this._speed.v[Math.round(idx)])}</b>`
+      : `<b>${fmt(ele)}</b> m`;
+    this.$('readout').innerHTML = `<b>${(d / 1000).toFixed(2)}</b> km &nbsp;·&nbsp; ${tail}`;
   }
 }

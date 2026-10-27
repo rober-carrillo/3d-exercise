@@ -107,6 +107,11 @@ export class Renderer {
     this.walkRate = 1;             // follows the playback speed multiplier
     this.onFrame = null;
     this.onChaseRelease = null;    // fired when a drag frees the camera from chase
+    // "Grab and move": a one-finger drag slides the point everything orbits
+    // around instead of swinging about it. Panning was always possible with a
+    // right button or shift held, and a phone has neither — so zooming in on a
+    // particular corner of a route meant orbiting until it drifted into view.
+    this.panMode = false;
     this._P = mat4(); this._V = mat4(); this._MVP = mat4();
     this._buffers = {};
     this._buildPrograms();
@@ -541,6 +546,7 @@ void main(){vec4 c=vCol;
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       drag.x = e.clientX; drag.y = e.clientY;
+      const panning = drag.pan || this.panMode;
       // Dragging while the replay is paused releases the camera: chase stops
       // driving it and you orbit freely around wherever the figure is standing.
       // Because chase has been steering the same cam values all along, dropping
@@ -553,10 +559,8 @@ void main(){vec4 c=vCol;
       if (this.state.chase) {                       // moving: look around the runner
         this.chase.azOffset = wrap(this.chase.azOffset - dx * 0.005);
         this.chase.pol = clamp(this.chase.pol - dy * 0.005, 0.25, 1.48);
-      } else if (drag.pan) {
-        const s = this.cam.dist * 0.0016;
-        this.cam.tx += (Math.sin(this.cam.az) * dx + Math.cos(this.cam.az) * dy) * s;
-        this.cam.ty += (-Math.cos(this.cam.az) * dx + Math.sin(this.cam.az) * dy) * s;
+      } else if (panning) {
+        this._pan(dx, dy);
       } else {
         this.cam.az -= dx * 0.005;
         this.cam.pol = clamp(this.cam.pol - dy * 0.005, 0.06, 1.52);
@@ -572,21 +576,76 @@ void main(){vec4 c=vCol;
       if (this.state.chase) this.chase.dist = clamp(this.chase.dist * k, ext * 0.02, ext * 0.9);
       else this.cam.dist = clamp(this.cam.dist * k, ext * 0.06, ext * 3.2);
     }, { passive: false });
-    let pinch = null;
+    let pinch = null, mid = null;
     c.addEventListener('touchmove', e => {
       if (e.touches.length === 2) {
         e.preventDefault();
-        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const [a, b] = e.touches;
+        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
         if (pinch) {
           const ext = this.g ? this.g.ext : 1, k = pinch / d;
           if (this.state.chase) this.chase.dist = clamp(this.chase.dist * k, ext * 0.02, ext * 0.9);
           else this.cam.dist = clamp(this.cam.dist * k, ext * 0.06, ext * 3.2);
         }
-        pinch = d;
-      } else pinch = null;
+        // Two fingers slide the ground, whatever mode the one-finger drag is
+        // in. Free the camera first, since chase owns where it is looking and
+        // would drag the view straight back.
+        if (mid && !this.state.chase) this._pan(mx - mid[0], my - mid[1]);
+        pinch = d; mid = [mx, my];
+      } else { pinch = null; mid = null; }
     }, { passive: false });
-    c.addEventListener('touchend', () => { pinch = null; });
+    c.addEventListener('touchend', () => { pinch = null; mid = null; });
     window.addEventListener('resize', () => this._resize());
+  }
+
+  /**
+   * Repaint the route from something other than its height.
+   *
+   * The ribbon, its halo and the curtain under it are coloured once, on the
+   * CPU, when the geometry is built — so switching what the colours *mean*
+   * does not need the terrain rebuilt, only three colour buffers rewritten.
+   * `norm[i]` is the value for sample i already scaled to 0…1; what it stands
+   * for is the caller's business. The ramp comes in as a function for the same
+   * reason — this file has no imports and is not about to grow one for five
+   * colours it does not otherwise need.
+   *
+   * @param {ArrayLike<number>} norm  one value per track sample, 0…1
+   * @param {(t:number)=>number[]} shade  0…1 to [r,g,b], each 0…1
+   */
+  recolourRoute(norm, shade) {
+    const g = this.g;
+    if (!g) return;
+    const gl = this.gl, B = this._buffers, M = g.track.n;
+    const rc = g.ribbon.col, wc = g.curtain.col;
+    for (let i = 0; i < M; i++) {
+      const c = shade(clamp(norm[i] ?? 0, 0, 1));
+      // two vertices per sample for the ribbon, and the curtain fades out
+      // upward, so only its colour changes and not the alpha it was given
+      for (const k of [0, 4]) {
+        rc[i * 8 + k] = c[0]; rc[i * 8 + k + 1] = c[1]; rc[i * 8 + k + 2] = c[2];
+      }
+      wc[i * 8] = c[0]; wc[i * 8 + 1] = c[1]; wc[i * 8 + 2] = c[2];
+      wc[i * 8 + 4] = c[0]; wc[i * 8 + 5] = c[1]; wc[i * 8 + 6] = c[2];
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.rib.col);
+    gl.bufferData(gl.ARRAY_BUFFER, rc, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.wall.col);
+    gl.bufferData(gl.ARRAY_BUFFER, wc, gl.STATIC_DRAW);
+  }
+
+  /**
+   * Slide the orbit centre across the ground, in screen terms.
+   *
+   * Scaled by the camera's distance so a drag moves the ground by about the
+   * same number of pixels whatever the zoom — close in it creeps, far out it
+   * sweeps, which is what makes it feel like dragging the map rather than
+   * driving a dial.
+   */
+  _pan(dx, dy) {
+    const s = this.cam.dist * 0.0016;
+    this.cam.tx += (Math.sin(this.cam.az) * dx + Math.cos(this.cam.az) * dy) * s;
+    this.cam.ty += (-Math.cos(this.cam.az) * dx + Math.sin(this.cam.az) * dy) * s;
   }
 
   _resize() {
