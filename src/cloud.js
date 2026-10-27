@@ -139,18 +139,27 @@ export function createCloud(db) {
     rotateShareToken(id) { return must().rpc('rotate_share_token', { route_id: id }); },
 
     /**
-     * Delete one route, and insist that it happened.
+     * Delete one route, and find out whether it is actually gone.
      *
-     * The check is the point. A DELETE the database accepts but matches no
-     * row — someone else's id, a row already gone, a policy that declines —
-     * used to return without complaint, so the row vanished from the screen
-     * and came back at the next reload with no error in between. Better to
-     * say so at the moment of pressing the button.
+     * A DELETE that matches no row answers exactly like one that matched, so
+     * a delete the database quietly declined used to look like success —
+     * until the route came back at the next reload. Asking for the deleted
+     * row back tells the two apart.
+     *
+     * But an empty answer is not yet a failure, and treating it as one was
+     * its own bug: a route already deleted — by the upload queue undoing
+     * itself, by another tab, by the same button pressed twice — matches
+     * nothing either, and reporting "could not delete" for a route that is
+     * not there is a lie in the opposite direction. So an empty answer is a
+     * question rather than a verdict: if the row really is gone, the press
+     * got what it asked for and that is a success.
      */
     async remove(id) {
       const gone = await must().from('routes').remove({ id: `eq.${id}` });
-      if (!gone.length) throw new Error('The database would not delete that route');
-      return gone[0];
+      if (gone.length) return gone[0];
+      const left = await must().from('routes').select('id', { filter: { id: `eq.${id}` }, limit: 1 });
+      if (left.length) throw new Error('The database would not delete that route');
+      return { id };
     },
 
     /**
