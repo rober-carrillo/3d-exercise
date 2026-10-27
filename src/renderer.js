@@ -641,11 +641,16 @@ void main(){vec4 c=vCol;
    * same number of pixels whatever the zoom — close in it creeps, far out it
    * sweeps, which is what makes it feel like dragging the map rather than
    * driving a dial.
+   *
+   * Both axes carry the drag the way a hand would: the ground follows the
+   * finger. Pulling down brings what is above the cursor down towards it,
+   * which is the opposite of moving the camera down, and is the one that feels
+   * like paper rather than a scrollbar.
    */
   _pan(dx, dy) {
     const s = this.cam.dist * 0.0016;
-    this.cam.tx += (Math.sin(this.cam.az) * dx + Math.cos(this.cam.az) * dy) * s;
-    this.cam.ty += (-Math.cos(this.cam.az) * dx + Math.sin(this.cam.az) * dy) * s;
+    this.cam.tx += (Math.sin(this.cam.az) * dx - Math.cos(this.cam.az) * dy) * s;
+    this.cam.ty += (-Math.cos(this.cam.az) * dx - Math.sin(this.cam.az) * dy) * s;
   }
 
   _resize() {
