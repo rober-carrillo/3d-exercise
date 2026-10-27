@@ -128,11 +128,7 @@ const TEMPLATE = `
 </div>
 
 <div class="rv-panel rv-legend">
-  <div class="rv-lgtop">
-    <span class="rv-lg-cap">Elevation</span>
-    <button type="button" class="rv-metric" hidden aria-pressed="false"
-      title="Colour by pace instead">pace</button>
-  </div>
+  <span class="rv-lg-cap">Elevation</span>
   <div class="rv-ramp"></div>
   <div class="rv-lgrow"><span class="rv-lg-lo">—</span><span class="rv-lg-hi">—</span></div>
 </div>
@@ -141,6 +137,8 @@ const TEMPLATE = `
 
 <div class="rv-panel rv-profile">
   <div class="rv-cap">Elevation profile</div>
+  <button type="button" class="rv-metric" hidden aria-pressed="false"
+    title="Colour by pace instead">pace</button>
   <div class="rv-readout"></div>
   <svg class="rv-prof" preserveAspectRatio="none"></svg>
 </div>

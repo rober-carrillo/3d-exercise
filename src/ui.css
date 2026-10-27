@@ -498,9 +498,12 @@ footer a{color:var(--ink-2)}
    The button sits in the legend rather than with the other controls because
    it relabels the scale right under it: the thing it changes is the thing it
    is standing on. */
-.rv-lgtop{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.rv-metric{font:inherit;font-size:11px;line-height:1;letter-spacing:.02em;
-  padding:4px 8px;border-radius:999px;cursor:pointer;
+/* Sits in the profile panel's header, beside the caption it rewrites — and
+   not in the legend, which a phone hides, which is the one place the switch
+   most needs to be reachable. */
+.rv-metric{position:absolute;top:5px;left:50%;transform:translateX(-50%);z-index:2;
+  font:inherit;font-size:10px;line-height:1;letter-spacing:.06em;text-transform:uppercase;
+  padding:5px 10px;border-radius:999px;cursor:pointer;
   color:var(--ink-3);background:transparent;border:1px solid var(--line-2);
   transition:color .15s,border-color .15s,background .15s}
 .rv-metric:hover{color:var(--ink);border-color:var(--ink-3)}
