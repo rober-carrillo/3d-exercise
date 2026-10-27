@@ -155,7 +155,8 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 
 .rv-legend{position:fixed;left:16px;bottom:154px;padding:9px 12px;z-index:5;font-size:10.5px;color:var(--ink-2)}
 .rv-ramp{width:132px;height:6px;border-radius:4px;margin:6px 0 4px;background:linear-gradient(90deg,#2e8a50 0 20%,#7cc06a 20% 40%,#f5b700 40% 60%,#f0761a 60% 80%,#e8162e 80%)}
-.rv-lgrow{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:10px;color:var(--ink-3)}
+.rv-lgrow{display:flex;justify-content:space-between;gap:6px;font-variant-numeric:tabular-nums;font-size:10px;color:var(--ink-3)}
+.rv-lg-mid:not(:empty){color:var(--ink-2)}
 .rv-status{position:fixed;right:16px;bottom:154px;padding:8px 12px;z-index:5;font-size:10.5px;color:var(--ink-3);max-width:272px;white-space:nowrap}
 .rv-ver{margin-left:8px;padding-left:8px;border-left:1px solid var(--line);color:var(--ink-3);font-variant-numeric:tabular-nums}
 .rv-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--ink-3)}
@@ -501,10 +502,22 @@ footer a{color:var(--ink-2)}
 /* Sits in the profile panel's header, beside the caption it rewrites — and
    not in the legend, which a phone hides, which is the one place the switch
    most needs to be reachable. */
-.rv-metric{position:absolute;top:5px;left:50%;transform:translateX(-50%);z-index:2;
+/* Two options and a pill that slides between them: which one is live is the
+   thing being read here, so it is shown by position and fill rather than by
+   the label changing under you. */
+.rv-metric{position:absolute;top:4px;left:50%;transform:translateX(-50%);z-index:2;
+  display:grid;grid-template-columns:1fr 1fr;align-items:stretch;
+  padding:2px;border-radius:999px;background:var(--fill-2);border:1px solid var(--line-2)}
+/* an author `display` beats the UA stylesheet's [hidden], so say it here */
+.rv-metric[hidden]{display:none}
+.rv-metric .rv-mt-pill{position:absolute;top:2px;left:2px;z-index:0;
+  width:calc(50% - 2px);height:calc(100% - 4px);border-radius:999px;
+  background:var(--accent);transition:transform .18s ease}
+.rv-metric.on .rv-mt-pill{transform:translateX(100%)}
+.rv-metric button{position:relative;z-index:1;appearance:none;border:0;background:none;
   font:inherit;font-size:10px;line-height:1;letter-spacing:.06em;text-transform:uppercase;
-  padding:5px 10px;border-radius:999px;cursor:pointer;
-  color:var(--ink-3);background:transparent;border:1px solid var(--line-2);
-  transition:color .15s,border-color .15s,background .15s}
-.rv-metric:hover{color:var(--ink);border-color:var(--ink-3)}
-.rv-metric.on{color:var(--on-accent);background:var(--accent);border-color:var(--accent)}
+  padding:5px 11px;border-radius:999px;cursor:pointer;color:var(--ink-3);
+  transition:color .18s}
+.rv-metric button:hover{color:var(--ink)}
+.rv-metric button[aria-pressed="true"]{color:var(--on-accent)}
+@media (prefers-reduced-motion:reduce){.rv-metric .rv-mt-pill{transition:none}}

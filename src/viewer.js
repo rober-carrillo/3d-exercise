@@ -130,15 +130,18 @@ const TEMPLATE = `
 <div class="rv-panel rv-legend">
   <span class="rv-lg-cap">Elevation</span>
   <div class="rv-ramp"></div>
-  <div class="rv-lgrow"><span class="rv-lg-lo">—</span><span class="rv-lg-hi">—</span></div>
+  <div class="rv-lgrow"><span class="rv-lg-lo">—</span><span class="rv-lg-mid"></span><span class="rv-lg-hi">—</span></div>
 </div>
 
 <div class="rv-panel rv-status"><span class="rv-dot"></span><span class="rv-st-txt">loading…</span></div>
 
 <div class="rv-panel rv-profile">
   <div class="rv-cap">Elevation profile</div>
-  <button type="button" class="rv-metric" hidden aria-pressed="false"
-    title="Colour by pace instead">pace</button>
+  <div class="rv-metric" hidden role="group">
+    <i class="rv-mt-pill" aria-hidden="true"></i>
+    <button type="button" data-metric="ele" aria-pressed="true">elevation</button>
+    <button type="button" data-metric="pace" aria-pressed="false">pace</button>
+  </div>
   <div class="rv-readout"></div>
   <svg class="rv-prof" preserveAspectRatio="none"></svg>
 </div>
@@ -532,13 +535,21 @@ export class RouteViewer {
     this._setPan = setPan;
 
     // Colour by pace. Offered only where there is pace to colour by: a .gpx
-    // with no timestamps has no speed, and a button that explains why it
-    // cannot do anything is worse than no button.
-    const metricBtn = this.$('metric');
-    metricBtn.hidden = !this.hasSpeed;
-    metricBtn.textContent = t('rv.metric.pace');
-    metricBtn.addEventListener('click', () =>
-      this.setMetric(this.metric === 'pace' ? 'ele' : 'pace'));
+    // with no timestamps has no speed, and a control that explains why it
+    // cannot do anything is worse than no control.
+    //
+    // Two named options with a pill behind the live one, not a single button
+    // that renames itself. A button reading "pace" is ambiguous in the worst
+    // possible way — it is equally readable as "you are looking at pace" and
+    // "press for pace" — and the only way to find out which was to press it
+    // and see what changed.
+    const metricBox = this.$('metric');
+    metricBox.hidden = !this.hasSpeed;
+    metricBox.setAttribute('aria-label', t('rv.metric.group'));
+    for (const b of metricBox.querySelectorAll('button')) {
+      b.textContent = t('rv.metric.' + b.dataset.metric);
+      b.addEventListener('click', () => this.setMetric(b.dataset.metric));
+    }
     // touching the scene puts the settings away again
     this.$('gl').addEventListener('pointerdown', () => { if (this.narrow()) setPanel(false); });
     // Only the viewer that *is* the page may claim the keyboard. One embedded
@@ -711,10 +722,16 @@ export class RouteViewer {
     this.$('lg-cap').textContent = t(pace ? 'rv.pace' : 'rv.elevation');
     this.$('cap').textContent = t(pace ? 'rv.paceprof' : 'rv.eleprof');
     if (pace) {
+      // The ends are a band around the middle, not the slowest and fastest
+      // readings, so the middle label is the one that makes the other two
+      // mean anything: this is your own average, and these are the paces the
+      // colours run out at either side of it.
       this.$('lg-lo').textContent = paceLabel(this._speed.lo);
+      this.$('lg-mid').textContent = t('rv.pace.avg', { pace: paceLabel(this._speed.mid) });
       this.$('lg-hi').textContent = paceLabel(this._speed.hi);
     } else {
       this.$('lg-lo').textContent = fmt(st.ele_min) + ' m';
+      this.$('lg-mid').textContent = '';
       this.$('lg-hi').textContent = fmt(st.ele_max) + ' m';
     }
   }
@@ -738,10 +755,11 @@ export class RouteViewer {
     this.renderer.recolourRoute(norm, ramp);
     this.buildProfile();
     this.paintLegend();
-    const btn = this.$('metric');
-    btn.classList.toggle('on', pace);
-    btn.setAttribute('aria-pressed', String(pace));
-    btn.textContent = t(pace ? 'rv.metric.ele' : 'rv.metric.pace');
+    const box = this.$('metric');
+    box.classList.toggle('on', pace);
+    for (const b of box.querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b.dataset.metric === (pace ? 'pace' : 'ele')));
+    }
     this.scrub(this.distFrac(this.playT), true);
   }
 
@@ -778,7 +796,16 @@ export class RouteViewer {
     const n = t.secs ? t.secs.length : 0;
     if (n < 3 || n !== t.dist.length) return;          // no timing in this file
 
-    const WINDOW_S = 10;
+    // Thirty seconds, not ten. Ten seconds of 1 Hz GPS is a handful of fixes
+    // with metres of scatter in each, and the pace that falls out of it
+    // swings by a minute per kilometre while somebody holds a perfectly even
+    // effort — which is what made the pace profile look like a saw. Half a
+    // minute is about the shortest window that reads effort instead of noise
+    // and still picks out a sprint down one street. Short routes get a
+    // proportionally shorter one, or a ten-minute jog would be a single
+    // colour.
+    const span_s = t.secs[n - 1] - t.secs[0];
+    const WINDOW_S = clamp(span_s / 20, 12, 30);
     const v = new Float32Array(n);
     let a = 0, b = 0;
     for (let i = 0; i < n; i++) {
@@ -790,20 +817,53 @@ export class RouteViewer {
       const dt = t.secs[b] - t.secs[a];
       v[i] = dt > 0 ? (t.dist[b] - t.dist[a]) / dt : 0;
     }
-    const sorted = Float32Array.from(v).sort();
-    const at = q => sorted[Math.min(n - 1, Math.max(0, Math.round(q * (n - 1))))];
-    const lo = at(0.05), hi = at(0.95);
-    if (!(hi > lo)) return;                            // stood still throughout
-    this._speed = { v, lo, hi, span: hi - lo };
+
+    /*
+     * The scale is centred on this route's own median pace and reaches the
+     * same distance either side of it. That is the question these colours are
+     * actually asked: where was I faster than usual, and where slower.
+     *
+     * It replaces the 5th-to-95th percentile of speed stretched across the
+     * whole ramp, which had no middle. A route run at an even effort has a p5
+     * and a p95 a few per cent apart; the ramp spent itself on those few per
+     * cent, and half the route came out scarlet for being marginally quicker
+     * than the other half. Every route looked eventful, so none of them did.
+     *
+     * The median is taken over moving samples only. Waiting at a crossing is
+     * not a pace, and a route with four red lights in it had its own middle
+     * dragged down by the waiting.
+     */
+    const STILL = 0.5;                                 // m/s, well under walking
+    const moving = Array.from(v).filter(x => x > STILL).sort((x, y) => x - y);
+    if (moving.length < 3) return;                     // stood still throughout
+    const q = p => moving[Math.min(moving.length - 1, Math.max(0, Math.round(p * (moving.length - 1))))];
+    const mid = q(0.5);
+    if (!(mid > 0)) return;
+
+    // How far either side the colours reach, as a fraction of the median.
+    // Floored at ±10% so an even run stays around the middle of the ramp
+    // rather than being magnified into drama, and capped at ±40% so one
+    // sprint — or one tunnel full of bad fixes — cannot flatten the rest of
+    // the route into a single shade.
+    const spread = Math.max(q(0.9) / mid - 1, 1 - q(0.1) / mid);
+    const half = clamp(spread, 0.10, 0.40);
+    this._speed = { v, mid, half, lo: mid * (1 - half), hi: mid * (1 + half) };
   }
 
   /** Is there pace to colour by? */
   get hasSpeed() { return !!this._speed; }
 
-  /** Sample i as 0…1 across this route's own range of speed. */
+  /**
+   * Sample i as 0…1, with 0.5 meaning "this route's own average".
+   *
+   * So the middle of the ramp is a fixed, readable thing rather than the
+   * middle of whatever happened: below it is slower than usual, above it
+   * faster, and the same colour means the same thing on every route.
+   */
   speedNorm(i) {
     const s = this._speed;
-    return s ? clamp((s.v[i] - s.lo) / s.span, 0, 1) : 0;
+    if (!s) return 0;
+    return clamp(0.5 + (s.v[i] / s.mid - 1) / (2 * s.half), 0, 1);
   }
 
   buildProfile() {
