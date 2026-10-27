@@ -264,8 +264,17 @@ export function createClient(url, publishableKey) {
         });
         return Array.isArray(out) ? out[0] : out;
       },
+      // `return=representation` so the caller can see *what* was deleted.
+      // Without it Postgres answers 204 whether it removed a row or none at
+      // all, and a delete that row-level security quietly declined is
+      // indistinguishable from one that worked — right up until the route
+      // comes back on the next reload.
       async remove(filter) {
-        await request(`/rest/v1/${table}${qs(filter)}`, { method: 'DELETE', token: await token() });
+        const out = await request(`/rest/v1/${table}${qs(filter)}`, {
+          method: 'DELETE', token: await token(),
+          headers: { Prefer: 'return=representation' },
+        });
+        return Array.isArray(out) ? out : out ? [out] : [];
       },
     };
   }

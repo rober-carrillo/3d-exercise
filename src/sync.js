@@ -22,7 +22,7 @@
  */
 
 import * as account from './account.js';
-import { listLocalRoutes, removeLocalRoute } from './library.js';
+import { listLocalRoutes, removeLocalRoute, hasLocalRoute } from './library.js';
 
 /** Wait this long before trying again, growing with each failed round. */
 const BACKOFF_MS = [15_000, 60_000, 180_000, 600_000];
@@ -34,6 +34,22 @@ let round = 0;                 // how many times in a row the whole batch has fa
 let busy = false;
 const refusals = new Map();    // slug -> how many times the server has said no
 const listeners = new Set();
+const held = new Set();        // slugs somebody is in the middle of deciding about
+
+/**
+ * Keep hands off this route until further notice.
+ *
+ * For the delete dialog. Uploading a route out from under the question "are
+ * you sure you want to delete this?" turns a yes into a route that is still
+ * in the account, because what the yes then deletes is a local copy that is
+ * already a duplicate. Holding it is simpler than trying to catch up
+ * afterwards, and the hold lasts seconds.
+ */
+export function hold(slug) { if (slug) held.add(slug); }
+export function release(slug) { if (slug) held.delete(slug); }
+
+/** Still here, still ours to send. Checked either side of every upload. */
+const sendable = slug => !held.has(slug) && hasLocalRoute(slug);
 
 /** Subscribe to progress: `{ state, done, total, failed, error }`. */
 export function onSync(fn) {
@@ -79,7 +95,8 @@ export async function syncNow() {
   if (busy) return { skipped: 'already running' };
   if (!account.enabled() || !account.user()) return { skipped: 'not signed in' };
 
-  const pending = listLocalRoutes().filter(e => (refusals.get(e.slug) ?? 0) < MAX_REFUSALS);
+  const pending = listLocalRoutes()
+    .filter(e => (refusals.get(e.slug) ?? 0) < MAX_REFUSALS && !held.has(e.slug));
   if (!pending.length) { round = 0; clearTimeout(timer); return { skipped: 'nothing pending' }; }
 
   // `onLine` false is reliable — the device knows it has no interface. `true`
@@ -91,13 +108,28 @@ export async function syncNow() {
   let done = 0, failed = 0, lastError = null;
 
   for (const [i, entry] of pending.entries()) {
+    // Deleted since the list was taken. `pending` is a snapshot, and an
+    // upload is slow enough — tens of thousands of points over one bar of
+    // signal — that somebody can read the library, decide they don't want a
+    // route and delete it entirely within one pass of this loop.
+    if (!sendable(entry.slug)) { emit({ state: 'uploading', done, total: pending.length }); continue; }
     try {
-      await account.routes().save(entry.track, {
+      const saved = await account.routes().save(entry.track, {
         name: entry.name,
         activity: entry.activity ?? entry.track?.activity ?? 'run',
         source: entry.source ?? 'recorded',
         profile: entry.profile ?? null,
       });
+      // And deleted *during* this upload. The row is in the database now, so
+      // dropping the local copy is not enough: without this the route the
+      // person deleted reappears at the next reload, as a cloud route this
+      // time, which is the one bug that makes an app look like it ignores you.
+      if (!sendable(entry.slug)) {
+        try { await account.routes().remove(saved.id); }
+        catch { /* best effort; a stray row can be deleted by hand, a lost route cannot be recovered */ }
+        emit({ state: 'uploading', done, total: pending.length });
+        continue;
+      }
       // Only now. The database has the route; this copy is a duplicate, and
       // leaving it is what made a synced route keep saying "this browser".
       removeLocalRoute(entry.slug);

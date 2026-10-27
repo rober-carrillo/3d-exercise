@@ -138,7 +138,20 @@ export function createCloud(db) {
     /** Invalidate every link already handed out for a route. */
     rotateShareToken(id) { return must().rpc('rotate_share_token', { route_id: id }); },
 
-    remove(id) { return must().from('routes').remove({ id: `eq.${id}` }); },
+    /**
+     * Delete one route, and insist that it happened.
+     *
+     * The check is the point. A DELETE the database accepts but matches no
+     * row — someone else's id, a row already gone, a policy that declines —
+     * used to return without complaint, so the row vanished from the screen
+     * and came back at the next reload with no error in between. Better to
+     * say so at the moment of pressing the button.
+     */
+    async remove(id) {
+      const gone = await must().from('routes').remove({ id: `eq.${id}` });
+      if (!gone.length) throw new Error('The database would not delete that route');
+      return gone[0];
+    },
 
     /**
      * Open a shared route from its token, with or without an account. This is

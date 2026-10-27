@@ -157,7 +157,7 @@ import { markSVG } from './src/mark.js';
 import { lastDiag, summarise } from './src/diag.js';
 import { initTheme, themeToggle } from './src/theme.js';
 import { initLang, langToggle, t } from './src/i18n.js';
-import { startSync, onSync } from './src/sync.js';
+import { startSync, onSync, hold, release } from './src/sync.js';
 
 initTheme();
 initLang();
@@ -470,6 +470,9 @@ function askDelete({ slug, id, name }) {
   const entry = all().find(r => (id && r.id === id) || (slug && r.slug === slug));
   if (!entry) return toast(t('toast.gone'));
   askTarget = entry;
+  // Nothing may upload this route while the question is on screen; see
+  // `hold` in src/sync.js for why a yes would otherwise delete the wrong copy.
+  hold(entry.slug);
   // Three different situations, three different warnings. A route in the
   // account disappears from every device at once; one held only here has no
   // copy anywhere; saying the same sentence for both would understate one and
@@ -480,7 +483,11 @@ function askDelete({ slug, id, name }) {
   askEl.classList.add('on');
   document.getElementById('ask-no').focus();
 }
-const closeAsk = () => { askEl.classList.remove('on'); askTarget = null; };
+const closeAsk = () => {
+  askEl.classList.remove('on');
+  release(askTarget?.slug);
+  askTarget = null;
+};
 document.getElementById('ask-no').addEventListener('click', closeAsk);
 askEl.addEventListener('click', e => { if (e.target === askEl) closeAsk(); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && askEl.classList.contains('on')) closeAsk(); });

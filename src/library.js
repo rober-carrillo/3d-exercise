@@ -191,6 +191,19 @@ export function getLocalRoute(slug) {
   catch { return null; }
 }
 
+/**
+ * Is this route still held here — right now, on disk?
+ *
+ * Deliberately not `getLocalRoute`, which falls back to the sessionStorage
+ * copy a viewer tab leaves behind and so answers yes for a route that has
+ * been deleted. The upload loop needs the strict question: has somebody
+ * removed this since I picked it up?
+ */
+export function hasLocalRoute(slug) {
+  const e = readAll()[slug];
+  return !!e && mine(e);
+}
+
 export function removeLocalRoute(slug) {
   const all = readAll();
   if (all[slug] && !mine(all[slug])) return;       // not ours to delete
