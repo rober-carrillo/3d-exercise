@@ -265,6 +265,7 @@ import * as account from './src/account.js';
 import { addLocalRoute, updateLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
 import { TrackRecorder } from './src/recorder.js';
 import { correctElevation } from './src/elevation.js';
+import { checkpoint, readCheckpoint, clearCheckpoint } from './src/crash.js';
 import { locationServices, openLocationSettings } from './src/geo.js';
 import { replayGeo, pickGeo, nativeGeoAvailable, geoAvailable, keepAwake, notificationState, warmUp,
          locationPrecision, requestLocationPermission, openAppSettings } from './src/geo.js';
@@ -662,7 +663,10 @@ function showLocationOff(off, { gps = document.getElementById('recgps') } = {}) 
 
 document.getElementById('recoffbtn')?.addEventListener('click', () => openLocationSettings());
 
+let warnedNoRoom = false;
+
 function startRecording(replaySlug) {
+  warnedNoRoom = false;
   rec = new TrackRecorder({ activity });
   rec.start();
   startDiag({
@@ -674,6 +678,18 @@ function startRecording(replaySlug) {
   const note = document.getElementById('recnote');
   const onFix = fix => {
     const why = rec.addFix(fix);
+    // Only when the fix became part of the track. A rejected one leaves the
+    // points exactly as they were, and rewriting the same track every second
+    // while somebody stands at a crossing is work for nothing.
+    //
+    // If the phone has no room the recording still runs, but it is back to
+    // being a single copy in memory — so say so once, while there is still
+    // time to free something, rather than at the end when it is too late to
+    // matter.
+    if (!why && !checkpoint(rec) && !warnedNoRoom) {
+      warnedNoRoom = true;
+      toast(t('rec.nocheckpoint'));
+    }
     logFix(fix, why, { lat: rec._pos?.lat, lon: rec._pos?.lon, points: rec.points.length });
     // Say where it came from as well as how good it is. A fix with no bearing
     // is very likely assembled from wifi and cell towers rather than read off
@@ -890,6 +906,12 @@ document.getElementById('recstop').addEventListener('click', async () => {
   // run is the normal case, not the exception — and a route that exists only
   // in a request that did not arrive is a route somebody just lost.
   const entry = addLocalRoute(name + '.gpx', track, profile);
+  // The in-progress copy goes only now, and only if the library really took
+  // the route. If storage refused it, the checkpoint is the better of the two
+  // copies — it is on disk and this one is not — so it stays where it is and
+  // the next start will offer it back.
+  if (entry.stored) clearCheckpoint();
+  else toast(t('rec.nostore'));
   note(`finished: ${finished.points.length} points kept, ${track.stats.distance_m.toFixed(0)} m`);
   persistDiag(entry.slug);
   paint();
@@ -1147,6 +1169,57 @@ if (arrived?.state === 'signed-in' && arrived.kind === 'recovery') {
   acctEl.classList.add('on');
   say(expired ? t('acct.linkexpired') : t('acct.linkbad', { why: arrived.message }));
 }
+
+/* ---------- a recording the app did not get to finish ---------- */
+/**
+ * Turn a leftover checkpoint into a route, at startup, before anything else.
+ *
+ * Before the upload queue, so a recovered route goes up in the same pass as
+ * everything else rather than waiting for the next one. Without asking,
+ * because the question has no useful "no": the alternative to keeping it is
+ * throwing away a walk somebody has already been on, and a dialog that can be
+ * dismissed by accident is how that happens twice.
+ *
+ * The rebuild runs through toGPX and analyze exactly as a normal finish does,
+ * so a recovered route is not a second kind of route — it is the same route
+ * the app would have made if it had survived to the end of the walk.
+ */
+function recoverRecording() {
+  const left = readCheckpoint();
+  if (!left) return;
+  if (left.points.length < 2) { clearCheckpoint(); return; }
+  try {
+    const act = left.activity || 'run';
+    const r = new TrackRecorder({ activity: act });
+    r.points = left.points;
+    r.breaks = left.breaks;
+    const when = new Date(left.points[0].t);
+    const name = `${act[0].toUpperCase() + act.slice(1)} · ${when.toLocaleDateString('en-US',
+      { day: 'numeric', month: 'short' })}`;
+    let track = analyze(parseGPX(r.toGPX(name, { activity: act })));
+    let profile = profileSamples(track, 96);
+    const entry = addLocalRoute(name + '.gpx', track, profile);
+    if (!entry.stored) return toast(t('rec.nostore'));   // keep the checkpoint; it is the safer copy
+    clearCheckpoint();
+    toast(t('rec.recovered', { name, km: fmtKm(track.stats.distance_m) }));
+
+    // Now that it is safe, try the terrain heights — but off to one side.
+    // This is the moment the phone is most likely to have a connection, since
+    // it is being opened at home, and it is the correction the recording
+    // itself could not do with no signal. It fetches tiles, though, and
+    // nothing else on this page may wait for that: the route is already
+    // saved, and failure changes nothing except that it keeps what the GPS
+    // said.
+    correctElevation(track)
+      .then(c => { if (c) updateLocalRoute(entry.slug, c, profileSamples(c, 96)); })
+      .catch(() => {});
+  } catch (err) {
+    // Never let this take the page down with it. A checkpoint that cannot be
+    // turned into a route is left exactly where it is, for a build that can.
+    console.warn('could not recover the last recording', err);
+  }
+}
+recoverRecording();
 
 /* ---------- uploading what is still on this device ---------- */
 const syncer = startSync();

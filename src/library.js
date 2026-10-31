@@ -132,11 +132,40 @@ export function addLocalRoute(fileName, track, profile) {
     },
   };
   all[slug] = entry;
-  if (!writeAll(all)) {
+  // `stored` is the difference between a route that is on this device and one
+  // that is only in this tab. It used to be neither recorded nor reported:
+  // the session copy below is gone the moment the app closes, it is invisible
+  // to listLocalRoutes, and the upload queue never sees it either — so a
+  // route that failed to store was announced as saved and then silently was
+  // not. Callers need to be able to tell, and to say so.
+  entry.stored = writeAll(all);
+  if (!entry.stored) {
     // out of quota (or storage unavailable) — keep it for this tab at least
     try { sessionStorage.setItem(KEY + ':' + slug, JSON.stringify(entry)); } catch {}
   }
   return entry;
+}
+
+/**
+ * Routes held only for this tab, because storage would not take them.
+ *
+ * They are real routes and they can still be uploaded; they just will not
+ * survive the app closing. Leaving them out of the library was how one came
+ * to vanish without ever being mentioned.
+ */
+function sessionHeld() {
+  const out = [];
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (!k || !k.startsWith(KEY + ':')) continue;
+      try {
+        const e = JSON.parse(sessionStorage.getItem(k) || 'null');
+        if (e && e.slug) out.push({ ...e, stored: false });
+      } catch {}
+    }
+  } catch {}
+  return out;
 }
 
 /**
@@ -176,7 +205,11 @@ export function updateLocalRoute(slug, track, profile) {
  * hiding routes somebody can already see, to fix a problem they may not have.
  */
 export function listLocalRoutes() {
-  return Object.values(readAll()).filter(mine).sort((a, b) => (a.added < b.added ? -1 : 1));
+  const all = readAll();
+  // Anything storage refused is held for this tab only; it still belongs in
+  // the list, so it can be seen and uploaded while the app is open.
+  for (const e of sessionHeld()) if (!all[e.slug]) all[e.slug] = e;
+  return Object.values(all).filter(mine).sort((a, b) => (a.added < b.added ? -1 : 1));
 }
 
 /** Every entry, whoever it belongs to. For counting and housekeeping only. */
@@ -200,7 +233,7 @@ export function getLocalRoute(slug) {
  * removed this since I picked it up?
  */
 export function hasLocalRoute(slug) {
-  const e = readAll()[slug];
+  const e = readAll()[slug] ?? sessionHeld().find(x => x.slug === slug);
   return !!e && mine(e);
 }
 
