@@ -286,6 +286,24 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .what{display:flex;flex-direction:column;min-width:0;gap:3px}
 .what b{font-size:15.5px;font-weight:620;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .what small{font-size:12px;color:var(--ink-3)}
+/* The name, as the thing you rename a route by (see routes.html).
+   Selection is off, which is a real loss — the name cannot be picked up and
+   copied any more — and is what stops a long press inside a link raising
+   selection handles and the system menu over the field that just opened. The
+   dotted underline is the only hint there is on a pointer; on a phone, holding
+   a name is the gesture people arrive with. */
+.what b.nm{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+@media (hover:hover){
+  .what b.nm:hover{text-decoration:underline dotted;text-underline-offset:3px}
+}
+/* The field takes the name's place rather than opening beside it, so the row
+   keeps its height and nothing moves under the thumb still resting on it. */
+.row.editing .what b.nm{display:none}
+.nm-edit{font:inherit;font-size:15.5px;font-weight:620;letter-spacing:-.01em;
+  width:100%;min-width:0;padding:2px 7px;margin:-3px 0 -3px -8px;
+  border:1px solid var(--accent);border-radius:7px;background:var(--bg-hi);color:var(--ink)}
+.nm-edit:focus{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.nm-edit:disabled{opacity:.6}
 .spark{width:150px;height:30px;display:block;overflow:visible}
 .num{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .num b{font-size:15.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}

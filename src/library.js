@@ -198,6 +198,43 @@ export function updateLocalRoute(slug, track, profile) {
 }
 
 /**
+ * Give a stored route a different name.
+ *
+ * Both copies of it. `entry.name` is what every list and the viewer show, and
+ * `entry.track.name` is what goes inside an exported GPX. They were written
+ * from the same string when the route arrived, and letting them drift means a
+ * route renamed here comes back out of the app still called what it used to
+ * be.
+ *
+ * The slug is deliberately left alone. It is the identity the upload queue,
+ * the delete holds and every ./view.html?local= link already use, so renaming
+ * a route cannot be allowed to break the link to it — the name is a label,
+ * not an address.
+ *
+ * Returns the updated entry, or null if the slug is not here or is not ours.
+ */
+export function renameLocalRoute(slug, name) {
+  const all = readAll();
+  const entry = all[slug];
+  if (entry && mine(entry)) {
+    all[slug] = { ...entry, name, track: { ...entry.track, name } };
+    writeAll(all);
+    return all[slug];
+  }
+  // A route storage would not take lives in this tab alone, and can still be
+  // renamed in the time it has — it is the same route, and it is still going
+  // to be uploaded under whatever name it is carrying.
+  const k = KEY + ':' + slug;
+  try {
+    const held = JSON.parse(sessionStorage.getItem(k) || 'null');
+    if (!held || !mine(held)) return null;
+    const next = { ...held, name, track: { ...held.track, name }, stored: false };
+    sessionStorage.setItem(k, JSON.stringify(next));
+    return next;
+  } catch { return null; }
+}
+
+/**
  * The routes in this browser that belong to the person using it.
  *
  * Entries written before this field existed have no owner and read as

@@ -146,6 +146,22 @@ function marks(r, { tagOrigin = true } = {}) {
 }
 
 /**
+ * What turns a route's name into the thing you rename it by.
+ *
+ * The attributes only; the page that asked for them owns the behaviour. There
+ * is nowhere good on a row to put a rename button — the name is already the
+ * widest thing on it, and the buttons that used to sit beside it had to go
+ * behind a dots menu to fit a phone upright at all — so the name is the
+ * control, and holding it is what opens it. That is where a phone already
+ * puts renaming.
+ *
+ * Which route it is travels with it, because the row's identity otherwise
+ * lives only on the buttons at the far end of it.
+ */
+const nameHandle = r => ` class="nm" data-id="${escapeHtml(r.id ?? '')}"`
+  + ` data-slug="${escapeHtml(r.slug ?? '')}" title="${t('row.rename.hint')}"`;
+
+/**
  * One row.
  * @param {object} r        a route, from the manifest, the account or this browser
  * @param {object} [o]
@@ -153,15 +169,19 @@ function marks(r, { tagOrigin = true } = {}) {
  * @param {boolean} [o.tagOrigin]  mark which routes are samples and which are
  *   only in this browser. The public library has no use for it — everything
  *   there is a sample — and saying so on every row is just noise.
+ * @param {boolean} [o.rename]  make the name itself a handle to rename by.
+ *   Off by default, and left off by the public library: those routes belong to
+ *   the build rather than to anybody, and offering to rename one would be
+ *   offering something that cannot work.
  */
-export function routeRow(r, { actions = () => '', tagOrigin = true } = {}) {
+export function routeRow(r, { actions = () => '', tagOrigin = true, rename = false } = {}) {
   const d = whenOf(r);
   const meta = [activityOf(r), r.dateSource === 'recorded' ? '' : t('row.added')].filter(Boolean).join(' · ');
   return `
     <div class="row">
       <a class="go" href="${routeHref(r)}">
         <span class="day"><b>${dayOf(d).day}</b><small>${dayOf(d).weekday}</small></span>
-        <span class="what"><b>${escapeHtml(r.name)}</b><small>${meta}${
+        <span class="what"><b${rename ? nameHandle(r) : ''}>${escapeHtml(r.name)}</b><small>${meta}${
           marks(r, { tagOrigin })}</small></span>
         ${spark(r)}
         <span class="num"><b>${(r.stats.distance_m / 1000).toFixed(2)} km</b><small>↑ ${fmt(r.stats.gain_m)} m</small></span>

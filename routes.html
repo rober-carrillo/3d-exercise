@@ -149,7 +149,7 @@
 import { parseGPX, analyze, profileSamples, trackToGPX } from './src/gpx.js';
 import { saveGPX, safeName } from './src/export.js';
 import * as account from './src/account.js';
-import { addLocalRoute, listLocalRoutes, removeLocalRoute } from './src/library.js';
+import { addLocalRoute, listLocalRoutes, removeLocalRoute, renameLocalRoute } from './src/library.js';
 import { routeDiary, escapeHtml, routeHref } from './src/cards.js';
 import { EFFORTS, ON_FOOT, personalBests, totals, clock, pace } from './src/stats.js';
 import { shareRoute, routeLink, canLink } from './src/share.js';
@@ -232,6 +232,10 @@ function actions(r) {
       r.visibility === 'private' ? '🔒' : r.visibility === 'public' ? '🌍' : '🔗',
       `${t('row.menu.share')} — ${state}`));
   }
+  // First, and in words. Holding the name is the way this is meant to be
+  // reached, but a long press cannot be done from a keyboard and is not
+  // announced by a screen reader, so it cannot be the only way in.
+  items.push(item('ren', ident, '✎', t('row.menu.rename')));
   items.push(item('gpx', ident, '⤓', t('row.menu.gpx')));
   // Only on the route the log belongs to. A menu entry that downloads another
   // run's diagnostic, or nothing at all, is worse than no entry.
@@ -318,7 +322,25 @@ async function fetchEffortTracks() {
   }
 }
 
+/* Whether a name is being typed somewhere in the list, and whether the list
+ * wanted redrawing while it was. Declared up here because render() consults
+ * them; the rest of the renaming lives further down, under "renaming one". */
+let editing = null;
+let redrawWanted = false;
+
 function render() {
+  /**
+   * Not on top of an open rename.
+   *
+   * A redraw replaces every row in the grid, and the field somebody is typing
+   * into is inside one of them. The sync reports its progress while they type
+   * — an upload finishing, the connection dropping — and every one of those
+   * ran this function, so a route uploading in the background would take a
+   * half-written name with it. The list waits its turn; closeRename() draws it
+   * the moment the field is gone.
+   */
+  if (editing) { redrawWanted = true; return; }
+
   const routes = all();
   const cloud = routes.filter(r => r.cloud).length, local = routes.length - cloud;
   document.getElementById('count').textContent = !routes.length ? ''
@@ -334,7 +356,7 @@ function render() {
   }
 
   paintFigures();
-  grid.innerHTML = routeDiary(routes, { actions });
+  grid.innerHTML = routeDiary(routes, { actions, rename: true });
 
   /**
    * The dots menus.
@@ -456,10 +478,198 @@ function render() {
     } finally { b.disabled = false; }
   }));
 
+  grid.querySelectorAll('.dl.ren').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault();
+    const nm = b.closest('.row')?.querySelector('b.nm');
+    if (nm) startRename(nm);
+  }));
+
   grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
     askDelete({ slug: b.dataset.slug, id: b.dataset.id, name: b.dataset.name || '' });
   }));
+}
+
+/* ---------- renaming one ----------
+ * Press and hold the name, and type over it.
+ *
+ * Every route in this list is the person's own — the account returns nobody
+ * else's rows and this browser's are filtered by owner — so the name on any
+ * row here is theirs to change, however old the route is.
+ *
+ * The listeners are delegated to the grid and attached once. render() replaces
+ * every row on each redraw, and handlers bound per row would be rebound on
+ * each one; the dots menus still do that, because they hold open/closed state
+ * of their own, but a long press has none.
+ */
+const LONG_PRESS_MS = 450;
+const DRIFT_PX = 10;                 // past this it was a scroll, not a press
+const NAME_MAX = 80;
+
+/** One line, no runs of spaces, nothing that is only spaces. */
+const tidyName = s => String(s).replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+
+let press = null;
+
+const dropPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
+
+grid.addEventListener('pointerdown', e => {
+  dropPress();
+  const b = e.target.closest('b.nm');
+  if (!b || e.button) return;                   // a finger, or the left button
+  press = {
+    x: e.clientX, y: e.clientY,
+    timer: setTimeout(() => { press = null; startRename(b); }, LONG_PRESS_MS),
+  };
+});
+grid.addEventListener('pointermove', e => {
+  if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRIFT_PX) dropPress();
+});
+// A press that ends before the timer was a tap, and a tap on a row opens it.
+for (const ev of ['pointerup', 'pointercancel', 'scroll']) {
+  addEventListener(ev, dropPress, true);
+}
+
+/**
+ * The context menu over a name is this, rather than the browser's.
+ *
+ * Two jobs. On Android a long press inside a link raises the system menu —
+ * copy, open in new tab, selection handles — over the field that has just
+ * appeared, and the gesture this feature is built on is the one the platform
+ * had already claimed. And on a desktop, right-click is where this belongs
+ * anyway, so the press we are intercepting is given the same meaning instead
+ * of being swallowed.
+ */
+grid.addEventListener('contextmenu', e => {
+  const b = e.target.closest('b.nm');
+  if (!b) return;
+  e.preventDefault();
+  dropPress();
+  startRename(b);
+});
+
+/**
+ * A press on the name is a rename, not a visit.
+ *
+ * The name sits inside the row's link, so the click that ends the long press
+ * would open the route on top of the field it just opened. Captured, so it is
+ * stopped before the anchor sees it, and only on the row being edited: every
+ * other row is still an ordinary link.
+ *
+ * The field is not exempt, which is the part that is easy to get wrong. It is
+ * inside the anchor too, so exempting it means every click in the middle of
+ * typing a name navigates away from it. Stopping the default on a click costs
+ * a text field nothing — the caret and the selection follow pointerdown, which
+ * is left alone.
+ */
+grid.addEventListener('click', e => {
+  if (e.target.closest('.row.editing')) e.preventDefault();
+}, true);
+
+function startRename(handle) {
+  // Called from the timer, from the context menu and from the dots menu, and
+  // on Android the first two can both fire for one press.
+  const id = handle.dataset.id || '', slug = handle.dataset.slug || '';
+  if (handle.closest('.row')?.classList.contains('editing')) return;
+
+  if (editing) {
+    // One already waiting on the database. Opening a second field would
+    // abandon the first with its request still in the air, and whichever
+    // answer came back would arrive with nowhere to report itself. It is a
+    // moment at most; the field closes itself when the answer lands.
+    if (editing.busy) return;
+    // Moving to another name is leaving this one, which is the same thing as
+    // tapping away from it: what was typed is kept. Saying it twice in two
+    // places is how the two gestures come to mean different things.
+    finishRename({ cancel: false });
+    if (editing) return;                       // it went to the database after all
+  }
+
+  // Re-found rather than reused. Finishing the last one redraws the list,
+  // which replaces every row in it, and the element that was pressed is by
+  // then a node belonging to no document — a field opened inside it would be
+  // invisible and unreachable.
+  const b = grid.querySelector(id ? `b.nm[data-id="${CSS.escape(id)}"]`
+    : `b.nm[data-slug="${CSS.escape(slug)}"]`);
+  const row = b?.closest('.row');
+  if (!row || row.classList.contains('editing')) return;
+
+  const entry = all().find(r => (id && r.id === id) || (slug && r.slug === slug));
+  if (!entry) return toast(t('toast.gone'));
+
+  // Nothing may upload this route while its name is being typed. syncNow takes
+  // its list of routes up front, so an upload already in flight would carry
+  // the old name into the account and the rename would be undone by the next
+  // reload. See `hold` in src/sync.js, which the delete dialog uses for the
+  // same reason.
+  hold(entry.slug);
+
+  const input = document.createElement('input');
+  input.className = 'nm-edit';
+  input.type = 'text';
+  input.value = entry.name ?? '';
+  input.maxLength = NAME_MAX;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.setAttribute('aria-label', t('row.rename.label'));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); finishRename({ cancel: false }); }
+    else if (e.key === 'Escape') { e.preventDefault(); finishRename({ cancel: true }); }
+  });
+  // Tapping elsewhere keeps what was typed. Nothing here is destructive and
+  // the old name is one more rename away, so losing the typing is the worse
+  // of the two surprises.
+  input.addEventListener('blur', () => finishRename({ cancel: false }));
+
+  b.after(input);
+  row.classList.add('editing');
+  editing = { entry, row, input };
+  input.focus();
+  input.select();
+}
+
+async function finishRename({ cancel }) {
+  if (!editing || editing.busy) return;         // disabling the field blurs it
+  const { entry, input } = editing;
+  const name = tidyName(input.value);
+  // Nothing to do, including the empty case: a name is how a route is found
+  // again, so a blank one is treated as a change of mind rather than written.
+  if (cancel || !name || name === entry.name) return closeRename();
+
+  editing.busy = true;
+  input.disabled = true;
+  try {
+    if (entry.cloud) {
+      const saved = await account.routes().rename(entry.id, name);
+      cloudRoutes = cloudRoutes.map(r => (r.id === entry.id ? { ...r, name: saved.name } : r));
+    }
+    // A route uploaded a moment ago can still have a copy here; rename
+    // whichever of the two is actually present, the same way a delete takes
+    // both.
+    renameLocalRoute(entry.slug, name);
+    closeRename();
+    render();
+    toast(t('row.rename.done', { name }));
+  } catch (err) {
+    // Left open, with what they typed still in it. A rename that failed and
+    // tidied itself away looks exactly like one that worked, and takes the
+    // name they wanted with it.
+    editing.busy = false;
+    input.disabled = false;
+    input.focus();
+    toast(t('row.rename.failed', { why: err?.message || err }));
+  }
+}
+
+function closeRename() {
+  const e = editing;
+  editing = null;                               // before the field goes: removing it blurs it
+  if (!e) return;
+  release(e.entry.slug);
+  e.input.remove();
+  e.row.classList.remove('editing');
+  // Anything that wanted to redraw while the field was open gets to now.
+  if (redrawWanted) { redrawWanted = false; render(); }
 }
 
 /* ---------- deleting one ---------- */

@@ -131,6 +131,30 @@ export function createCloud(db) {
       return rowToRoute(await must().from('routes').insert({ ...routeToRow(track, meta), owner }));
     },
 
+    /**
+     * Rename one route.
+     *
+     * Only the `name` column. The copy of the name inside the `track` blob is
+     * left as it was on purpose: rewriting one string there would mean sending
+     * the whole track back, every point of it, and nothing reads it — the list
+     * and the viewer both take the name from the column (see rowToRoute), and
+     * the GPX export is handed `entry.name` explicitly.
+     *
+     * Who may do this is not decided here. Row-level security permits an
+     * update only on a row the caller owns, so somebody else's public route
+     * cannot be renamed from a client however the request is phrased;
+     * supabase/rls-test.sql checks that case by name.
+     *
+     * An empty answer is the same trap as the delete had: a PATCH that matched
+     * no row replies exactly like one that matched, so it is reported rather
+     * than returned as a success with nothing in it.
+     */
+    async rename(id, name) {
+      const row = await must().from('routes').update({ name }, { id: `eq.${id}` });
+      if (!row) throw new Error('That route is not in your account any more');
+      return rowToRoute(row);
+    },
+
     async setVisibility(id, visibility) {
       return rowToRoute(await must().from('routes').update({ visibility }, { id: `eq.${id}` }));
     },
