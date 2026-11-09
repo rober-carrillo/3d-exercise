@@ -139,3 +139,122 @@ $$;
 
 revoke all on function rotate_share_token(uuid) from public;
 grant execute on function rotate_share_token(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Scene reports
+--
+-- What a route looked like on somebody else's phone.
+--
+-- There is a class of bug this table exists for and nothing else: the terrain
+-- comes out with spikes in it on one device, on the same build, from the same
+-- tiles, and there is no way to see it from here. Elevation arrives as a PNG
+-- whose red channel is worth 256 metres a step (src/terrain.js), so a device
+-- that hands back a slightly different byte than the file held draws a
+-- mountain. Whether it does is a property of the device, which means the only
+-- place the evidence exists is the device.
+--
+-- So a viewing writes itself down — tiles asked for and arrived, the decoded
+-- elevation field's own statistics, the raw bytes of any pixel that disagrees
+-- with its neighbours, a probe of whether the canvas can hold eight bits a
+-- channel at all, and a thumbnail of the result. See src/scenelog.js for what
+-- goes in and why. A report is sent when something in it is wrong, or when
+-- somebody presses the button; a scene that worked is kept on the device and
+-- goes no further.
+--
+-- `faults` is a column rather than a key inside the blob so that a list of
+-- reports can be read, filtered and counted without opening any of them.
+-- ---------------------------------------------------------------------------
+
+create table if not exists scene_reports (
+  id          uuid primary key default gen_random_uuid(),
+  reporter    uuid not null references auth.users on delete cascade,
+  -- Which route, when it was one from the account. A local-only route has no
+  -- id to point at, and a report is worth having either way, so this is null.
+  route_id    uuid references routes on delete set null,
+  route_name  text,
+  faults      text[] not null default '{}',
+  app_version text,
+  platform    text,
+  report      jsonb not null,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists scene_reports_reporter_idx on scene_reports (reporter, created_at desc);
+create index if not exists scene_reports_faults_idx   on scene_reports using gin (faults);
+
+-- Who is allowed to read everybody's reports.
+--
+-- A table rather than a hard-coded uuid in a policy, so adding or removing
+-- somebody is a row and not a migration. It is readable by nobody and writable
+-- by nobody: rows go in from the SQL editor, which runs as the table owner and
+-- bypasses row-level security.
+create table if not exists admins (
+  id          uuid primary key references auth.users on delete cascade,
+  note        text,
+  created_at  timestamptz not null default now()
+);
+alter table admins enable row level security;
+
+-- Am I one of them?
+--
+-- `security definer`, and that is not a shortcut. A policy's subquery runs
+-- with the privileges of whoever is asking, so a policy that reads `admins`
+-- directly needs every client to hold select on it — and row-level security
+-- would then answer "no rows" to all of them, making the check silently
+-- false for the admin too. A definer function reads the table as its owner
+-- and returns one boolean, which is all a policy needs and all a client gets.
+create or replace function is_admin() returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$ select exists (select 1 from admins a where a.id = auth.uid()); $$;
+
+revoke all on function is_admin() from public;
+grant execute on function is_admin() to authenticated;
+
+alter table scene_reports enable row level security;
+
+-- Her own reports are hers: she can file them, read them back and delete them.
+drop policy if exists scene_reports_own on scene_reports;
+create policy scene_reports_own on scene_reports
+  for all to authenticated
+  using (reporter = auth.uid()) with check (reporter = auth.uid());
+
+-- And an admin may read them all, which is the entire point of the table.
+-- Read only: a report is somebody's account of what they saw, and nothing
+-- here should be able to edit it.
+drop policy if exists scene_reports_admin_read on scene_reports;
+-- Scoped to `authenticated` on purpose. Left unscoped, an anonymous select
+-- would evaluate is_admin(), which anon may not execute, and the refusal
+-- would come back as a permission error on the table rather than as the empty
+-- answer an outsider ought to get.
+create policy scene_reports_admin_read on scene_reports
+  for select to authenticated using (is_admin());
+
+-- Reading somebody's reports means knowing which rows are theirs, and the
+-- reporter column is a bare uuid. `security definer` because an admin has no
+-- policy on auth.users and should not be given one; the gate is inside.
+create or replace function scene_reports_for(who text default null, lim int default 50)
+returns table (
+  id uuid, reporter uuid, handle text, email text, route_id uuid, route_name text,
+  faults text[], app_version text, platform text, created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select s.id, s.reporter, p.handle, u.email, s.route_id, s.route_name,
+         s.faults, s.app_version, s.platform, s.created_at
+    from scene_reports s
+    left join profiles p on p.id = s.reporter
+    left join auth.users u on u.id = s.reporter
+   where is_admin()
+     and (who is null or p.handle = who or u.email = who or s.reporter::text = who)
+   order by s.created_at desc
+   limit greatest(1, least(coalesce(lim, 50), 500));
+$$;
+
+revoke all on function scene_reports_for(text, int) from public;
+grant execute on function scene_reports_for(text, int) to authenticated;

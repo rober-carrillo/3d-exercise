@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scene reports · Salpicón!</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#fcf1ee">
+<script>try{var t=localStorage.getItem('salpicon.theme.v1');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="icon" href="./brand/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./src/ui.css">
+<style>
+  /* A workbench, not a page: this is read by whoever is diagnosing a device,
+     so density beats decoration and it stays in English like the rest of the
+     diagnostic surface. */
+  body{min-height:100%;background:radial-gradient(120% 80% at 50% -10%,var(--bg-hi) 0%,var(--bg) 60%) fixed}
+  .page-head h1{font-size:24px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 18px}
+  .bar input{flex:1 1 220px;min-width:0;font:15px/1.2 var(--font);padding:11px 13px;
+    border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+  .bar button{font:600 14px/1 var(--font);padding:11px 15px;border-radius:10px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);cursor:pointer}
+  .bar button.pri{background:var(--accent);color:var(--on-accent);border-color:transparent}
+  .bar button:disabled{opacity:.5;cursor:default}
+  h2{margin:26px 0 10px;font:600 15px/1.3 var(--font);color:var(--ink-2);
+    text-transform:uppercase;letter-spacing:.06em}
+  .rep{border:1px solid var(--line);border-radius:12px;background:var(--card);margin:0 0 10px;overflow:hidden}
+  .rep > summary{cursor:pointer;padding:13px 15px;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+  .rep > summary::-webkit-details-marker{display:none}
+  .rep b{font:620 15px/1.3 var(--font)}
+  .rep .who{font:13px/1.3 var(--font);color:var(--ink-2)}
+  .rep .when{margin-left:auto;font:12.5px/1.3 var(--font);color:var(--ink-2);white-space:nowrap}
+  .chip{display:inline-block;padding:3px 8px;border-radius:999px;font:600 11.5px/1.35 var(--font);
+    background:var(--bg-hi);color:var(--ink-2);border:1px solid var(--line)}
+  .chip.bad{background:#ffe3e3;color:#7a1320;border-color:#f3b9bd}
+  :root[data-theme="dark"] .chip.bad{background:#49141c;color:#ffd9dd;border-color:#7a2b34}
+  .chip.ok{background:#e2f3e6;color:#17502c;border-color:#b6ddc0}
+  :root[data-theme="dark"] .chip.ok{background:#15351f;color:#cdeed6;border-color:#2f6b40}
+  .body{padding:0 15px 15px;border-top:1px solid var(--line)}
+  .facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:14px 0;
+    font:13px/1.45 var(--font)}
+  .facts dt{color:var(--ink-2)}
+  .facts dd{margin:0;font-variant-numeric:tabular-nums}
+  .facts dd.bad{color:#b3222f;font-weight:600}
+  .verdict{margin:12px 0;padding:11px 13px;border-radius:10px;background:var(--bg-hi);
+    font:13.5px/1.5 var(--font)}
+  .verdict b{display:block;margin-bottom:3px}
+  img.shot{display:block;max-width:100%;border-radius:10px;border:1px solid var(--line);margin:12px 0}
+  pre{overflow:auto;max-height:420px;margin:10px 0 0;padding:12px;border-radius:10px;
+    background:var(--bg-hi);border:1px solid var(--line);
+    font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .acts button{font:600 13px/1 var(--font);padding:9px 13px;border-radius:9px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+  .note{font:13.5px/1.6 var(--font);color:var(--ink-2);max-width:68ch;margin:0 0 20px}
+  .empty{padding:22px;text-align:center;color:var(--ink-2);font:14px/1.5 var(--font);
+    border:1px dashed var(--line);border-radius:12px}
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);z-index:40;
+    padding:11px 18px;font-size:12.5px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <div class="brand"><a href="./"><span id="brandmark"></span><h1>Scene reports</h1></a></div>
+    <div class="nav">
+      <a class="add quiet" href="./routes.html">← Your routes</a>
+      <button class="theme-btn" id="themebtn" type="button"></button>
+    </div>
+  </header>
+
+  <p class="note">What a route looked like on a particular device. A viewing writes itself
+    down — tiles asked for and arrived, the elevation field's own statistics, the raw bytes of any
+    pixel that disagrees with its neighbours, and a probe of whether the canvas on that device can
+    hold eight bits a channel at all. Reports are sent when something in them is wrong; a viewing
+    that worked stays on the device it happened on.</p>
+
+  <div class="bar">
+    <input id="who" placeholder="handle, email or user id — blank for everybody" autocomplete="off">
+    <button id="load" class="pri">Load reports</button>
+    <button id="sendlast">Send my last viewing</button>
+    <button id="save">Download what is on this device</button>
+  </div>
+
+  <div id="out"></div>
+
+  <footer></footer>
+</div>
+
+<div id="toast" class="rv-panel"></div>
+
+<script type="module">
+import { markSVG } from './src/mark.js';
+import { initTheme, themeToggle } from './src/theme.js';
+import { sceneLogs, sceneFile, faults } from './src/scenelog.js';
+import { saveGPX } from './src/export.js';
+
+initTheme();
+themeToggle(document.getElementById('themebtn'));
+document.getElementById('brandmark').innerHTML = markSVG({ juice: 1 });
+
+const out = document.getElementById('out');
+const toastEl = document.getElementById('toast');
+let toastTimer;
+const toast = m => {
+  toastEl.textContent = m; toastEl.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('on'), 4200);
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const when = iso => { try { return new Date(iso).toLocaleString(); } catch { return String(iso); } };
+
+const { ready, enabled, user, routes } = await import('./src/account.js');
+await ready();
+const signedIn = enabled() && !!user();
+const admin = signedIn ? await routes().amAdmin() : false;
+
+/**
+ * The sentence the numbers add up to.
+ *
+ * A report is a hundred fields and nobody reads a hundred fields. This turns
+ * the two or three that are decisive into a plain statement of what the device
+ * did, which is the thing worth reading first — and the thing worth pasting
+ * into a message to somebody else.
+ */
+function verdict(r) {
+  const f = r?.faults ?? [];
+  const p = r?.probe, d = r?.dem;
+  const says = [];
+  const lost = x => x && !x.error
+    && (x.distinct?.r < 250 || x.distinct?.g < 250 || x.distinct?.b < 250);
+  if (lost(p?.put))
+    says.push(`<b>This device cannot hold eight bits a channel in a canvas that size.</b>
+      A straight putImageData/getImageData round trip over ${esc(p.put.region)} gave back
+      ${p.put.distinct.r} of 256 reds, ${p.put.distinct.g} greens and ${p.put.distinct.b} blues.
+      Red is worth 256 m a step in terrarium, so losing it to ${p.put.distinct.r} values puts the
+      elevation this device can report in steps of about
+      ${Math.round(256 * 256 / Math.max(1, p.put.distinct.r))} m. Every spike in the terrain
+      follows from this, and no amount of retrying the tiles will change it.`);
+  if (lost(p?.draw) && !lost(p?.put))
+    says.push(`<b>The image decode path changes the bytes, though the canvas itself is sound.</b>
+      A PNG written with known values came back with ${p.draw.wrong} of ${p.draw.sampled} samples
+      altered, worst by ${p.draw.worst_channel_delta} — which in the red channel is
+      ${p.draw.worst_channel_delta * 256} m of elevation. Colour management applied on the way
+      into the canvas is the usual cause.`);
+  if (p?.put && !p.put.error && p.put.wrong > 0 && !lost(p.put))
+    says.push(`<b>The canvas gave back ${p.put.wrong} of ${p.put.sampled} sampled pixels changed</b>,
+      worst by ${p.put.worst_channel_delta} of 255, without losing any channel's range. See
+      <code>probe.put.cases</code> for which.`);
+  if (d?.quantised) {
+    const c = d.channels || {};
+    // The red channel is the one that matters and usually the one that cannot
+    // be measured: a single town spans two or three values of it, and
+    // quantisation collapses those into one, leaving no gap to size. Green
+    // runs the full 0–255 every 256 m of relief, so green is the witness —
+    // and a green stride of 4 with a blue stride of 8 is the signature of a
+    // 16-bit backing store, in which red is 5 bits and worth 2,048 m a step.
+    const fiveSix = c.g_stride === 4 && c.b_stride === 8;
+    says.push(`<b>The elevation data itself came back quantised on this device.</b>
+      Distinct values per channel: red ${c.r}, green ${c.g}, blue ${c.b}; strides
+      ${c.r_stride ?? '—'}/${c.g_stride ?? '—'}/${c.b_stride ?? '—'}. The finest step that can be
+      measured from this scene is ${d.step_m} m.
+      ${fiveSix ? `The pattern — six bits of green, five of blue — is a 16-bit (RGB565) canvas,
+      which means red is five bits too and the elevation steps are about 2,048 m. Red cannot be
+      measured directly here because the scene only spans ${c.r} value${c.r === 1 ? '' : 's'} of it.`
+      : ''}`);
+  }
+  if (d?.void_px)
+    says.push(`<b>${d.void_px.toLocaleString()} pixels of the elevation mosaic were never drawn</b> —
+      tiles that did not arrive. Undrawn canvas decodes to −32768 m, so each one is a hole
+      32 km deep until it is repaired.`);
+  if (d?.spikes)
+    says.push(`<b>${d.spikes.toLocaleString()} pixels disagreed with their neighbours by more than
+      ${d.spike_threshold_m} m</b> and were repaired. The raw bytes of the worst of them are in
+      <code>dem.worst</code> below, with the tile each came from.`);
+  if (!says.length && f.length)
+    says.push(`<b>Faults recorded: ${esc(f.join(', '))}.</b> Nothing in the probe or the elevation
+      audit explains them, so the detail below is where to look.`);
+  if (!says.length)
+    says.push('<b>Nothing in this report is wrong.</b> The scene was built from complete data on a device that holds it correctly.');
+  return says.map(s => `<div class="verdict">${s}</div>`).join('');
+}
+
+const probeBad = x => !!(x && !x.error
+  && (x.wrong > 0 || x.distinct?.r < 250 || x.distinct?.g < 250 || x.distinct?.b < 250));
+const probeLine = x => !x ? null : x.error
+  ? x.error
+  : `${x.region}: r ${x.distinct.r} g ${x.distinct.g} b ${x.distinct.b} of 256`
+    + ` · ${x.wrong} of ${x.sampled} samples wrong`
+    + (x.worst_channel_delta ? ` (worst ${x.worst_channel_delta})` : '');
+
+function facts(r) {
+  const row = (k, v, bad = false) => v == null || v === '' ? ''
+    : `<dt>${esc(k)}</dt><dd class="${bad ? 'bad' : ''}">${esc(v)}</dd>`;
+  const d = r.device || {}, g = r.gl || {}, dm = r.dem || {}, m = r.mesh || {}, p = r.probe || {};
+  const t = Object.entries(r.tiles || {})
+    .map(([k, v]) => `${k} ${v.arrived}/${v.asked}@z${v.z}${v.missing ? ` — ${v.missing} MISSING` : ''}`)
+    .join(' · ');
+  return `<dl class="facts">
+    ${row('app', `v${r.app?.version ?? '?'} · ${r.app?.build ?? ''} · ${d.native ? 'android' : 'web'}`)}
+    ${row('device', [d.platform, d.screen && `${d.screen} @${d.dpr}`, d.cores && `${d.cores} cores`, d.memory_gb && `${d.memory_gb} GB`].filter(Boolean).join(' · '))}
+    ${row('user agent', d.ua)}
+    ${row('gl', [g.renderer, g.vendor, g.gl2 ? 'webgl2' : 'webgl1', g.max_texture && `max tex ${g.max_texture}`].filter(Boolean).join(' · '))}
+    ${row('network', d.net ? `${d.net.type ?? '?'}${d.net.downlink ? ` · ${d.net.downlink} Mb/s` : ''}${d.net.saveData ? ' · data saver' : ''}` : null)}
+    ${row('tiles', t, /MISSING/.test(t))}
+    ${row('canvas probe (put)', probeLine(p.put), probeBad(p.put))}
+    ${row('canvas probe (png)', probeLine(p.draw), probeBad(p.draw))}
+    ${row('elevation mosaic', dm.canvas ? `${dm.canvas} from ${dm.tiles}` : null)}
+    ${row('heights', dm.min_m != null ? `${dm.min_m} … ${dm.max_m} m (mean ${dm.mean_m})` : null)}
+    ${row('raw heights', dm.raw_min_m != null ? `${dm.raw_min_m} … ${dm.raw_max_m} m before repair` : null)}
+    ${row('channels', dm.channels ? `r ${dm.channels.r} g ${dm.channels.g} b ${dm.channels.b}`
+      + ` · strides ${dm.channels.r_stride ?? '—'}/${dm.channels.g_stride ?? '—'}/${dm.channels.b_stride ?? '—'}`
+      + (dm.quantised ? ` · quantised, ${dm.step_m} m steps` : '') : null, !!dm.quantised)}
+    ${row('repaired', dm.repaired_px != null ? `${dm.repaired_px.toLocaleString()} px (${dm.void_px} never drawn, ${dm.out_of_range} impossible, ${dm.spikes} spikes)` : null, !!(dm.repaired_px))}
+    ${row('mesh', m.N ? `${m.N}² over ${m.ext_m} m, cell ${m.cell_m} m` : null)}
+    ${row('mesh heights', m.z_min != null ? `${m.z_min} … ${m.z_max} m, span ${m.hSpan_m}` : null, m.z_min < -1000 || m.z_max > 9000)}
+    ${row('worst step', m.worst_step_m != null ? `${m.worst_step_m} m over one cell (${m.worst_step_per_m} m/m)` : null, m.worst_step_per_m > 4)}
+    ${row('built in', r.build_ms != null ? `${r.build_ms} ms` : null)}
+    ${row('errors', (r.errors || []).map(e => `${e.where}: ${e.message}`).join(' · '), !!(r.errors || []).length)}
+  </dl>`;
+}
+
+function card(meta, record) {
+  const f = meta.faults ?? [];
+  const chips = f.length
+    ? f.map(x => `<span class="chip bad">${esc(x)}</span>`).join(' ')
+    : '<span class="chip ok">clean</span>';
+  const id = meta.id ?? '';
+  return `<details class="rep" data-id="${esc(id)}">
+    <summary><b>${esc(meta.route_name || record?.route?.name || 'a route')}</b>
+      <span class="who">${esc([meta.handle, meta.email, meta.platform, meta.app_version && 'v' + meta.app_version].filter(Boolean).join(' · '))}</span>
+      ${chips}
+      <span class="when">${esc(when(meta.created_at))}</span></summary>
+    <div class="body">${record ? render(record) : '<p class="note">Opening…</p>'}</div>
+  </details>`;
+}
+
+function render(r) {
+  return verdict(r) + facts(r)
+    + (r.shot ? `<img class="shot" alt="what the scene looked like" src="${esc(r.shot)}">` : '')
+    + `<div class="acts">
+         <button data-act="copy">Copy the JSON</button>
+         <button data-act="save">Save the JSON</button>
+       </div>`
+    + `<pre>${esc(JSON.stringify({ ...r, shot: r.shot ? `[${Math.round(r.shot.length / 1024)} kB jpeg, shown above]` : undefined }, null, 1))}</pre>`;
+}
+
+/** Wire the copy/save buttons inside one opened report. */
+function wire(el, record) {
+  el.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async e => {
+    e.preventDefault(); e.stopPropagation();
+    const text = JSON.stringify(record, null, 1);
+    if (b.dataset.act === 'copy') {
+      try { await navigator.clipboard.writeText(text); toast('Report copied — paste it anywhere'); }
+      catch { toast('This browser would not let the page copy'); }
+    } else {
+      const stamp = (record.started || '').replace(/[:.]/g, '-').slice(0, 19);
+      // saveGPX answers with how it went out, not whether: 'shared' on the
+      // phone, where a share sheet opened, and 'downloaded' in a browser.
+      const how = await saveGPX(`salpicon-scene-${stamp || 'report'}.json`, text);
+      toast(how === 'shared' ? 'Sent to the share sheet' : 'Downloaded');
+    }
+  }));
+}
+
+/** The reports this device kept, whether or not any of them were ever sent. */
+function paintLocal() {
+  const logs = sceneLogs();
+  const html = logs.length
+    ? logs.map(r => card({
+        route_name: r.route?.name, created_at: r.started, platform: r.device?.native ? 'android' : 'web',
+        app_version: r.app?.version, faults: r.faults ?? faults(r), handle: 'this device',
+      }, r)).join('')
+    : '<div class="empty">Nothing viewed in this browser yet.</div>';
+  return `<h2>On this device (${logs.length})</h2>${html}`;
+}
+
+async function paintCloud() {
+  if (!signedIn) return '<h2>Sent reports</h2><div class="empty">Sign in to see reports from the account.</div>';
+  const who = document.getElementById('who').value.trim();
+  try {
+    const rows = admin
+      ? await routes().sceneReports({ who: who || null, limit: 100 })
+      : await routes().mySceneReports(100);
+    const head = admin
+      ? `<h2>Sent reports — ${who ? esc(who) : 'everybody'} (${rows.length})</h2>`
+      : `<h2>My sent reports (${rows.length})</h2>`;
+    if (!rows.length) return head + '<div class="empty">No reports have been sent.</div>';
+    return head + rows.map(r => card(r, null)).join('');
+  } catch (err) {
+    return `<h2>Sent reports</h2><div class="empty">${esc(err.message || String(err))}</div>`;
+  }
+}
+
+async function paint() {
+  out.innerHTML = '<div class="empty">Loading…</div>';
+  out.innerHTML = (await paintCloud()) + paintLocal();
+  // Local records are already in hand; the sent ones are fetched when opened,
+  // because the blob with the screenshot in it is the biggest part of the row
+  // and a list of forty of them is not worth downloading to show a heading.
+  out.querySelectorAll('.rep').forEach(el => {
+    const id = el.dataset.id;
+    if (!id) {
+      const logs = sceneLogs();
+      const i = [...out.querySelectorAll('.rep')].filter(x => !x.dataset.id).indexOf(el);
+      if (logs[i]) wire(el, logs[i]);
+      return;
+    }
+    el.addEventListener('toggle', async () => {
+      if (!el.open || el.dataset.done) return;
+      el.dataset.done = '1';
+      try {
+        const row = await routes().sceneReport(id);
+        el.querySelector('.body').innerHTML = render(row.report);
+        wire(el, row.report);
+      } catch (err) {
+        el.querySelector('.body').innerHTML = `<p class="note">${esc(err.message || String(err))}</p>`;
+      }
+    });
+  });
+}
+
+document.getElementById('load').addEventListener('click', paint);
+document.getElementById('who').addEventListener('keydown', e => { if (e.key === 'Enter') paint(); });
+
+document.getElementById('save').addEventListener('click', async () => {
+  const f = sceneFile();
+  const how = await saveGPX(f.name, f.text);
+  toast(how === 'shared' ? `Sent ${f.name} to the share sheet` : `Downloaded ${f.name}`);
+});
+
+// Sending by hand, for a viewing that came out wrong in a way the checks did
+// not catch. Without it the only reports that exist are the ones the app
+// already knew to be suspicious, which is exactly the wrong sample.
+document.getElementById('sendlast').addEventListener('click', async e => {
+  const b = e.currentTarget;
+  const last = sceneLogs()[0];
+  if (!last) return toast('Open a route first — there is nothing to send yet.');
+  if (!signedIn) return toast('Sign in first: a report with nobody attached to it is no use.');
+  b.disabled = true;
+  try {
+    await routes().reportScene(last, { routeId: last.route?.cloud_id ?? null });
+    toast('Sent. It is in the list above.');
+    await paint();
+  } catch (err) { toast(err.message || String(err)); }
+  b.disabled = false;
+});
+
+await paint();
+</script>
+</body>
+</html>

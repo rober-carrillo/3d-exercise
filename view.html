@@ -69,6 +69,8 @@ if (cloudId) {
       window.viewer = new RouteViewer({
         mount: document.body, track: entry.track, name: entry.name, backHref: './routes.html',
         date: entry.date, onShare: sharer(entry, routes()),
+        // So a diagnostic report can say which route it was about.
+        cloudId: entry.id,
       });
     } catch (err) {
       fail(t('view.nocloud.title'), t('view.nocloud.body'), './routes.html');

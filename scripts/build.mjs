@@ -19,7 +19,7 @@ import { sceneFrame, pickZoom } from '../src/terrain.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
 const STATIC = ['index.html', 'routes.html', 'library.html', 'view.html', 'r.html',
-                'src', 'brand'];
+                'diag.html', 'src', 'brand'];
 
 /**
  * Which of the recordings in routes/ the platform actually shows.
@@ -316,7 +316,8 @@ async function checkInlineModules(files) {
   }
 }
 
-await checkInlineModules(['index.html', 'routes.html', 'library.html', 'view.html', 'r.html']);
+await checkInlineModules(['index.html', 'routes.html', 'library.html', 'view.html', 'r.html',
+                          'diag.html']);
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });

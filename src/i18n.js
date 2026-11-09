@@ -329,6 +329,10 @@ const DICT = {
       + 'Mapa de reserva © <a href="https://www.openstreetmap.org/copyright">colaboradores de OpenStreetMap</a>',
     'foot.short': 'Imágenes © Esri y sus colaboradores · Elevación de '
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP y otros)',
+    // El informe de una visualización: lo que se vio y en qué aparato. Ver
+    // src/scenelog.js y diag.html.
+    'nav.diag': 'Informe de visualización',
+    'nav.diag.hint': 'Qué vio este aparato al dibujar una ruta — útil si el terreno sale mal.',
     'toast.noaccount': 'No se ha podido contactar con tu cuenta. Mostrando lo que hay en este aparato.',
     'toast.notgpx': 'Eso no es un archivo .gpx.',
     'toast.added.one': 'Añadida {name} — abriéndola…',
@@ -643,6 +647,8 @@ const DICT = {
       + 'Map fallback © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     'foot.short': 'Imagery © Esri and its contributors · Elevation from '
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others)',
+    'nav.diag': 'Scene report',
+    'nav.diag.hint': 'What this device saw when it drew a route — useful if the terrain came out wrong.',
     'toast.noaccount': 'Could not reach your account. Showing what is on this device.',
     'toast.notgpx': 'That is not a .gpx file.',
     'toast.added.one': 'Added {name} — opening it…',

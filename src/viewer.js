@@ -14,6 +14,10 @@ import { t, lang, applyI18n } from './i18n.js';
 import { correctElevation } from './elevation.js';
 import { osmInk } from './osmink.js';
 import {
+  beginScene, step, noteGl, noteTiles, noteDem, noteMesh, noteProbe, noteShot, noteError,
+  probeCanvas, finishScene, faults,
+} from './scenelog.js';
+import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, ramp, rampCss, clamp, setEsriToken,
 } from './terrain.js';
 
@@ -174,6 +178,7 @@ export class RouteViewer {
       meshN: null,            // terrain grid resolution; null picks by capability
       tiles: null,            // { sat, dem } specs for tiles shipped with the build
       tileSlug: null,         // the folder those tiles live in
+      cloudId: null,          // the account route's id, for diagnostic reports
       inline: false,          // mounted in a box rather than over the window
       showcase: false,        // no controls: the route, flying itself, as a sample
       loop: false,            // start again at the end instead of stopping
@@ -320,6 +325,17 @@ export class RouteViewer {
 
   async boot() {
     const o = this.opts;
+    // Write this viewing down. Costs a few kilobytes and answers the one
+    // question that is otherwise unanswerable: what did this route look like
+    // on somebody else's phone? See src/scenelog.js.
+    beginScene({
+      app: { version: VERSION, build: o.showcase ? 'showcase' : 'viewer' },
+      route: {
+        name: o.name ?? null,
+        cloud_id: o.cloudId ?? null,
+        source: o.track ? 'local' : o.gpxText ? 'inline' : 'file',
+      },
+    });
     // `let`, because the elevations are replaced from the terrain model a few
     // steps down and the geometry built after that has to see the new ones.
     let track = this.track = o.track ? o.track
@@ -364,6 +380,9 @@ export class RouteViewer {
     this.buildSpeed();
 
     const renderer = this.renderer = new Renderer(this.$('gl'));
+    noteGl(renderer.gl);
+    step('track parsed', { points: s.points, km: +(s.distance_m / 1000).toFixed(2),
+      ele_min: Math.round(s.ele_min), ele_max: Math.round(s.ele_max) });
     renderer.onChaseRelease = () =>
       this.mount.querySelector('.rv-sw[data-key="chase"]').classList.remove('on');
     renderer.state.vex = o.vex;
@@ -406,6 +425,9 @@ export class RouteViewer {
       satSpec ? loadTiles(satSpec, satUrl, () => this.tick()) : Promise.resolve({ ok: 0 }),
       demSpec ? loadTiles(demSpec, demUrl, () => this.tick()) : Promise.resolve({ ok: 0 }),
     ]);
+    noteTiles('sat', satSpec, sat, cached?.sat ? 'build-cache' : o.imagery);
+    noteTiles('dem', demSpec, dem, cached?.dem ? 'build-cache' : 'terrarium');
+    step('tiles fetched');
     let imageryLabel = o.imagery ? TILES[o.imagery].label : null;
     if (satSpec && !sat.ok && o.imagery !== 'osm') {          // imagery blocked → plain map drape
       this.msg('imagery unavailable — trying map tiles…');
@@ -435,7 +457,20 @@ export class RouteViewer {
     this.msg('shaping terrain…');
     await this.breathe();
     let sample = null, demReal = false;
-    if (dem.ok) { const fn = demSampler(dem); if (fn) { sample = fn; demReal = true; } }
+    if (dem.ok) {
+      const fn = demSampler(dem);
+      if (fn) {
+        sample = fn; demReal = true;
+        // The whole reason this log exists. `audit` says how much of the
+        // elevation picture could not be true and what the bytes were where it
+        // was not — see demField in src/terrain.js.
+        noteDem(fn.audit);
+        if (fn.audit.spikes || fn.audit.void_px || fn.audit.out_of_range) {
+          console.warn('Salpicón! elevation repaired:', fn.audit);
+        }
+      }
+    }
+    step('elevation decoded', { real: demReal });
     if (!sample) sample = idwSampler(track, frame);
 
     // Take the route's own heights off the terrain rather than off the phone.
@@ -485,6 +520,8 @@ export class RouteViewer {
     this._satSpec = satSpec;
 
     const g = buildGeometry({ track, frame, sample, sat, N, uint: renderer.caps.uint });
+    noteMesh(g);
+    step('mesh built', { N });
     await this.breathe();
     renderer.setGeometry(g);
     await this.breathe();
@@ -514,6 +551,50 @@ export class RouteViewer {
     if (o.showcase) {
       this.renderer.beginChase();
       this.setPlay(true);
+    }
+    // Close the record once the scene is actually on the screen: the probe
+    // wants a canvas the size of the one that was used, and the thumbnail
+    // wants something drawn in it. Deferred so neither is in the way of the
+    // first frame.
+    setTimeout(() => this.closeSceneLog(dem), 1500);
+  }
+
+  /**
+   * Finish the record, and send it if there is something wrong with it.
+   *
+   * The probe runs here rather than during the build because it allocates a
+   * canvas as large as the elevation mosaic, and doing that while the scene is
+   * still being assembled is how a phone with no memory to spare gets pushed
+   * over — which would turn a diagnostic into the fault it is meant to
+   * describe.
+   *
+   * What is sent and what is not: a scene with an empty verdict list stays on
+   * the device. Anything with a fault in it goes up, because the whole purpose
+   * is to see what happened on a device nobody is holding. Both are kept
+   * locally either way, and `sceneLogs()` is what the diagnostics page reads
+   * when there is no account to send to.
+   */
+  async closeSceneLog(dem) {
+    try {
+      if (dem?.ok && dem.w) {
+        // Same dimensions as the real thing, because the size of the canvas is
+        // precisely what is under suspicion.
+        noteProbe(await probeCanvas(dem.w, dem.h));
+      }
+      const bad = faults();
+      if (bad.length) noteShot(this.$('gl'));
+      const record = finishScene();
+      if (!record || !bad.length) return;
+      console.warn('Salpicón! scene report:', bad.join(', '), record);
+      const { ready, enabled, user, routes } = await import('./account.js');
+      await ready();
+      // No account, no report. Nothing here is interesting without knowing
+      // whose device it came from, and the table will not take it anyway.
+      if (!enabled() || !user()) return;
+      await routes().reportScene(record, { routeId: this.opts.cloudId ?? null });
+    } catch (err) {
+      noteError('closeSceneLog', err);
+      try { finishScene(); } catch {}
     }
   }
 

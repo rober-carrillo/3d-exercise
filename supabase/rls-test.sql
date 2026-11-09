@@ -133,6 +133,73 @@ select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111
 select assert((select count(*) from route_by_token(:'fresh')) = 1,
               'and the owner''s link still works afterwards');
 
+\echo ''
+\echo 'SCENE REPORTS'
 reset role;
+grant select, insert, update, delete on scene_reports to authenticated;
+grant select on scene_reports to anon;
+-- rober is an admin; the stranger is not
+insert into admins (id, note) values ('11111111-1111-1111-1111-111111111111', 'test admin');
+insert into scene_reports (reporter, route_id, route_name, faults, app_version, platform, report) values
+  ('22222222-2222-2222-2222-222222222222', 'bbbbbbbb-0000-0000-0000-000000000001',
+   'Stranger private', '{dem-spikes}', '1.5.1', 'android', '{"dem":{"spikes":41}}'),
+  ('22222222-2222-2222-2222-222222222222', null, 'A local route', '{}', '1.5.1', 'android', '{}'),
+  ('11111111-1111-1111-1111-111111111111', null, 'Mine', '{tiles-missing:dem}', '1.5.1', 'web', '{}');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+select assert((select count(*) from scene_reports) = 2,
+              'a reporter sees her own reports and only those');
+with d as (delete from scene_reports where reporter = '11111111-1111-1111-1111-111111111111' returning 1)
+select assert((select count(*) from d) = 0,
+              'a reporter cannot delete somebody else''s report');
+-- Filing one in somebody else's name is the interesting attack: a report is
+-- evidence, and being able to forge whose device it came from would make the
+-- whole table worthless. The with-check clause is what stops it, so it has to
+-- raise rather than quietly insert.
+do $$ begin
+  begin
+    insert into scene_reports (reporter, report)
+      values ('11111111-1111-1111-1111-111111111111', '{}');
+    raise exception 'FAILED: a reporter was able to file a report as somebody else';
+  exception when insufficient_privilege then
+    raise notice '  PASS  a reporter cannot file a report in somebody else''s name';
+  end;
+end $$;
+
+\echo ''
+\echo 'AS THE ADMIN'
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+select assert((select count(*) from scene_reports) = 3,
+              'an admin reads every report, including other people''s');
+select assert((select count(*) from scene_reports_for(null, 50)) = 3,
+              'the listing function returns them all');
+select assert((select count(*) from scene_reports_for('stranger', 50)) = 2,
+              'and can be narrowed to one person by handle');
+select assert((select handle from scene_reports_for('stranger', 1)) = 'stranger',
+              'the listing carries the handle, which the reports table does not');
+select assert((select faults from scene_reports_for('stranger', 1)) = '{dem-spikes}',
+              'and the verdicts, so a list can be read without opening a report');
+
+\echo ''
+\echo 'AS NOBODY'
+reset role; set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+select assert((select count(*) from scene_reports) = 0,
+              'reports do not leak to anonymous visitors');
+-- The listing is not merely empty for an outsider, it is not callable: execute
+-- was granted to signed-in people only.
+do $$ begin
+  begin
+    perform count(*) from scene_reports_for(null, 50);
+    raise exception 'FAILED: an anonymous visitor could call the report listing';
+  exception when insufficient_privilege then
+    raise notice '  PASS  the listing function is not callable without an account';
+  end;
+end $$;
+
+reset role;
+
 \echo ''
 \echo 'all assertions passed'

@@ -140,19 +140,237 @@ export function loadTiles(spec, url, onTick, timeout = 20000, attempts = 3) {
   return Promise.all(jobs).then(() => ({ cv, ctx, ok, total: spec.nx * spec.ny, spec, w: cv.width, h: cv.height }));
 }
 
-/** Decode Mapzen/AWS terrarium RGB into metres, bilinearly. */
-export function demSampler(dem) {
+/**
+ * Decode a terrarium mosaic into a field of metres, repairing what cannot be.
+ *
+ *     height = R * 256 + G + B / 256 - 32768      metres
+ *
+ * Read that formula again before changing anything here, because it is the
+ * whole reason this function is not three lines long: the red channel is worth
+ * 256 metres a step. Elevation delivered as an image is elevation with no
+ * tolerance for a wrong byte. Everything that can put a wrong byte in front of
+ * us does so in a way that looks like a mountain:
+ *
+ *   a tile that never arrived   The mosaic canvas starts out transparent
+ *                               black, and black decodes to -32768 m. One
+ *                               missing tile is a 32 km hole, and it takes the
+ *                               scene's reference height and colour range down
+ *                               with it, so the other fifteen tiles' worth of
+ *                               real relief flattens into nothing.
+ *
+ *   a canvas that is not        A large canvas may be backed by five or six
+ *   eight bits a channel        bits a channel on a device that is short of
+ *                               memory. Five bits of red is a two-kilometre
+ *                               step in the elevation it reports.
+ *
+ *   colour management           A profile applied on the way in moves red by
+ *                               one, which is 256 m, in patches.
+ *
+ * None of those can be prevented from here, so they are measured and then
+ * mended. Measured first and in detail — the audit is the only evidence that
+ * ever reaches anybody, see src/scenelog.js — and then mended, because a user
+ * looking at a spike does not want to be told it has been written down.
+ *
+ * Mending is a pyramid fill rather than a neighbourhood average: a whole
+ * missing tile is 65,536 contiguous pixels, and averaging inwards from its
+ * edge would need hundreds of passes. Averages are taken over the good pixels
+ * at each halving, and a hole takes its value from the first level that has
+ * one. A big hole comes back smooth and slightly wrong, which is the correct
+ * outcome: it is honest about having no data, and it is not a mountain.
+ */
+export function demField(dem, { spike = 120, lo = -500, hi = 9000 } = {}) {
   let px;
   try { px = dem.ctx.getImageData(0, 0, dem.w, dem.h).data; }
   catch { return null; }                       // canvas tainted → caller falls back
-  const s = dem.spec;
-  return (lat, lon) => {
-    const x = clamp((lon2tx(lon, s.z) - s.x0) * 256, 0, dem.w - 1.001);
-    const y = clamp((lat2ty(lat, s.z) - s.y0) * 256, 0, dem.h - 1.001);
+  const w = dem.w, h = dem.h, n = w * h;
+  const z = new Float32Array(n);
+  const bad = new Uint8Array(n);
+  let voidPx = 0, oor = 0, rawLo = Infinity, rawHi = -Infinity;
+  // Which values actually occur in each channel. A device that quantised them
+  // leaves its fingerprint here — every value a multiple of 8, say — and that
+  // is a statement about the device made from the route's own data rather than
+  // from a synthetic probe.
+  //
+  // All three channels, not just red, and the reason is worth keeping. Red is
+  // the channel that matters: it is worth 256 m a step, so it is where the
+  // damage shows. But red is also nearly constant across one scene — a town at
+  // 1,300 m uses two or three values of it — and two values quantised into one
+  // leave nothing to measure. Green runs through all 256 of its values every
+  // 256 metres of relief, so green is where quantisation is *visible*. One
+  // channel says how bad it is and another says whether it happened.
+  const seen = [new Uint8Array(256), new Uint8Array(256), new Uint8Array(256)];
+
+  for (let i = 0; i < n; i++) {
+    const k = i * 4;
+    const v = px[k] * 256 + px[k + 1] + px[k + 2] / 256 - 32768;
+    z[i] = v;
+    seen[0][px[k]] = 1; seen[1][px[k + 1]] = 1; seen[2][px[k + 2]] = 1;
+    if (px[k + 3] < 255) { bad[i] = 1; voidPx++; continue; }
+    if (!(v > lo && v < hi)) { bad[i] = 1; oor++; continue; }
+    if (v < rawLo) rawLo = v;
+    if (v > rawHi) rawHi = v;
+  }
+
+  // Lone pixels that disagree violently with their surroundings. Judged
+  // against the median of the four neighbours rather than their mean, so one
+  // bad neighbour cannot drag the comparison far enough to hide a spike.
+  const worst = [];
+  let spikes = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (bad[i]) continue;
+      const a = z[i - 1], b = z[i + 1], c = z[i - w], d = z[i + w];
+      if (bad[i - 1] || bad[i + 1] || bad[i - w] || bad[i + w]) continue;
+      const s = [a, b, c, d].sort((p, q) => p - q);
+      const med = (s[1] + s[2]) / 2;
+      const dev = z[i] - med;
+      if (Math.abs(dev) > spike) {
+        bad[i] = 1; spikes++;
+        if (worst.length < 8) {
+          const raw = o => [px[o * 4], px[o * 4 + 1], px[o * 4 + 2], px[o * 4 + 3]];
+          worst.push({
+            // where in the mosaic, and which tile that is — so a tile can be
+            // fetched again by hand and compared byte for byte
+            px: [x, y],
+            tile: [dem.spec.z, dem.spec.x0 + ((x / 256) | 0), dem.spec.y0 + ((y / 256) | 0)],
+            in_tile: [x % 256, y % 256],
+            m: +z[i].toFixed(1), neighbour_median_m: +med.toFixed(1), off_by_m: +dev.toFixed(1),
+            rgba: raw(i), west: raw(i - 1), east: raw(i + 1), north: raw(i - w), south: raw(i + w),
+          });
+        }
+      }
+    }
+  }
+
+  // Pyramid of the good data, each level half the size of the last, all the
+  // way down to a single pixel.
+  //
+  // The last level is not a flourish. A hole aligned with the pyramid — a
+  // missing tile is exactly one quadrant of a 2x2 grid — is entirely bad at
+  // every level above the one that mixes it with its siblings, so stopping at
+  // 2x2 leaves precisely the commonest case unrepaired. Carry on to 1x1 and
+  // there is always a value to fall back on, which at worst is the mean height
+  // of everything that did arrive.
+  const levels = [{ z, bad, w, h }];
+  for (let lw = w, lh = h, src = levels[0]; lw > 1 || lh > 1;) {
+    const nw = Math.max(1, lw >> 1), nh = Math.max(1, lh >> 1);
+    const nz = new Float32Array(nw * nh), nb = new Uint8Array(nw * nh);
+    for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
+      let sum = 0, cnt = 0;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const sy = y * 2 + dy, sx = x * 2 + dx;
+        if (sy >= lh || sx >= lw) continue;         // an odd level has a short edge
+        const k = sy * lw + sx;
+        if (!src.bad[k]) { sum += src.z[k]; cnt++; }
+      }
+      if (cnt) nz[y * nw + x] = sum / cnt; else nb[y * nw + x] = 1;
+    }
+    levels.push(src = { z: nz, bad: nb, w: nw, h: nh });
+    lw = nw; lh = nh;
+  }
+
+  // The height to use when even the top of the pyramid has nothing: the mean
+  // of what did arrive. Zero would be a sea-level plateau in the middle of a
+  // mountain scene, which is a worse lie than a flat average.
+  let goodSum = 0, goodN = 0;
+  for (let i = 0; i < n; i++) if (!bad[i]) { goodSum += z[i]; goodN++; }
+  const fallback = goodN ? goodSum / goodN : 0;
+
+  let repaired = 0, unrepairable = 0;
+  for (let i = 0; i < n; i++) {
+    if (!bad[i]) continue;
+    const x = i % w, y = (i / w) | 0;
+    let got = false;
+    for (let L = 1; L < levels.length; L++) {
+      const lv = levels[L], lx = Math.min(lv.w - 1, x >> L), ly = Math.min(lv.h - 1, y >> L);
+      const k = ly * lv.w + lx;
+      if (!lv.bad[k]) { z[i] = lv.z[k]; got = true; break; }
+    }
+    repaired++;
+    if (!got) { z[i] = fallback; unrepairable++; }
+  }
+
+  let zLo = Infinity, zHi = -Infinity, sum = 0;
+  for (let i = 0; i < n; i++) { const v = z[i]; if (v < zLo) zLo = v; if (v > zHi) zHi = v; sum += v; }
+
+  /**
+   * How far apart the values in one channel are.
+   *
+   * The greatest common divisor of the gaps between the values that occur. One
+   * means every value was available, which is a healthy eight-bit channel.
+   * Eight means only every eighth value came back, which is five bits.
+   *
+   * Null when there is nothing to measure — a channel with one value in it has
+   * no gaps — and that matters: a channel so narrow that quantisation collapses
+   * it to a single value cannot report its own damage, which is why this is
+   * measured on all three and read off the one that varies.
+   */
+  const strideOf = flags => {
+    const present = [];
+    for (let v = 0; v < 256; v++) if (flags[v]) present.push(v);
+    let g = 0;
+    for (let i = 1; i < present.length; i++) {
+      let a = present[i] - present[i - 1], b = g;
+      while (b) { const t = a % b; a = b; b = t; }
+      g = a;
+    }
+    return { values: present.length, stride: present.length > 1 ? g : null };
+  };
+  const chan = { r: strideOf(seen[0]), g: strideOf(seen[1]), b: strideOf(seen[2]) };
+  // The one number to read: the finest elevation step this device could have
+  // reported. Red is worth 256 m a step, green 1 m, so whichever channel can
+  // still be measured gives the answer.
+  const step_m = chan.r.stride > 1 ? chan.r.stride * 256
+    : chan.g.stride > 1 ? chan.g.stride
+    : chan.b.stride > 1 ? chan.b.stride / 256
+    : null;
+
+  const audit = {
+    canvas: `${w}x${h}`, tiles: `${dem.spec.nx}x${dem.spec.ny}@z${dem.spec.z}`,
+    px: n,
+    void_px: voidPx,                         // never drawn: a tile that did not arrive
+    out_of_range: oor,                       // decoded to somewhere that is not Earth
+    spikes,                                  // disagreed with its neighbours by > spike m
+    repaired_px: repaired,
+    unrepairable_px: unrepairable,
+    raw_min_m: isFinite(rawLo) ? +rawLo.toFixed(1) : null,
+    raw_max_m: isFinite(rawHi) ? +rawHi.toFixed(1) : null,
+    min_m: +zLo.toFixed(1), max_m: +zHi.toFixed(1), mean_m: +(sum / n).toFixed(1),
+    // How many of the 256 values each channel actually produced, and the gap
+    // between them. Anything but a stride of 1 is a device that cannot hold
+    // the data it was given.
+    channels: {
+      r: chan.r.values, g: chan.g.values, b: chan.b.values,
+      r_stride: chan.r.stride, g_stride: chan.g.stride, b_stride: chan.b.stride,
+    },
+    quantised: !!(chan.r.stride > 1 || chan.g.stride > 1 || chan.b.stride > 1),
+    step_m,
+    spike_threshold_m: spike,
+    worst,
+  };
+  return { z, w, h, spec: dem.spec, audit };
+}
+
+/**
+ * Heights in metres from a terrarium mosaic, bilinearly.
+ *
+ * The repaired field is what gets sampled; `sample.audit` carries what had to
+ * be repaired to get it, for whoever is keeping the log.
+ */
+export function demSampler(dem, opts) {
+  const f = demField(dem, opts);
+  if (!f) return null;
+  const { z, w, h, spec: s } = f;
+  const sample = (lat, lon) => {
+    const x = clamp((lon2tx(lon, s.z) - s.x0) * 256, 0, w - 1.001);
+    const y = clamp((lat2ty(lat, s.z) - s.y0) * 256, 0, h - 1.001);
     const x0 = Math.floor(x), y0 = Math.floor(y), ux = x - x0, uy = y - y0;
-    const at = (a, b) => { const i = (b * dem.w + a) * 4; return px[i] * 256 + px[i + 1] + px[i + 2] / 256 - 32768; };
+    const at = (a, b) => z[b * w + a];
     return lerp(lerp(at(x0, y0), at(x0 + 1, y0), ux), lerp(at(x0, y0 + 1), at(x0 + 1, y0 + 1), ux), uy);
   };
+  sample.audit = f.audit;
+  return sample;
 }
 
 /** Offline fallback: infer a plausible surface from the track's own elevations. */

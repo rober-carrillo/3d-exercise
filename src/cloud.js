@@ -197,6 +197,69 @@ export function createCloud(db) {
       return row ? rowToRoute(row) : null;
     },
 
+    /* ---------- scene reports ---------- */
+
+    /**
+     * File what one viewing looked like on this device.
+     *
+     * The record is built by src/scenelog.js; this only decides what of it
+     * becomes a column. Three things do — who, which route, and what is wrong
+     * with it — because a list of reports has to be readable without opening
+     * any of them, and `faults` is what makes that possible.
+     *
+     * `reporter` is set from the signed-in session rather than from the
+     * record. Row-level security would refuse anything else, which is the
+     * point: a report is evidence, and a client that could choose whose
+     * device it came from would make the table worth nothing.
+     */
+    async reportScene(record, { routeId = null } = {}) {
+      const reporter = must().auth.user()?.id;
+      if (!reporter) throw new Error('Sign in to send a diagnostic report');
+      return must().from('scene_reports').insert({
+        reporter,
+        route_id: routeId,
+        route_name: record?.route?.name ?? null,
+        faults: record?.faults ?? [],
+        app_version: record?.app?.version ?? null,
+        platform: record?.device?.native ? 'android' : 'web',
+        report: record,
+      });
+    },
+
+    /** Am I allowed to read everybody's? */
+    async amAdmin() {
+      try { return !!(await must().rpc('is_admin')); } catch { return false; }
+    },
+
+    /**
+     * The reports, newest first — mine, or everybody's if I am an admin.
+     *
+     * Through the function rather than the table because a report carries only
+     * a bare uuid for whose device it came from, and turning that into a name
+     * means reading the profile and the account, neither of which an admin has
+     * any policy on. The function joins them under its own privileges and
+     * checks who is asking on the way in.
+     */
+    async sceneReports({ who = null, limit = 50 } = {}) {
+      const rows = await must().rpc('scene_reports_for', { who, lim: limit });
+      return Array.isArray(rows) ? rows : [];
+    },
+
+    /** One report in full, with everything the device wrote down. */
+    async sceneReport(id) {
+      const rows = await must().from('scene_reports').select('*', { filter: { id: `eq.${id}` }, limit: 1 });
+      if (!rows?.length) throw new Error('That report is not here');
+      return rows[0];
+    },
+
+    /** My own, without needing to be an admin to see them. */
+    async mySceneReports(limit = 50) {
+      const me = must().auth.user()?.id;
+      if (!me) return [];
+      return must().from('scene_reports').select('id,route_name,faults,app_version,platform,created_at',
+        { filter: { reporter: `eq.${me}` }, order: 'created_at.desc', limit });
+    },
+
     /**
      * Move routes held in this browser into the account that just signed in.
      *

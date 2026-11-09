@@ -552,3 +552,10 @@ footer a{color:var(--ink-2)}
 .rv-metric button:hover{color:var(--ink)}
 .rv-metric button[aria-pressed="true"]{color:var(--on-accent)}
 @media (prefers-reduced-motion:reduce){.rv-metric .rv-mt-pill{transition:none}}
+
+/* The way to the scene reports (diag.html). Deliberately faint: it is a
+   workbench door, not a feature, and it sits under the footer it belongs to. */
+.diag-link{margin:-6px 0 26px;text-align:center}
+.diag-link a{font:12.5px/1.4 var(--font);color:var(--ink-2);text-decoration:none;
+  border-bottom:1px dotted var(--line)}
+.diag-link a:hover{color:var(--ink)}
