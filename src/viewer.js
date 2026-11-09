@@ -13,12 +13,15 @@ import { Renderer } from './renderer.js';
 import { t, lang, applyI18n } from './i18n.js';
 import { correctElevation } from './elevation.js';
 import { osmInk } from './osmink.js';
+import { loadNames } from './placenames.js';
+import { buildNameSet } from './labels.js';
 import {
   beginScene, step, noteGl, noteTiles, noteDem, noteMesh, noteProbe, noteShot, noteError,
   probeCanvas, finishScene, faults,
 } from './scenelog.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, ramp, rampCss, clamp, setEsriToken,
+  mercX, mercY,
 } from './terrain.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -228,7 +231,12 @@ export class RouteViewer {
     const r = this.renderer;
     this.streetMap = mode;
     if (!r || !this._ground) return;
-    r.state.labels = mode === 'off';
+    // Which layer of names is in charge. With real words on the ground the
+    // raster is off for good and only the full sheet changes anything — it
+    // prints its own street names, so ours stand down and the region names
+    // keep floating. Without them, the raster behaves as it always did.
+    if (r.hasNames) { r.state.labels = false; r.nameKinds = mode === 'full' ? 'places' : 'all'; }
+    else r.state.labels = mode === 'off';
     if (mode === 'off') { r.setTexture(this._ground); return; }
 
     this._mix = this._mix || {};
@@ -246,7 +254,8 @@ export class RouteViewer {
         this.mount.querySelectorAll('.rv-roads button')
           .forEach(b => b.classList.toggle('on', b.dataset.roads === 'off'));
         this.streetMap = 'off';
-        r.state.labels = true;
+        r.state.labels = !r.hasNames;
+        r.nameKinds = 'all';
         return;
       }
       try {
@@ -513,8 +522,20 @@ export class RouteViewer {
         loadTiles(satSpec, TILES.esriPlaces.url, null, 12000, 2),
         loadTiles(satSpec, TILES.esriStreets.url, null, 12000, 2),
       ]);
-      if (places.ok) sat.ctx.drawImage(places.cv, 0, 0);
+      // Street names go up at once. Asking OpenStreetMap for the words takes
+      // thirty seconds on a good day and can take two minutes, and a ground
+      // with no names on it for two minutes is worse than a ground with
+      // somebody else's. These are replaced the moment the words arrive —
+      // see setNames, which switches this layer off as it takes over.
       if (streets.ok) renderer.setLabels(streets.cv);
+      // Place names wait, and this is the asymmetry worth explaining. They are
+      // painted into the ground picture rather than drawn over it, and once
+      // painted they cannot be taken out again without rebuilding it. Our own
+      // region names float in the air over the same places, so printing both
+      // would double every barrio in the scene. Thirty seconds without them
+      // costs little; an unremovable duplicate costs for as long as the route
+      // is open.
+      this._rasterNames = { places: places.ok ? places.cv : null, streets: streets.ok ? streets.cv : null };
     }
     this._ground = sat.ok ? sat.cv : null;
     this._satSpec = satSpec;
@@ -552,11 +573,100 @@ export class RouteViewer {
       this.renderer.beginChase();
       this.setPlay(true);
     }
+    // The names, as words rather than as a picture. Deliberately not awaited:
+    // the service they come from takes half a minute on a good day, and
+    // nothing about the route should wait for that.
+    this.nameTheGround(frame, satSpec, g);
+
     // Close the record once the scene is actually on the screen: the probe
     // wants a canvas the size of the one that was used, and the thumbnail
     // wants something drawn in it. Deferred so neither is in the way of the
     // first frame.
     setTimeout(() => this.closeSceneLog(dem), 1500);
+  }
+
+  /**
+   * Put real names on the ground, when they can be had.
+   *
+   * This runs after the scene is already on screen and is never awaited,
+   * because OpenStreetMap's query service answers in anything from five
+   * seconds to a minute and a half, or refuses outright because it is busy.
+   * A route that waited for that would be a route that looked broken.
+   *
+   * Two outcomes, and both are fine:
+   *
+   *   names arrive   they are typeset into one sheet and laid out every frame
+   *                  — along the streets for street names, floating and facing
+   *                  the camera for regions. The raster label layer switches
+   *                  off, because it says the same things in the same places.
+   *
+   *   they do not    the Esri rasters that were fetched with the imagery go on
+   *                  as before: place names painted into the ground picture,
+   *                  street names as a layer the renderer fades by distance.
+   *                  This is what the viewer did before any of this existed.
+   */
+  async nameTheGround(frame, satSpec, g) {
+    const r = this.renderer;
+    if (!r || !satSpec) return this.fallBackToRasterNames();
+    try {
+      const { cx, cy, K } = frame;
+      const project = (lon, lat) => [(mercX(lon) - cx) * K, (mercY(lat) - cy) * K];
+      const names = await loadNames(satSpec, frame, {
+        // Baked beside the tiles for a route the build ships, so the landing
+        // page never waits on anybody's public endpoint.
+        local: this.opts.tileSlug ? `./tiles/${this.opts.tileSlug}/names.json` : null,
+      });
+      if (!names || (!names.streets?.length && !names.places?.length)) return this.fallBackToRasterNames();
+      const set = buildNameSet(names, project, {
+        ext: g.ext,
+        groundZ: g.groundZ,
+        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+      });
+      if (!set.items.length) return this.fallBackToRasterNames();
+      r.setNames(set);
+      this._names = { set, count: set.items.length };
+      // The ink and the halo are baked into the sheet, so a change of theme
+      // means setting the names again. Cheap — it is one canvas and a few
+      // hundred strings — and the alternative is dark words with a white halo
+      // on a dark map, which is the one combination that cannot be read.
+      if (!this._nameTheme) {
+        this._nameTheme = () => {
+          const dark = document.documentElement.dataset.theme === 'dark';
+          if (dark === this._namesDark) return;
+          this._namesDark = dark;
+          r.setNames(buildNameSet(names, project, {
+            ext: g.ext, groundZ: g.groundZ, theme: dark ? 'dark' : 'light',
+          }));
+        };
+        this._namesDark = document.documentElement.dataset.theme === 'dark';
+        window.addEventListener('salpicon:theme', this._nameTheme);
+        window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', this._nameTheme);
+      }
+      // In the full OpenStreetMap sheet the names are already printed on the
+      // ground, so ours would double them. Region names still float: they are
+      // in the air over the place, which the sheet has no way of saying.
+      r.nameKinds = this.streetMap === 'full' ? 'places' : 'all';
+      // The credit for the names, where the names are. OpenStreetMap's data
+      // is ODbL: a produced work carrying it has to say so.
+      this.$('st-txt').textContent += ' · names © OpenStreetMap';
+    } catch {
+      this.fallBackToRasterNames();
+    }
+  }
+
+  /** The pictures of names, used when the words could not be had. */
+  fallBackToRasterNames() {
+    const r = this.renderer, n = this._rasterNames;
+    if (!r || !n) return;
+    if (n.places && !this._placesPainted && this._ground) {
+      this._placesPainted = true;
+      this._ground.getContext('2d').drawImage(n.places, 0, 0);
+      if (this.streetMap === 'off' || !this.streetMap) r.setTexture(this._ground);
+      this._mix = {};                       // the mixes were built without them
+    }
+    // The street raster is already up from the load; this only settles whether
+    // the current map mode wants it showing.
+    if (n.streets) r.state.labels = this.streetMap === 'off' || !this.streetMap;
   }
 
   /**

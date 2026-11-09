@@ -35,6 +35,11 @@ const CHASE_DIST = 0.221;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 /** frame-rate independent easing */
 const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
+/** the same ramp the shaders use for fog, on this side of the fence */
+const smooth = (a, b, x) => {
+  const t = clamp((x - a) / (b - a || 1), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 const FIG_MAX = 1500;           // vertices in the figure; the cyclist is the bigger of the two
 const mat4 = () => new Float32Array(16);
@@ -108,6 +113,12 @@ export class Renderer {
     this.faceAz = null;            // eased facing, so the figure never snaps
     this.hasTexture = false;
     this.hasLabels = false;
+    this.hasNames = false;          // true once real words arrive; see setNames
+    this.names = null;
+    // 'all' or 'places'. The full OpenStreetMap sheet prints street names into
+    // the ground itself, so ours stand down for it; region names float in the
+    // air, which no sheet can do, and stay whatever is underneath.
+    this.nameKinds = 'all';
     this.walking = false;          // true while the route is replaying
     this.walkPhase = 0;
     this.walkRate = 1;             // follows the playback speed multiplier
@@ -166,6 +177,28 @@ void main(){vec3 n=normalize(vN);
   if(uHasLab>0.5){vec4 lb=texture2D(uLab,vUv);
     col=mix(col,lb.rgb,lb.a*(1.0-smoothstep(uLabNear,uLabFar,vD)));}
   gl_FragColor=vec4(mix(col,uSky,fogf(vD)*0.88),1.0);}`);
+
+    /**
+     * Names: a textured quad apiece, with its own opacity.
+     *
+     * No vertical scale and no fog. The positions arrive in final world
+     * metres — the layout in _buildNames has already applied whatever the
+     * ground is being scaled by — because a name has to sit a fixed height
+     * above the surface whether the relief is exaggerated, true, or switched
+     * off entirely, and multiplying its height by zero would bury it.
+     *
+     * The opacity is per vertex rather than per draw so that every name can
+     * fade on its own: one going out because the camera pulled back, another
+     * because a more important name took its piece of screen.
+     */
+    this.pLab = this._program(`
+attribute vec3 aPos;attribute vec2 aUv;attribute float aA;
+uniform mat4 uMVP;varying vec2 vUv;varying float vA;
+void main(){vUv=aUv;vA=aA;gl_Position=uMVP*vec4(aPos,1.0);}`, `
+precision highp float;
+uniform sampler2D uAtlas;varying vec2 vUv;varying float vA;
+void main(){vec4 c=texture2D(uAtlas,vUv);float a=c.a*vA;
+  if(a<0.008)discard;gl_FragColor=vec4(c.rgb,a);}`);
 
     this.pCol = this._program(`
 attribute vec3 aPos;attribute vec4 aCol;
@@ -255,6 +288,284 @@ void main(){vec4 c=vCol;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     this.hasLabels = true;
+  }
+
+  /**
+   * The names, as words.
+   *
+   * Replaces the raster label layer when it arrives, which is why `labels`
+   * goes off here: the two say the same things in the same places, and both
+   * at once prints every street name twice, a few pixels apart.
+   *
+   * @param set  from buildNameSet in src/labels.js — one sheet of type and a
+   *             list of where each piece of it goes
+   */
+  setNames(set) {
+    const gl = this.gl;
+    if (!set?.items?.length) return;
+    if (!this.nameTex) this.nameTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.nameTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, set.atlas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // Mipmaps, because a name seen from far off is minified hard and without
+    // them the glyphs sparkle as the camera moves. The sheet is not a power of
+    // two in height, so WebGL1 would refuse to mip it — it is padded by the
+    // atlas builder for exactly this reason.
+    const pot = v => (v & (v - 1)) === 0;
+    const mip = this.caps.gl2 || (pot(set.atlas.width) && pot(set.atlas.height));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+
+    this.names = set.items;
+    this.fade = new Float32Array(set.items.length);   // where each one is between gone and here
+    const max = set.items.length * 6;
+    this._nPos = new Float32Array(max * 3);
+    this._nUv = new Float32Array(max * 2);
+    this._nA = new Float32Array(max);
+    this._nStem = new Float32Array(set.items.length * 6);
+    this._nStemCol = new Float32Array(set.items.length * 8);
+    const B = this._buffers;
+    // A change of theme re-typesets the whole sheet and comes back through
+    // here, so whatever was allocated last time goes first.
+    for (const old of [B.lab, B.stem]) {
+      if (old) for (const k of ['pos', 'uv', 'a', 'col']) if (old[k]) gl.deleteBuffer(old[k]);
+    }
+    B.lab = { pos: gl.createBuffer(), uv: gl.createBuffer(), a: gl.createBuffer(), n: 0 };
+    B.stem = { pos: gl.createBuffer(), col: gl.createBuffer(), n: 0 };
+    this.hasNames = true;
+    this.state.labels = false;             // the raster layer steps aside
+  }
+
+  /**
+   * Lay the names out for this frame, in screen terms.
+   *
+   * Done on the processor, every frame, and that is not an oversight. Three of
+   * the things a name has to do cannot be expressed as a fixed piece of
+   * geometry: a region name must turn to face wherever the camera now is; both
+   * kinds must hold a sensible size on screen rather than the size perspective
+   * would give them; and no name may sit on top of another, which is a
+   * question about pixels and therefore about this frame. A few hundred labels
+   * is a few thousand multiplications — far less than one tree of the terrain
+   * mesh — and it buys all three.
+   *
+   * The order matters. Candidates are considered by how much they deserve the
+   * space, so when two collide it is the smaller road that goes, and a region
+   * name never loses to a street.
+   */
+  _buildNames(eye, W, H) {
+    const B = this._buffers;
+    if (!this.hasNames) return;
+    const g = this.g, m = this._MVP, V = this._V, vex = this.state.vex;
+    const items = this.names, fade = this.fade;
+    const dt = this._nDt || 0.016;
+
+    // Metres per screen pixel at a given distance, for a 45° vertical field.
+    const TAN = Math.tan(45 * D2R / 2);
+    const wppAt = d => 2 * d * TAN / H;
+
+    // A horizontal camera-right, so region names stay upright. A full
+    // spherical billboard would tilt the words whenever the camera looked
+    // down, which is most of the time here.
+    let rx = V[0], ry = V[4];
+    const rl = Math.hypot(rx, ry) || 1; rx /= rl; ry /= rl;
+
+    const clearance = (g.track.lift || 2) * 2.2;      // above the ribbon, always
+    const hover = Math.max(g.hSpan * 0.35, g.ext * 0.04);
+    const streetM = g.ext * 0.0045;
+
+    const cand = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const place = it.kind === 'place';
+      if (!place && this.nameKinds === 'places') continue;
+      const z = it.z * vex + (place ? hover : clearance);
+      const d = Math.hypot(it.x - eye[0], it.y - eye[1], z - eye[2]);
+      const wpp = wppAt(d);
+
+      // How tall on screen, and how tall that makes it on the ground.
+      //
+      // A street name is sized in metres, so it belongs to the ground and
+      // grows as you come down to it the way the street does. Where that
+      // would make it unreadably small it is simply not drawn, and where it
+      // would make it absurdly large it is held back — a name is a label, not
+      // a billboard painted on the tarmac.
+      let hPx, hM, size = 1;
+      if (place) {
+        hPx = 15 + it.rank * 1.5;                     // a city reads larger than a barrio
+        hM = hPx * wpp;
+      } else {
+        const raw = streetM / wpp;
+        if (raw < 6.5) continue;                      // too far to read: not drawn at all
+        // Which is also how street names arrive and leave: by becoming legible
+        // rather than by crossing a distance. The same rule then holds on a
+        // phone and on a desktop, where the same distance is a different
+        // number of pixels.
+        size = smooth(6.5, 11, raw);
+        hM = Math.max(10, Math.min(34, raw)) * wpp;
+        hPx = hM / wpp;
+      }
+      const wM = hM * it.aspect;
+
+      // Where the middle of it lands on screen, and whether it is in front.
+      const cw = m[3] * it.x + m[7] * it.y + m[11] * z + m[15];
+      if (cw <= 0) continue;
+      const sx = (m[0] * it.x + m[4] * it.y + m[8] * z + m[12]) / cw;
+      const sy = (m[1] * it.x + m[5] * it.y + m[9] * z + m[13]) / cw;
+      if (sx < -1.6 || sx > 1.6 || sy < -1.6 || sy > 1.6) continue;
+
+      // Its footprint in pixels. A street name lies flat, so perspective
+      // squashes it and the box has to be measured rather than assumed; a
+      // region name faces us and is exactly as big as it asked to be.
+      // The two vectors the quad is built on, half a width and half a height.
+      //
+      // A region name is a plain upright billboard. A street name is the
+      // interesting one, and the reason it is not simply laid flat on the
+      // ground: a flat label seen at a grazing angle is stretched into a
+      // streak, the near end magnified several times over while the far end
+      // vanishes — which is precisely the softness that made the old raster
+      // labels unreadable, and would have been inherited whole.
+      //
+      // So it keeps the street's direction and gives up only the rest. The
+      // long axis stays along the road; the short axis is turned out of the
+      // ground until the face of the quad points as near the camera as it can
+      // while still containing that axis. Looking straight down, that is flat
+      // on the road, like a map. From anything lower, the words tilt up to
+      // meet the eye, standing along the street instead of lying on it — and
+      // at every angle they keep the size they asked for, because nothing is
+      // foreshortened any more.
+      let ax, ay, az, bx, by, bz;
+      if (place) {
+        ax = rx * wM / 2; ay = ry * wM / 2; az = 0;
+        bx = 0; by = 0; bz = hM / 2;
+      } else {
+        let ux = Math.cos(it.dir), uy = Math.sin(it.dir);
+        // Which way along the street the words run is a question about where
+        // the camera is, not about the street, and the answer changes the
+        // moment anybody orbits. Whichever direction points rightwards on
+        // screen is the one they read in.
+        if (ux * rx + uy * ry < 0) { ux = -ux; uy = -uy; }
+        // the part of "towards the camera" that is square to the street
+        let vx = eye[0] - it.x, vy = eye[1] - it.y, vz = eye[2] - z;
+        const vl = Math.hypot(vx, vy, vz) || 1; vx /= vl; vy /= vl; vz /= vl;
+        const along = vx * ux + vy * uy;
+        let nx = vx - along * ux, ny = vy - along * uy, nz = vz;
+        const nl = Math.hypot(nx, ny, nz);
+        // Looking straight down the street there is no such part: the label
+        // is edge-on whatever is done with it, so it lies flat and takes
+        // whatever foreshortening comes.
+        if (nl < 1e-4) { nx = 0; ny = 0; nz = 1; } else { nx /= nl; ny /= nl; nz /= nl; }
+        // up = n x u, flipped if it would stand the words on their head
+        let wx = ny * 0 - nz * uy, wy = nz * ux - nx * 0, wz = nx * uy - ny * ux;
+        const wl = Math.hypot(wx, wy, wz) || 1; wx /= wl; wy /= wl; wz /= wl;
+        if (wz < 0) { wx = -wx; wy = -wy; wz = -wz; }
+        ax = ux * wM / 2; ay = uy * wM / 2; az = 0;
+        bx = wx * hM / 2; by = wy * hM / 2; bz = wz * hM / 2;
+      }
+
+      // Its footprint in pixels, measured from the corners rather than
+      // assumed: the quad faces the camera only as far as it is allowed to,
+      // so what it covers is still worth asking about.
+      let halfW, halfH;
+      {
+        let lo = Infinity, hi = -Infinity, lo2 = Infinity, hi2 = -Infinity;
+        for (const [sa, sb] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+          const qx = it.x + ax * sa + bx * sb, qy = it.y + ay * sa + by * sb, qz = z + az * sa + bz * sb;
+          const qw = m[3] * qx + m[7] * qy + m[11] * qz + m[15];
+          if (qw <= 0) { lo = Infinity; break; }
+          const ppx = (m[0] * qx + m[4] * qy + m[8] * qz + m[12]) / qw * W / 2;
+          const ppy = (m[1] * qx + m[5] * qy + m[9] * qz + m[13]) / qw * H / 2;
+          if (ppx < lo) lo = ppx; if (ppx > hi) hi = ppx;
+          if (ppy < lo2) lo2 = ppy; if (ppy > hi2) hi2 = ppy;
+        }
+        if (!isFinite(lo)) continue;
+        halfW = (hi - lo) / 2; halfH = (hi2 - lo2) / 2;
+        if (halfH < 3) continue;                      // edge-on to the camera: unreadable
+      }
+
+      // Region names have no distance limit at all: knowing which barrio this
+      // is stays true from any height, and that is the whole difference
+      // between the two kinds.
+      const far = place ? 1 : size;
+      if (far <= 0.01) continue;
+
+      cand.push({
+        i, it, place, z, ax, ay, az, bx, by, bz, want: far,
+        px: sx * W / 2, py: sy * H / 2, halfW, halfH,
+        key: (place ? 1000 : 0) + it.rank * 10 - Math.min(9, d / Math.max(1, g.ext) * 9),
+      });
+    }
+
+    // The ones that deserve the space take it; anything that would land on top
+    // of one already placed is let go, and fades rather than blinking out.
+    cand.sort((a, b) => b.key - a.key);
+    const kept = [];
+    const want = new Float32Array(items.length);
+    for (const c of cand) {
+      let clash = false;
+      for (const k of kept) {
+        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 3
+         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 3) { clash = true; break; }
+      }
+      if (clash) continue;
+      kept.push(c);
+      want[c.i] = c.want;
+    }
+
+    // Ease every name towards where it should be, so collisions and distance
+    // both read as a name arriving or leaving rather than as a flicker.
+    const k = ease(5.5, dt);
+    for (let i = 0; i < items.length; i++) fade[i] += (want[i] - fade[i]) * k;
+
+    const P = this._nPos, U = this._nUv, A = this._nA;
+    const S = this._nStem, SC = this._nStemCol;
+    let v = 0, sv = 0;
+    for (const c of kept) {
+      const a = fade[c.i];
+      if (a < 0.01) continue;
+      const it = c.it;
+      const { ax, ay, az, bx, by, bz } = c;           // worked out above, with the camera
+      const corner = (sa, sb, u, w) => {
+        P[v * 3] = it.x + ax * sa + bx * sb;
+        P[v * 3 + 1] = it.y + ay * sa + by * sb;
+        P[v * 3 + 2] = c.z + az * sa + bz * sb;
+        U[v * 2] = u; U[v * 2 + 1] = w;
+        A[v] = a;
+        v++;
+      };
+      // v0 is the top of the row in the sheet, which is why the bottom corners
+      // take v1: the atlas is uploaded without a flip.
+      corner(-1, 1, it.u0, it.v0); corner(-1, -1, it.u0, it.v1); corner(1, 1, it.u1, it.v0);
+      corner(1, 1, it.u1, it.v0); corner(-1, -1, it.u0, it.v1); corner(1, -1, it.u1, it.v1);
+
+      // A region name floating with nothing under it reads as a sticker on the
+      // lens. The stem says which piece of ground it belongs to.
+      if (c.place) {
+        const gz = it.z * vex;
+        S[sv * 3] = it.x; S[sv * 3 + 1] = it.y; S[sv * 3 + 2] = gz;
+        S[sv * 3 + 3] = it.x; S[sv * 3 + 4] = it.y; S[sv * 3 + 5] = c.z - Math.abs(c.bz) * 1.1;
+        for (const [j, al] of [[0, 0.0], [1, 0.45]]) {
+          SC[(sv + j) * 4] = 0.10; SC[(sv + j) * 4 + 1] = 0.13; SC[(sv + j) * 4 + 2] = 0.11;
+          SC[(sv + j) * 4 + 3] = al * a;
+        }
+        sv += 2;
+      }
+    }
+
+    const gl = this.gl;
+    B.lab.n = v; B.stem.n = sv;
+    if (v) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, B.lab.pos); gl.bufferData(gl.ARRAY_BUFFER, P.subarray(0, v * 3), gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, B.lab.uv); gl.bufferData(gl.ARRAY_BUFFER, U.subarray(0, v * 2), gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, B.lab.a); gl.bufferData(gl.ARRAY_BUFFER, A.subarray(0, v), gl.DYNAMIC_DRAW);
+    }
+    if (sv) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, B.stem.pos); gl.bufferData(gl.ARRAY_BUFFER, S.subarray(0, sv * 3), gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, B.stem.col); gl.bufferData(gl.ARRAY_BUFFER, SC.subarray(0, sv * 4), gl.DYNAMIC_DRAW);
+    }
   }
 
   setTexture(source) {
@@ -827,6 +1138,44 @@ void main(){vec4 c=vCol;
       this._attr(pC, 'aPos', B.mk.pos, 3); this._attr(pC, 'aCol', B.mk.col, 4);
       gl.drawArrays(gl.POINTS, 0, 3);
       gl.disable(gl.BLEND);
+
+      // The names, last of everything.
+      //
+      // Last because a name is the one thing on the ground that nothing else
+      // may cover: the route is the subject, and the route running down a
+      // street is exactly where its name wants to be. The depth test still
+      // applies, so a hill in front of a name hides it — what is overcome is
+      // only the ribbon, by a polygon offset deeper than the ribbon's own.
+      if (this.hasNames) {
+        this._nDt = dt;
+        this._buildNames(eye, W, H);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(false);
+        if (B.stem.n) {
+          gl.uniform1f(pC.u.uIsPoint, 0);
+          gl.uniform1f(pC.u.uVex, 1);           // stems are built in final metres
+          this._attr(pC, 'aPos', B.stem.pos, 3); this._attr(pC, 'aCol', B.stem.col, 4);
+          gl.drawArrays(gl.LINES, 0, B.stem.n);
+        }
+        if (B.lab.n) {
+          const pL = this.pLab;
+          gl.useProgram(pL);
+          gl.uniformMatrix4fv(pL.u.uMVP, false, this._MVP);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, this.nameTex);
+          gl.uniform1i(pL.u.uAtlas, 0);
+          this._attr(pL, 'aPos', B.lab.pos, 3);
+          this._attr(pL, 'aUv', B.lab.uv, 2);
+          this._attr(pL, 'aA', B.lab.a, 1);
+          gl.enable(gl.POLYGON_OFFSET_FILL);
+          gl.polygonOffset(-9.0, -24);          // deeper than the ribbon's -4 / -8
+          gl.drawArrays(gl.TRIANGLES, 0, B.lab.n);
+          gl.disable(gl.POLYGON_OFFSET_FILL);
+        }
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+      }
     };
     requestAnimationFrame(frame);
   }

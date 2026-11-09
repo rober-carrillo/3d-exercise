@@ -605,6 +605,12 @@ export function buildGeometry({ track, frame, sample, sat, N, uint }) {
 
   return {
     N, ext, zRef, hSpan, indexType: uint ? 'uint32' : 'uint16',
+    // The height of the drawn surface at any point of the scene, in the same
+    // metres the vertices use. Anything that has to sit *on* the ground rather
+    // than in the mesh — a name lying along a street, the foot of a label's
+    // stem — needs the same answer the GPU will give, not a second opinion
+    // from the sampler.
+    groundZ: (x, y) => meshH(x, y) - zRef,
     terrain: { pos, slope, uv, idx },
     skirt: { pos: new Float32Array(sp), col: new Float32Array(sc) },
     ribbon: { pos: rp, col: rc }, outline: { pos: op, col: oc }, curtain: { pos: wp, col: wc },

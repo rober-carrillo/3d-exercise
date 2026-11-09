@@ -328,7 +328,8 @@ const DICT = {
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP y otros) · '
       + 'Mapa de reserva © <a href="https://www.openstreetmap.org/copyright">colaboradores de OpenStreetMap</a>',
     'foot.short': 'Imágenes © Esri y sus colaboradores · Elevación de '
-      + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP y otros)',
+      + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP y otros) · '
+      + 'Nombres de calles y barrios © <a href="https://www.openstreetmap.org/copyright">colaboradores de OpenStreetMap</a>',
     // El informe de una visualización: lo que se vio y en qué aparato. Ver
     // src/scenelog.js y diag.html.
     'nav.diag': 'Informe de visualización',
@@ -646,7 +647,8 @@ const DICT = {
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) · '
       + 'Map fallback © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     'foot.short': 'Imagery © Esri and its contributors · Elevation from '
-      + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others)',
+      + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) · '
+      + 'Street and place names © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     'nav.diag': 'Scene report',
     'nav.diag.hint': 'What this device saw when it drew a route — useful if the terrain came out wrong.',
     'toast.noaccount': 'Could not reach your account. Showing what is on this device.',

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, basename, extname } from 'node:path';
 import { parseGPX, analyze, profileSamples } from '../src/gpx.js';
 import { sceneFrame, pickZoom } from '../src/terrain.js';
+import { condense, query as namesQuery } from '../src/placenames.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'dist');
@@ -186,6 +187,39 @@ async function cacheTiles(route, track, outDir) {
     // skip the network for tiles that are not here, and draw holes.
     if (ok === total) out[kind] = { z: spec.z, x0: spec.x0, y0: spec.y0, x1: spec.x1, y1: spec.y1, ext };
     console.log(`  · tiles/${route.slug}/${kind}: ${ok}/${total}${ok === total ? '' : ' — incomplete, will fetch live'}`);
+  }
+
+  // The names on that ground, as words, fetched once here.
+  //
+  // Same reasoning as the tiles and then some. OpenStreetMap's query service
+  // answers in anything from five seconds to a minute and a half and refuses
+  // outright when it is busy, so a landing page that asked it on every visit
+  // would be both slow and rude. Asked once per deploy, the answer ships with
+  // the build and the page has its street names before it has finished
+  // drawing. A failure here costs nothing: the viewer falls back to asking at
+  // runtime, and failing that, to the raster labels.
+  try {
+    const b = [frame.minLat, frame.minLon, frame.maxLat, frame.maxLon].map(v => v.toFixed(5)).join(',');
+    const ctl = AbortSignal.timeout?.(60000);
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST', signal: ctl,
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        // Node sends no user agent of its own and Overpass answers 406 to
+        // that. A bare name and version, and nothing else: its front end also
+        // answers 406 to any user agent with a URL in it, however politely
+        // the URL is offered, which costs an afternoon to discover.
+        'user-agent': 'salpicon-build/1.0',
+      },
+      body: 'data=' + encodeURIComponent(namesQuery(b)),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = condense((await res.json()).elements);
+    await writeFile(join(outDir, 'tiles', route.slug, 'names.json'), JSON.stringify(data));
+    const distinct = new Set(data.streets.map(x => x.n)).size;
+    console.log(`  · tiles/${route.slug}/names.json: ${distinct} street names, ${data.places.length} places`);
+  } catch (err) {
+    console.warn(`  ! names for ${route.slug}: ${err.message} — the viewer will ask at runtime`);
   }
 
   // The analysed track, as the viewer would have derived it anyway.
