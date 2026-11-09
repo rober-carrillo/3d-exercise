@@ -611,6 +611,7 @@ export class RouteViewer {
     try {
       const { cx, cy, K } = frame;
       const project = (lon, lat) => [(mercX(lon) - cx) * K, (mercY(lat) - cy) * K];
+      this._nameProject = project;          // kept for the tests and for a retypeset
       const names = await loadNames(satSpec, frame, {
         // Baked beside the tiles for a route the build ships, so the landing
         // page never waits on anybody's public endpoint.

@@ -189,37 +189,61 @@ async function cacheTiles(route, track, outDir) {
     console.log(`  · tiles/${route.slug}/${kind}: ${ok}/${total}${ok === total ? '' : ' — incomplete, will fetch live'}`);
   }
 
-  // The names on that ground, as words, fetched once here.
+  // The names on that ground, as words.
   //
-  // Same reasoning as the tiles and then some. OpenStreetMap's query service
-  // answers in anything from five seconds to a minute and a half and refuses
-  // outright when it is busy, so a landing page that asked it on every visit
-  // would be both slow and rude. Asked once per deploy, the answer ships with
-  // the build and the page has its street names before it has finished
-  // drawing. A failure here costs nothing: the viewer falls back to asking at
-  // runtime, and failing that, to the raster labels.
-  try {
-    const b = [frame.minLat, frame.minLon, frame.maxLat, frame.maxLon].map(v => v.toFixed(5)).join(',');
-    const ctl = AbortSignal.timeout?.(60000);
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST', signal: ctl,
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        // Node sends no user agent of its own and Overpass answers 406 to
-        // that. A bare name and version, and nothing else: its front end also
-        // answers 406 to any user agent with a URL in it, however politely
-        // the URL is offered, which costs an afternoon to discover.
-        'user-agent': 'salpicon-build/1.0',
-      },
-      body: 'data=' + encodeURIComponent(namesQuery(b)),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = condense((await res.json()).elements);
-    await writeFile(join(outDir, 'tiles', route.slug, 'names.json'), JSON.stringify(data));
+  // Checked into the repository beside the route, and fetched only when it is
+  // not there. The first draft asked OpenStreetMap on every deploy, which was
+  // wrong twice over: its query service answers 502 whenever it is busy — it
+  // did exactly that on the first build that ran this, so the names silently
+  // did not ship — and asking a shared public service for the same answer on
+  // every push is not a reasonable thing to do with it.
+  //
+  // So the answer is an artefact, like the tiles would be if they were small
+  // enough to check in. Deleting routes/<slug>.names.json is how you ask for
+  // a fresh one; a local build then fetches it and writes it back, ready to
+  // be committed. A build that cannot get one carries on without: the viewer
+  // asks at runtime, and failing that, falls back to the raster labels.
+  const namesFile = join(root, 'routes', `${route.slug}.names.json`);
+  const namesOut = join(outDir, 'tiles', route.slug, 'names.json');
+  if (existsSync(namesFile)) {
+    const data = JSON.parse(await readFile(namesFile, 'utf8'));
+    await writeFile(namesOut, JSON.stringify(data));
     const distinct = new Set(data.streets.map(x => x.n)).size;
-    console.log(`  · tiles/${route.slug}/names.json: ${distinct} street names, ${data.places.length} places`);
-  } catch (err) {
-    console.warn(`  ! names for ${route.slug}: ${err.message} — the viewer will ask at runtime`);
+    console.log(`  · tiles/${route.slug}/names.json: ${distinct} street names, ${data.places.length} places (from the repo)`);
+  } else {
+    const bbox = [frame.minLat, frame.minLon, frame.maxLat, frame.maxLon].map(v => v.toFixed(5)).join(',');
+    const ends = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+    let got = null;
+    for (const url of ends) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST', signal: AbortSignal.timeout?.(90000),
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            // Node sends no user agent of its own and Overpass answers 406 to
+            // that. A bare name and version, and nothing else: its front end
+            // also answers 406 to any user agent with a URL in it, however
+            // politely the URL is offered, which costs an afternoon to find.
+            'user-agent': 'salpicon-build/1.0',
+          },
+          body: 'data=' + encodeURIComponent(namesQuery(bbox)),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        got = condense((await res.json()).elements);
+        break;
+      } catch (err) {
+        console.warn(`  ! names for ${route.slug} from ${new URL(url).host}: ${err.message}`);
+      }
+    }
+    if (got) {
+      await writeFile(namesOut, JSON.stringify(got));
+      await writeFile(namesFile, JSON.stringify(got));
+      const distinct = new Set(got.streets.map(x => x.n)).size;
+      console.log(`  · tiles/${route.slug}/names.json: ${distinct} street names, ${got.places.length} places`);
+      console.log(`    written to routes/${route.slug}.names.json — commit it so the next build need not ask`);
+    } else {
+      console.warn(`  ! no names for ${route.slug} — the viewer will ask at runtime`);
+    }
   }
 
   // The analysed track, as the viewer would have derived it anyway.
