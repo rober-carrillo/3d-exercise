@@ -37,6 +37,26 @@ export const TILES = {
       ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}?token=${esriToken}`
       : `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
   },
+  /**
+   * Esri's two transparent reference layers, from the same service as the
+   * imagery and under the same terms — which is the reason to prefer them over
+   * anybody else's labels. Places is neighbourhoods, parks and districts, and
+   * belongs on the ground picture at any distance. Transportation is street
+   * names, which are worth reading only from close up, so it is kept as its own
+   * layer for the renderer to fade.
+   */
+  esriPlaces: {
+    label: 'Esri place names',
+    url: (z, x, y) => esriToken
+      ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}?token=${esriToken}`
+      : `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`,
+  },
+  esriStreets: {
+    label: 'Esri street names',
+    url: (z, x, y) => esriToken
+      ? `https://ibasemaps-api.arcgis.com/arcgis/rest/services/Reference/World_Transportation/MapServer/tile/${z}/${y}/${x}?token=${esriToken}`
+      : `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/${z}/${y}/${x}`,
+  },
   osm: {
     label: 'OpenStreetMap',
     url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,

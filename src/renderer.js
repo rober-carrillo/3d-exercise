@@ -94,7 +94,12 @@ export class Renderer {
     // and what it mostly did was drain the colour out of everything past the
     // middle distance — the satellite imagery people came to look at, greyed
     // out in the name of a horizon that is only ever a few kilometres away.
-    this.state = { vex: 1, texture: true, curtain: true, chase: false, bike: false, fog: false };
+    this.state = { vex: 1, texture: true, curtain: true, chase: false, bike: false, fog: false,
+      labels: true };
+    // How far away a street name survives, in ground metres. Set from the
+    // scene's own size in setGeometry, because "near" on a 2 km walk and on a
+    // 60 km ride are not the same distance.
+    this.lab = { near: 0, far: 1e9 };
     this.cam = { az: -2.24, pol: 0.97, dist: 1, tx: 0, ty: 0, tz: 0 };
     this.home = { az: -2.24, pol: 0.97, distScale: 1.45, bearing: 0, lift: 0.09 };
     this.chase = { dist: 0, pol: 1.10, azOffset: 0, height: 0 };
@@ -102,6 +107,7 @@ export class Renderer {
     this.cursorF = 0;              // continuous position along the track
     this.faceAz = null;            // eased facing, so the figure never snaps
     this.hasTexture = false;
+    this.hasLabels = false;
     this.walking = false;          // true while the route is replaying
     this.walkPhase = 0;
     this.walkRate = 1;             // follows the playback speed multiplier
@@ -143,7 +149,8 @@ void main(){vec3 p=vec3(aPos.xy,aPos.z*uVex);
   vN=normalize(vec3(-aSlope.x*uVex,-aSlope.y*uVex,1.0));vH=aPos.z;vUv=aUv;vD=distance(p,uCam);
   gl_Position=uMVP*vec4(p,1.0);}`, `
 precision highp float;
-uniform sampler2D uTex;uniform float uHasTex,uHSpan,uFogNear,uFogFar;uniform vec3 uLight,uSky;
+uniform sampler2D uTex,uLab;uniform float uHasTex,uHasLab,uLabNear,uLabFar,uHSpan,uFogNear,uFogFar;
+uniform vec3 uLight,uSky;
 varying vec2 vUv;varying vec3 vN;varying float vH;varying float vD;
 ${RAMP_GLSL}${FOG_GLSL}
 void main(){vec3 n=normalize(vN);
@@ -151,6 +158,13 @@ void main(){vec3 n=normalize(vN);
   float lam=max(dot(n,uLight),0.0);float sky=0.5+0.5*n.z;
   vec3 col=base*(0.34+0.78*lam)+base*sky*0.16;
   col+=vec3(0.03,0.05,0.09)*(1.0-lam)*sky;
+  // Street names, nearest first. vD is already here for the haze, so the only
+  // new arithmetic is the smoothstep. Mixed after the lighting rather than
+  // into the ground colour: painted on before it, a name on a slope facing
+  // away from the sun is shaded along with the slope and stops being readable,
+  // which is the one thing a name has to be.
+  if(uHasLab>0.5){vec4 lb=texture2D(uLab,vUv);
+    col=mix(col,lb.rgb,lb.a*(1.0-smoothstep(uLabNear,uLabFar,vD)));}
   gl_FragColor=vec4(mix(col,uSky,fogf(vD)*0.88),1.0);}`);
 
     this.pCol = this._program(`
@@ -206,6 +220,13 @@ void main(){vec4 c=vCol;
     this.home.bearing = g.track.bearing;
     this.home.az = g.track.bearing + Math.PI;
     this.cam.dist = g.ext * this.home.distScale;
+    // Tight on purpose. Set wide, the names are technically visible from the
+    // opening view and illegible at that size — the scene reads as dirty
+    // rather than as labelled. They belong to the close view: nothing at the
+    // distance the route opens at, names once the camera has come down to a
+    // street.
+    this.lab.near = g.ext * 0.02;
+    this.lab.far = g.ext * 0.15;
     this.chase.dist = g.ext * CHASE_DIST;
     this.chase.height = g.hSpan * 0.02;
     this.cam.tz = (this.g.track.tz[0] || 0);
@@ -213,8 +234,35 @@ void main(){vec4 c=vCol;
     this.setCursor(0);
   }
 
+  /**
+   * The street-name layer: a transparent picture the size of the imagery.
+   *
+   * Kept apart from the ground picture rather than painted into it, for two
+   * reasons. It can then be faded by how far away the ground is, which is the
+   * whole point — names that appear as you come down to a street and go when
+   * you pull back. And its strength becomes a uniform the card reads every
+   * frame, so a slider costs nothing; composited in, every change would mean
+   * redrawing the canvas and uploading a couple of megabytes again.
+   */
+  setLabels(source) {
+    const gl = this.gl;
+    if (!this.labTex) this.labTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.labTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    this.hasLabels = true;
+  }
+
   setTexture(source) {
     const gl = this.gl;
+    // Freed first: the street-map switch calls this every time it is pressed,
+    // and a new texture per press is a couple of megabytes of video memory
+    // left behind on each one.
+    if (this.texture) gl.deleteTexture(this.texture);
     this.texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -270,13 +318,16 @@ void main(){vec4 c=vCol;
     const lift = t.lift;              // the same clearance the ribbon is drawn at
     // the cursor dot rides just above the walker's head, so the position still
     // reads when the figure itself is only a few pixels tall
-    const overhead = this.figureSize() * 1.35 / Math.max(0.001, this.state.vex);
+    // Drawn with uVex pinned to 1 (see the frame loop), so these are already
+    // world heights: the ground's own scale is applied here instead.
+    const vex = this.state.vex;
+    const overhead = this.figureSize() * 1.35;
     const p = this._pos();
     gl.bindBuffer(gl.ARRAY_BUFFER, B.mk.pos);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      t.tx[0], t.ty[0], t.tz[0] + lift,
-      t.tx[t.n - 1], t.ty[t.n - 1], t.tz[t.n - 1] + lift,
-      p[0], p[1], p[2] + overhead,
+      t.tx[0], t.ty[0], (t.tz[0] + lift) * vex,
+      t.tx[t.n - 1], t.ty[t.n - 1], (t.tz[t.n - 1] + lift) * vex,
+      p[0], p[1], p[2] * vex + overhead,
     ]), gl.DYNAMIC_DRAW);
   }
 
@@ -424,13 +475,13 @@ void main(){vec4 c=vCol;
    * z by it — the ground gets stretched, the walker should not.
    */
   _buildFigure() {
-    const S = this.figureSize(), vex = Math.max(0.001, this.state.vex);
+    const S = this.figureSize(), vex = this.state.vex;   // only to place her on the ground
     const h = this.faceAz === null ? this._facing() : this.faceAz;
     const ch = Math.cos(h), sh = Math.sin(h);
     const ph = this.walkPhase;
     // the walker bobs on each step; a rider's saddle does not
     const bob = this.state.bike ? 0 : (Math.abs(Math.sin(ph)) - 0.5) * 0.025 * S;
-    const p = this._pos(), ox = p[0], oy = p[1], oz = p[2];
+    const p = this._pos(), ox = p[0], oy = p[1], oz = p[2] * vex;
 
     const P = this._figPos, C = this._figCol;
     let n = 0;
@@ -444,7 +495,7 @@ void main(){vec4 c=vCol;
     const push = (p, col, lam) => {
       P[n * 3] = ox + p[0] * ch - p[1] * sh;
       P[n * 3 + 1] = oy + p[0] * sh + p[1] * ch;
-      P[n * 3 + 2] = oz + (p[2] + bob) / vex;
+      P[n * 3 + 2] = oz + p[2] + bob;             // true metres; see _buildFigure
       const k = 0.56 + 0.58 * lam;
       C[n * 4] = col[0] * k; C[n * 4 + 1] = col[1] * k; C[n * 4 + 2] = col[2] * k; C[n * 4 + 3] = 1;
       n++;
@@ -720,6 +771,11 @@ void main(){vec4 c=vCol;
       gl.uniform3fv(pT.u.uSky, new Float32Array(this.sky));
       gl.uniform1f(pT.u.uFogNear, fogN); gl.uniform1f(pT.u.uFogFar, fogF);
       if (useTex) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texture); gl.uniform1i(pT.u.uTex, 0); }
+      const useLab = this.hasLabels && this.state.labels && useTex ? 1 : 0;
+      gl.uniform1f(pT.u.uHasLab, useLab);
+      gl.uniform1f(pT.u.uLabNear, this.lab.near);
+      gl.uniform1f(pT.u.uLabFar, this.lab.far);
+      if (useLab) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.labTex); gl.uniform1i(pT.u.uLab, 1); }
       this._attr(pT, 'aPos', B.ter.pos, 3); this._attr(pT, 'aSlope', B.ter.slope, 2); this._attr(pT, 'aUv', B.ter.uv, 2);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, B.ter.idx);
       gl.drawElements(gl.TRIANGLES, B.ter.n, B.ter.type, 0);
@@ -747,9 +803,14 @@ void main(){vec4 c=vCol;
       for (const s of strips) gl.drawArrays(gl.TRIANGLE_STRIP, s.first, s.count);
       gl.disable(gl.POLYGON_OFFSET_FILL);
 
+      // She is built in real metres on ground that has already been scaled, so
+      // the vertical scale must not be applied to her a second time. It goes
+      // back to the ground's own value for the curtain below.
       this._buildFigure();
+      gl.uniform1f(pC.u.uVex, 1);
       this._attr(pC, 'aPos', B.fig.pos, 3); this._attr(pC, 'aCol', B.fig.col, 4);
       gl.drawArrays(gl.TRIANGLES, 0, B.fig.n);
+      gl.uniform1f(pC.u.uVex, this.state.vex);
 
       if (this.state.curtain) {
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
@@ -761,6 +822,7 @@ void main(){vec4 c=vCol;
 
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.uniform1f(pC.u.uIsPoint, 1);
+      gl.uniform1f(pC.u.uVex, 1);                 // scaled in _updateMarkers, as above
       gl.uniform1f(pC.u.uPointSize, Math.max(9, Math.min(20, H * 0.016)));
       this._attr(pC, 'aPos', B.mk.pos, 3); this._attr(pC, 'aCol', B.mk.col, 4);
       gl.drawArrays(gl.POINTS, 0, 3);

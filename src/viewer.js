@@ -12,6 +12,7 @@ import { loadTrack, parseGPX, analyze, formatDate } from './gpx.js';
 import { Renderer } from './renderer.js';
 import { t, lang, applyI18n } from './i18n.js';
 import { correctElevation } from './elevation.js';
+import { osmInk } from './osmink.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, ramp, rampCss, clamp, setEsriToken,
 } from './terrain.js';
@@ -98,14 +99,19 @@ const TEMPLATE = `
 </div>
 
 <div class="rv-panel rv-ctrl">
-  <div class="rv-row"><span class="rv-lab">Vertical scale</span><span class="rv-val rv-vex-v">1.0×</span></div>
-  <input type="range" class="rv-vex" min="1" max="5" step="0.1" value="1">
-  <div class="rv-row rv-mt"><span class="rv-lab">Satellite imagery</span><div class="rv-sw on" data-key="texture"></div></div>
-  <div class="rv-row"><span class="rv-lab">Elevation curtain</span><div class="rv-sw on" data-key="curtain"></div></div>
+  <div class="rv-row"><span class="rv-lab">Satellite imagery</span><div class="rv-sw on" data-key="texture"></div></div>
+  <div class="rv-row"><span class="rv-lab">Elevation</span><div class="rv-sw on" data-key="vex"></div></div>
+  <div class="rv-row"><span class="rv-lab">Street map</span>
+    <div class="rv-seg rv-roads">
+      <button type="button" data-roads="off" class="on">Off</button>
+      <button type="button" data-roads="roads">Roads</button>
+      <button type="button" data-roads="full">Full</button>
+    </div>
+  </div>
   <div class="rv-row"><span class="rv-lab">Chase camera</span><div class="rv-sw" data-key="chase"></div></div>
   <div class="rv-row"><span class="rv-lab">Recorded pace</span><div class="rv-sw" data-key="pace"></div></div>
   <div class="rv-row"><span class="rv-lab">Figure</span>
-    <div class="rv-seg">
+    <div class="rv-seg rv-fig">
       <button type="button" data-mode="foot" class="on">On foot</button>
       <button type="button" data-mode="bike">Bike</button>
     </div>
@@ -194,6 +200,69 @@ export class RouteViewer {
   }
 
   msg(t) { const n = this.$('msg'); if (n) n.textContent = t; }
+
+  /**
+   * What is drawn on the ground besides the photograph.
+   *
+   *   off    the imagery with its place names, and street names that fade in
+   *          as you come down to them
+   *   roads  the street network alone, laid over the photograph
+   *   full   the whole OpenStreetMap sheet minus the washes it paints the
+   *          ground with, so the photograph still shows through
+   *
+   * The OSM grid is fetched once per mode and kept, because the keying and the
+   * patch filter in src/osmink.js take a couple of hundred milliseconds on a
+   * sheet this size and nobody should pay that twice for pressing a button
+   * they already pressed.
+   *
+   * Street names go off in the two map modes. Both of them already draw the
+   * roads, and in `full` the names are in the sheet as well; leaving the faded
+   * layer on would print every name twice, half a pixel apart.
+   */
+  async setStreetMap(mode) {
+    const r = this.renderer;
+    this.streetMap = mode;
+    if (!r || !this._ground) return;
+    r.state.labels = mode === 'off';
+    if (mode === 'off') { r.setTexture(this._ground); return; }
+
+    this._mix = this._mix || {};
+    if (!this._mix[mode]) {
+      this.msg(mode === 'roads' ? 'fetching the street network…' : 'fetching the street map…');
+      let osm;
+      try { osm = await loadTiles(this._satSpec, TILES.osm.url, null, 15000, 2); }
+      catch { osm = { ok: 0 }; }
+      if (!osm.ok) {
+        // Nothing to show and nothing to be done about it from here. Say so
+        // and put the switch back where it was, rather than leaving a mode
+        // selected that is not on the screen.
+        this.msg('the street map could not be fetched');
+        setTimeout(() => this.msg(''), 3000);
+        this.mount.querySelectorAll('.rv-roads button')
+          .forEach(b => b.classList.toggle('on', b.dataset.roads === 'off'));
+        this.streetMap = 'off';
+        r.state.labels = true;
+        return;
+      }
+      try {
+        osmInk(osm.cv, { mode: mode === 'roads' ? 'roads' : 'full' });
+      } catch {
+        // A tainted canvas, which means a tile arrived without the header that
+        // lets it be read back. The sheet is still a picture; it just has to
+        // go on whole.
+      }
+      const cv = document.createElement('canvas');
+      cv.width = this._ground.width; cv.height = this._ground.height;
+      const cx = cv.getContext('2d');
+      cx.drawImage(this._ground, 0, 0);
+      cx.globalAlpha = 0.7;                      // the photograph stays the subject
+      cx.drawImage(osm.cv, 0, 0, cv.width, cv.height);
+      cx.globalAlpha = 1;
+      this._mix[mode] = cv;
+      this.msg('');
+    }
+    r.setTexture(this._mix[mode]);
+  }
 
   /**
    * Hand the browser a frame.
@@ -390,6 +459,31 @@ export class RouteViewer {
     // part. Halving it quarters the arithmetic, which is the difference
     // between a stutter and a stall.
     const N = o.meshN ?? (o.showcase ? 176 : renderer.caps.uint ? 352 : 224);
+    /**
+     * The two kinds of writing on the ground, kept apart on purpose.
+     *
+     * Place names are painted into the ground picture and stay there, because
+     * knowing which barrio you are running through is true whether you are
+     * looking from a hundred metres or a thousand. Street names are their own
+     * layer, so the renderer can bring them up as the ground comes near and
+     * let them go as it recedes — see setLabels and the terrain shader.
+     *
+     * Both come from the same service as the imagery, at the same zoom, so
+     * they are the same grid, cached the same way, and failing to arrive
+     * leaves exactly the scene there would have been without them.
+     */
+    if (sat.ok && o.imagery === 'esri') {
+      this.msg('fetching place and street names…');
+      const [places, streets] = await Promise.all([
+        loadTiles(satSpec, TILES.esriPlaces.url, null, 12000, 2),
+        loadTiles(satSpec, TILES.esriStreets.url, null, 12000, 2),
+      ]);
+      if (places.ok) sat.ctx.drawImage(places.cv, 0, 0);
+      if (streets.ok) renderer.setLabels(streets.cv);
+    }
+    this._ground = sat.ok ? sat.cv : null;
+    this._satSpec = satSpec;
+
     const g = buildGeometry({ track, frame, sample, sat, N, uint: renderer.caps.uint });
     await this.breathe();
     renderer.setGeometry(g);
@@ -442,6 +536,13 @@ export class RouteViewer {
         // Flipping the clock must not teleport her: note where she is on the
         // route, then wind the new clock to that same place.
         const held = key === 'pace' ? this.distFrac(this.playT) : 0;
+        // Elevation is the ground's own scale or none of it, not a boolean, so
+        // the generic flip below would turn 1 into false and never back.
+        if (key === 'vex') {
+          r.state.vex = r.state.vex ? 0 : 1;
+          sw.classList.toggle('on', !!r.state.vex);
+          return;
+        }
         r.state[key] = !r.state[key];
         sw.classList.toggle('on', r.state[key]);
         if (key === 'pace') { this.playT = this.playFrac(held); this.cadence(); }
@@ -452,16 +553,20 @@ export class RouteViewer {
       });
     });
     // the figure swap: she is the same rider either way, on her feet or on a bike
-    this.mount.querySelectorAll('.rv-seg button').forEach(btn => {
+    this.mount.querySelectorAll('.rv-fig button').forEach(btn => {
       btn.addEventListener('click', () => {
         r.state.bike = btn.dataset.mode === 'bike';
-        this.mount.querySelectorAll('.rv-seg button')
+        this.mount.querySelectorAll('.rv-fig button')
           .forEach(other => other.classList.toggle('on', other === btn));
       });
     });
-    this.$('vex').addEventListener('input', e => {
-      r.state.vex = parseFloat(e.target.value);
-      this.$('vex-v').textContent = r.state.vex.toFixed(1) + '×';
+
+    this.mount.querySelectorAll('.rv-roads button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.mount.querySelectorAll('.rv-roads button')
+          .forEach(other => other.classList.toggle('on', other === btn));
+        this.setStreetMap(btn.dataset.roads);
+      });
     });
     this.$('play').addEventListener('click', () => {
       const starting = !this.play;

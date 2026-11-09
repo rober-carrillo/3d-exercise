@@ -114,6 +114,12 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)
 .rv-row:last-of-type{margin-bottom:0}
 .rv-mt{margin-top:13px}
 .rv-lab{font-size:11.5px;color:var(--ink-2)}
+/* A row's name stays on one line. With three buttons beside it rather than two,
+   "Street map" was breaking across two lines and dragging the row's height with
+   it; the segment gives up the width instead, since its words are short. */
+.rv-row > .rv-lab{white-space:nowrap}
+.rv-seg{min-width:0}
+.rv-seg button{min-width:0}
 .rv-val{font-size:11.5px;color:var(--ink);font-variant-numeric:tabular-nums}
 .rv-ctrl input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;
   background:linear-gradient(90deg,var(--accent),var(--fill-2));outline:none;margin:2px 0 0}
