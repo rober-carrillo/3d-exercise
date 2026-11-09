@@ -118,6 +118,14 @@
   .rec-btns button{flex:1;font:inherit;font-size:13px;font-weight:580;border-radius:10px;padding:11px;cursor:pointer;
     border:1px solid var(--line);background:var(--fill);color:var(--ink)}
   .rec-btns .pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  /* Told apart by colour before they are read.
+     This panel is used mid-stride, one-handed, often in sunlight, and the
+     three buttons were the same grey rectangle with different words on them.
+     Yellow stops the clock, green starts it again, red is done — the one
+     button whose colour changes is the one whose meaning changes. */
+  .rec-btns .hold{background:var(--pause);border-color:var(--pause);color:var(--on-pause)}
+  .rec-btns .go{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .rec-btns .stop{background:var(--juice);border-color:var(--juice);color:var(--on-juice)}
   .rec-btns button:disabled{opacity:.4;cursor:not-allowed}
   .rec-note{font-size:11.5px;line-height:1.6;color:var(--ink-3)}
   /* the one thing somebody recording without an account has to know */
@@ -236,8 +244,8 @@
       <button data-a="ride" data-i18n="act.ride">Bici</button><button data-a="field" data-i18n="act.field">Deporte de cancha</button>
     </div>
     <div class="rec-btns">
-      <button id="recpause" data-i18n="rec.pause">Pausa</button>
-      <button id="recstop" class="pri" data-i18n="rec.finish">Terminar</button>
+      <button id="recpause" class="hold">Pausa</button>
+      <button id="recstop" class="stop" data-i18n="rec.finish">Terminar</button>
       <button id="reccancel" data-i18n="rec.discard">Descartar</button>
     </div>
     <p class="rec-note" id="recnote" data-i18n="rec.note.screen">Mantén esta pantalla abierta — las posiciones
@@ -282,7 +290,7 @@ themeToggle(document.getElementById('themebtn'));
 langToggle(document.getElementById('langbtn'));
 startAmbient();
 // The static text repaints itself; everything built by script has to be told.
-addEventListener('salpicon:lang', () => { paintStageNote(); paintPreviews(); paintAccount(account.user()); });
+addEventListener('salpicon:lang', () => { paintStageNote(); paintPreviews(); paintAccount(account.user()); paint(); });
 
 /* ---------- the mark, walking ----------
  * The logo is the app's own stoplight figure, and standing still it is just a
@@ -618,6 +626,17 @@ function paint() {
   document.getElementById('recpts').textContent = s.points;
   const st = document.getElementById('recstate');
   st.textContent = rec.state === 'paused' ? t('rec.paused') : t('rec.recording');
+  // The middle button says what pressing it will do, and is coloured for it.
+  // Taken from the recorder's own state rather than flipped inside the click
+  // handler: the same button is also pressed from the notification, and a
+  // recording can start, resume or be recovered without passing through that
+  // handler at all — every one of those is a way to end up with a button
+  // offering the opposite of what it does.
+  const pb = document.getElementById('recpause');
+  const held = rec.state === 'paused';
+  pb.textContent = t(held ? 'rec.resume' : 'rec.pause');
+  pb.classList.toggle('go', held);
+  pb.classList.toggle('hold', !held);
   signal.state = rec.state === 'stopped' ? 'arrived'
     : rec.state === 'paused' ? 'paused'
     : rec.points.length === 0 ? 'gps' : 'recording';
@@ -869,8 +888,7 @@ document.getElementById('recacts').addEventListener('click', e => {
 });
 document.getElementById('recpause').addEventListener('click', () => {
   if (!rec) return;
-  if (rec.state === 'paused') { rec.resume(); document.getElementById('recpause').textContent = t('rec.pause'); }
-  else { rec.pause(); document.getElementById('recpause').textContent = t('rec.resume'); }
+  if (rec.state === 'paused') rec.resume(); else rec.pause();
   paint();
 });
 // Discard asks twice rather than opening a dialog: confirm() does nothing in

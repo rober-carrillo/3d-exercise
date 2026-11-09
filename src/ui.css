@@ -8,6 +8,12 @@
   --ink:#17201b; --ink-2:#4b5a52; --ink-3:#7d8a83;
   --accent:#138a4a; --accent-2:#0f6e3b; --on-accent:#ffffff;
   --route:#138a4a; --route-2:#0f6e3b; --warm:#a87400; --hot:#a87400; --juice:#e4233f;
+  /* the three recording buttons, which are read at a glance mid-stride and so
+     are told apart by colour before they are read at all: stop the clock,
+     start it again, done. `--juice` is reused for done rather than a second
+     red — on the mark it is already the finish point, which is what the
+     button is. */
+  --pause:#ffc400; --on-pause:#2b2100; --on-juice:#ffffff;
   --brown:#7a2e6b; --tag-brown:#7a2e6b; --tag-green:#0f6e3b;
   --bg-hi:#fef7f5; --scrim:rgba(252,241,238,.93); --line-2:rgba(23,32,27,.2);
   --load-1:#fef7f5; --load-2:#f7e4df; --sky:#f6e8e4;   /* --sky is read by the WebGL renderer for haze and clear colour */
@@ -31,6 +37,7 @@
   --ink:#f6ece9; --ink-2:#cdb9b5; --ink-3:#95817e;
   --accent:#3ccf7f; --accent-2:#2fb56c; --on-accent:#0b2a18;
   --route:#3ccf7f; --route-2:#2fb56c; --warm:#ffc23d; --hot:#ffc23d; --juice:#ff3b56;
+  --pause:#ffcf33; --on-pause:#241a00; --on-juice:#2a0a0f;
   --brown:#d79cc8; --tag-brown:#e3a6d6; --tag-green:#8fd9a9;
   --bg-hi:#211a1d; --scrim:rgba(23,18,20,.93); --line-2:rgba(252,236,232,.26);
   --load-1:#241c1f; --load-2:#120e0f; --sky:#1f191b;
