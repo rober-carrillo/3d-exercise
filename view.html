@@ -98,6 +98,12 @@ if (cloudId) {
     window.viewer = new RouteViewer({
       mount: document.body, gpxUrl: './routes/' + entry.file, name: entry.name,
       backHref: './library.html', date: entry.date, onShare: sharer({ ...entry, cloud: false, local: false }),
+      // The map that travels with the build, which the landing page has always
+      // used and this page never did — so opening the same route full-screen
+      // re-fetched every tile from a metered API and then asked a public
+      // service for street names it was already carrying. See scripts/build.mjs.
+      tiles: entry.tiles ?? null,
+      tileSlug: entry.slug,
     });
   }
 }

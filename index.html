@@ -412,7 +412,10 @@ if (!stageRoute) {
         try { prepared = await fetch(stageRoute.tiles.track).then(r => (r.ok ? r.json() : null)); } catch {}
       }
       stage.innerHTML = '';
-      new RouteViewer({
+      // Named, like the one on the route page. The scene writes a diagnostic
+      // record of itself (src/scenelog.js) and somebody reading it needs a way
+      // to ask this one what it saw.
+      window.viewer = new RouteViewer({
         mount: stage,
         ...(prepared ? { track: prepared } : { gpxUrl: './routes/' + stageRoute.file }),
         name: stageRoute.name,
