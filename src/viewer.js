@@ -407,7 +407,7 @@ export class RouteViewer {
     } catch {}
 
     await this.breathe();                 // the track is parsed; let the page move
-    const frame = sceneFrame(track);
+    const frame = this._frame = sceneFrame(track);
     // The imagery ceiling was 16 — about 2 m a pixel, so a soccer pitch drew
     // as a green smudge roughly 30 px across. Nothing changes for a route
     // that already fills the tile budget at a lower zoom.
@@ -653,10 +653,17 @@ export class RouteViewer {
       const { cx, cy, K } = frame;
       const project = (lon, lat) => [(mercX(lon) - cx) * K, (mercY(lat) - cy) * K];
       this._nameProject = project;          // kept for the tests and for a retypeset
+      // In a browser the endpoint is on this very origin, and a relative path
+      // is right whether that origin is the deployed site or a checkout on a
+      // laptop. Only the Android build needs telling: it serves its files from
+      // https://localhost, where /api/names is nothing at all.
+      const native = !!window.Capacitor?.isNativePlatform?.();
+      const origin = native ? (await import('./site.js')).siteOrigin() : '';
       const names = await loadNames(satSpec, frame, {
         // Baked beside the tiles for a route the build ships, so the landing
-        // page never waits on anybody's public endpoint.
+        // page never waits for anything at all.
         local: this.opts.tileSlug ? `./tiles/${this.opts.tileSlug}/names.json` : null,
+        origin,
       });
       if (!names || (!names.streets?.length && !names.places?.length)) return this.fallBackToRasterNames();
       const set = buildNameSet(names, project, {

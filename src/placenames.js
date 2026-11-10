@@ -32,22 +32,29 @@
  */
 
 const KEY = 'salpicon.names.v1';
-/** Four scenes' worth. Each is 50–250 kB of JSON; localStorage holds ~5 MB. */
+/** Four areas' worth. Each is 50–250 kB of JSON; localStorage holds about 5 MB. */
 const MAX_KEPT = 4;
 /** Names move slowly. A month is a long time to be wrong about a street. */
 const TTL_MS = 30 * 24 * 3600 * 1000;
 
 /**
- * The endpoints, tried in order.
+ * The grid the server works in, and it has to match api/names.js exactly.
  *
- * Mirrors rather than one address because the main instance refuses outright
- * when it is busy, and the refusal is instant — so a second try costs almost
- * nothing and quite often works.
+ * One cell per request, one cache entry per cell, shared by every route and
+ * every person who ever looks at that part of the world. Asking for a scene's
+ * own bounding box instead would be a cache entry nobody else could ever use.
  */
-const ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
+const Z = 13;
+/** A long ride can cross a lot of ground; past this the names are not worth the wait. */
+const MAX_CELLS = 16;
+/** How many to have in the air at once. Each miss is a query on a shared service. */
+const AT_ONCE = 3;
+
+const lon2tx = (lon, z) => (lon + 180) / 360 * 2 ** z;
+const lat2ty = (lat, z) => {
+  const r = lat * Math.PI / 180;
+  return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z;
+};
 
 /**
  * Which roads are worth a name, in the order they deserve one.
@@ -72,16 +79,12 @@ const PLACE_RANK = {
  * One query for both kinds of name.
  *
  * Deliberately broad — every named highway, every named place — and filtered
- * here rather than in the query. Overpass answers a plain tag test far faster
- * than a regexp over values, and the filtering is free once the data has
- * arrived; asking for less and waiting longer is the wrong trade when the
- * waiting is the problem.
+ * afterwards. Overpass answers a plain tag test far faster than a regexp over
+ * values, and the filtering is free once the data has arrived.
  */
 const query = b => `[out:json][timeout:30];
 (way["highway"]["name"](${b});node["place"]["name"](${b}););
 out geom;`;
-
-const cacheKey = spec => `${KEY}:${spec.z}:${spec.x0},${spec.y0}-${spec.x1},${spec.y1}`;
 
 function readCache(key) {
   try {
@@ -120,7 +123,13 @@ const geom = g => {
   return out;
 };
 
-/** Overpass's answer, reduced to what gets drawn. */
+/**
+ * Overpass's answer, reduced to what gets drawn.
+ *
+ * Shared with api/names.js, which is the only thing that calls Overpass now —
+ * and with scripts/build.mjs, which bakes an answer in for the route the site
+ * ships. Three callers, one definition of what a name is.
+ */
 function condense(elements) {
   const streets = [], places = [];
   for (const e of elements || []) {
@@ -139,18 +148,57 @@ function condense(elements) {
   return { v: 1, streets, places };
 }
 
+/** The cells of the fixed grid that cover a scene. */
+function cellsFor(frame) {
+  const x0 = Math.floor(lon2tx(frame.minLon, Z)), x1 = Math.floor(lon2tx(frame.maxLon, Z));
+  const y0 = Math.floor(lat2ty(frame.maxLat, Z)), y1 = Math.floor(lat2ty(frame.minLat, Z));
+  const out = [];
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) out.push([x, y]);
+  // Nearest the middle first, so a route too long to cover entirely is at
+  // least named where somebody is looking when it opens.
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  out.sort((a, b) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(b[0] - cx, b[1] - cy));
+  return out.slice(0, MAX_CELLS);
+}
+
+/** Run jobs a few at a time, keeping whatever succeeds. */
+async function pool(items, n, fn) {
+  const out = [];
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    for (;;) {
+      const k = i++;
+      if (k >= items.length) return;
+      try { out.push(await fn(items[k])); } catch { /* this cell has no names today */ }
+    }
+  }));
+  return out;
+}
+
 /**
  * Names for the ground a scene covers.
  *
- * @param spec   the tile grid the scene was built from; it is the cache key
- * @param frame  the scene's own bounds, which is what gets asked for
+ * Nothing here talks to Overpass. The browser asks our own endpoint, one
+ * request per cell of a fixed grid, and that endpoint is the only thing in
+ * the system with a right to a public service's time — see api/names.js for
+ * why that matters and what it costs when it is done the other way.
+ *
+ * Partial answers are kept. Nine cells where two refused is a scene with most
+ * of its names on it, which is worth a great deal more than none.
+ *
+ * @param spec   the tile grid the scene was built from; only a cache key here
+ * @param frame  the scene's own bounds, which decides the cells
  * @param opts.local  a URL to try first — the build bakes names in beside the
- *                    tiles for routes it ships, and a baked answer means the
- *                    landing page never waits on anybody's public endpoint
+ *                    tiles for routes it ships, so the landing page never
+ *                    waits for anything
+ * @param opts.origin where the endpoint lives, for a build whose own origin is
+ *                    not on the internet (the Android app serves from
+ *                    https://localhost)
  * @returns {Promise<{streets, places}|null>}  null if nothing could be had
  */
-export async function loadNames(spec, frame, { local = null, timeout = 35000 } = {}) {
-  const key = cacheKey(spec);
+async function loadNames(spec, frame, { local = null, origin = '', timeout = 70000 } = {}) {
+  const cells = cellsFor(frame);
+  const key = `${KEY}:${Z}:` + cells.map(c => c.join(',')).join(';');
   const cached = readCache(key);
   if (cached) return cached;
 
@@ -161,30 +209,42 @@ export async function loadNames(spec, frame, { local = null, timeout = 35000 } =
         const data = await r.json();
         if (data?.streets) { writeCache(key, data); return data; }
       }
-    } catch { /* not baked for this route; ask the network */ }
+    } catch { /* not baked for this route; ask the endpoint */ }
   }
 
-  const b = [frame.minLat, frame.minLon, frame.maxLat, frame.maxLon]
-    .map(v => v.toFixed(5)).join(',');
-  const body = 'data=' + encodeURIComponent(query(b));
-  for (const url of ENDPOINTS) {
+  const base = String(origin || '').replace(/\/+$/, '');
+  const got = await pool(cells, AT_ONCE, async ([x, y]) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeout);
     try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), timeout);
-      const res = await fetch(url, {
-        method: 'POST', body, signal: ctl.signal,
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      }).finally(() => clearTimeout(timer));
-      if (!res.ok) continue;                   // busy, almost always: try the next
-      const json = await res.json();
-      const data = condense(json.elements);
-      if (!data.streets.length && !data.places.length) return data;
-      writeCache(key, data);
-      return data;
-    } catch { /* timed out, aborted, offline: try the next, then give up */ }
+      const r = await fetch(`${base}/api/names?z=${Z}&x=${x}&y=${y}`, { signal: ctl.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } finally { clearTimeout(timer); }
+  });
+  if (!got.length) return null;
+
+  // A way that crosses a cell boundary comes back from both of them.
+  const streets = [], places = [];
+  const seenWay = new Set(), seenPlace = new Set();
+  for (const part of got) {
+    for (const s of part.streets || []) {
+      const k = `${s.n}@${s.g[0]},${s.g[1]}`;
+      if (seenWay.has(k)) continue;
+      seenWay.add(k); streets.push(s);
+    }
+    for (const p of part.places || []) {
+      const k = `${p.n}@${p.lon},${p.lat}`;
+      if (seenPlace.has(k)) continue;
+      seenPlace.add(k); places.push(p);
+    }
   }
-  return null;
+  const data = { v: 1, streets, places, cells: got.length, asked: cells.length };
+  if (streets.length || places.length) writeCache(key, data);
+  return data;
 }
+
+export { loadNames, cellsFor, Z as NAME_CELL_Z };
 
 /** For the build, which writes the answer out beside the tiles. */
 export { condense, query, PLACE_RANK, ROAD_RANK };

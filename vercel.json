@@ -29,5 +29,10 @@
       "source": "/r/:token",
       "destination": "/r"
     }
-  ]
+  ],
+  "functions": {
+    "api/names.js": {
+      "maxDuration": 60
+    }
+  }
 }
