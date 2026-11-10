@@ -180,6 +180,16 @@ export function placeStreets(streets, project, {
   // one long avenue into a road that is named wherever you happen to be
   // looking at it.
   const every = spacing ?? ext * 0.070;
+  // And only where there is ground to put a name on. The names arrive by the
+  // z13 cell — five kilometres on a side, several cells to a scene — so a good
+  // deal of what comes back belongs to streets beyond the edge of the block
+  // that was built: 60 of 744 anchors in one Pereira scene. Out there a name
+  // has nothing under it and nothing in front of it, so it reads as a word
+  // hanging in the sky past the cliff, and it reads at any distance, because
+  // there is no terrain between it and the camera. Places were filtered this
+  // way from the start; ways were not. The inset keeps a word from overhanging
+  // the edge it was placed just inside of.
+  const edge = ext * (0.5 - 0.015);
   const byName = new Map();
 
   for (const st of streets) {
@@ -199,6 +209,7 @@ export function placeStreets(streets, project, {
     for (let k = 0; k < count; k++) {
       const d = total * (k + 0.5) / count;
       const m = at(pts, cum, n, d);
+      if (Math.abs(m.x) > edge || Math.abs(m.y) > edge) continue;
       list.push({ text: st.n, rank: st.r, len: total, x: m.x, y: m.y, dir: m.dir });
     }
     byName.set(st.n, list);

@@ -123,6 +123,9 @@ export class Renderer {
     // the ground itself, so ours stand down for it; region names float in the
     // air, which no sheet can do, and stay whatever is underneath.
     this.nameKinds = 'all';
+    // Device pixels per CSS pixel, kept from the last resize. The label layout
+    // needs it: see _buildNames.
+    this._dpr = 1;
     this.walking = false;          // true while the route is replaying
     this.walkPhase = 0;
     this.walkRate = 1;             // follows the playback speed multiplier
@@ -366,6 +369,14 @@ void main(){vec4 c=vCol;
     const g = this.g, m = this._MVP, V = this._V, vex = this.state.vex;
     const items = this.names, fade = this.fade;
     const dt = this._nDt || 0.016;
+    // Every pixel figure below — the size a name has to reach before it is
+    // worth drawing, the gap two of them must leave each other — is about what
+    // an eye can read, so it is a CSS pixel. W and H are device pixels, and on
+    // a 2x screen the two differ by a factor of two. Taking one for the other
+    // let a name through at half the size it was meant to need: on the same
+    // scene a retina laptop drew 326 street names where a 1x screen drew 45,
+    // most of them three pixels of blur, and it did it from twice as far away.
+    const dpr = this._dpr || 1;
 
     // Metres per screen pixel at a given distance, for a 45° vertical field.
     const TAN = Math.tan(45 * D2R / 2);
@@ -398,7 +409,7 @@ void main(){vec4 c=vCol;
       // a billboard painted on the tarmac.
       let hPx, hM, size = 1;
       if (place) {
-        hPx = 15 + it.rank * 1.5;                     // a city reads larger than a barrio
+        hPx = (15 + it.rank * 1.5) * dpr;             // a city reads larger than a barrio
         hM = hPx * wpp;
       } else {
         // How big the name is drawn on the ground, by what kind of road it is.
@@ -408,15 +419,15 @@ void main(){vec4 c=vCol;
         // longer. The spread is about a third between the two extremes.
         const streetM = g.ext * (0.0032 + it.rank * 0.00045);
         const raw = streetM / wpp;
-        if (raw < 6.5) continue;                      // too far to read: not drawn at all
+        if (raw < 6.5 * dpr) continue;                // too far to read: not drawn at all
         // Which is also how street names arrive and leave: by becoming legible
         // rather than by crossing a distance. The same rule then holds on a
         // phone and on a desktop, where the same distance is a different
         // number of pixels.
-        size = smooth(6.5, 11, raw);
+        size = smooth(6.5 * dpr, 11 * dpr, raw);
         // The ceiling rises with the road's standing too, so a main road's
         // name keeps growing a little after a side street's has stopped.
-        hM = Math.max(10, Math.min(30 + it.rank * 1.2, raw)) * wpp;
+        hM = Math.max(10 * dpr, Math.min((30 + it.rank * 1.2) * dpr, raw)) * wpp;
         hPx = hM / wpp;
       }
       const wM = hM * it.aspect;
@@ -494,7 +505,7 @@ void main(){vec4 c=vCol;
         }
         if (!isFinite(lo)) continue;
         halfW = (hi - lo) / 2; halfH = (hi2 - lo2) / 2;
-        if (halfH < 3) continue;                      // edge-on to the camera: unreadable
+        if (halfH < 3 * dpr) continue;                // edge-on to the camera: unreadable
       }
 
       // Region names have no distance limit at all: knowing which barrio this
@@ -522,8 +533,8 @@ void main(){vec4 c=vCol;
         // comfortable printed-map margin and it was what actually set the
         // density of the whole layer — candidates were plentiful and this
         // threw most of them away.
-        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 8
-         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 8) { clash = true; break; }
+        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 8 * dpr
+         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 8 * dpr) { clash = true; break; }
       }
       if (clash) continue;
       kept.push(c);
@@ -1032,6 +1043,7 @@ void main(){vec4 c=vCol;
 
   _resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this._dpr = dpr;
     const w = Math.round(this.canvas.clientWidth * dpr), h = Math.round(this.canvas.clientHeight * dpr);
     if (w !== this.canvas.width || h !== this.canvas.height) { this.canvas.width = w; this.canvas.height = h; }
   }
