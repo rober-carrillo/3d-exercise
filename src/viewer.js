@@ -660,20 +660,18 @@ export class RouteViewer {
       const native = !!window.Capacitor?.isNativePlatform?.();
       const origin = native ? (await import('./site.js')).siteOrigin() : '';
       const names = await loadNames(satSpec, frame, {
+        // Cells that were refused are tried again a minute later, and if any
+        // of them come good the ground is re-lettered with the fuller set.
+        // Names are additive, so this is only ever an improvement arriving
+        // late rather than a change anybody has to notice.
+        onMore: more => { try { this.applyNames(more, project, g); } catch {} },
         // Baked beside the tiles for a route the build ships, so the landing
         // page never waits for anything at all.
         local: this.opts.tileSlug ? `./tiles/${this.opts.tileSlug}/names.json` : null,
         origin,
       });
       if (!names || (!names.streets?.length && !names.places?.length)) return this.fallBackToRasterNames();
-      const set = buildNameSet(names, project, {
-        ext: g.ext,
-        groundZ: g.groundZ,
-        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
-      });
-      if (!set.items.length) return this.fallBackToRasterNames();
-      r.setNames(set);
-      this._names = { set, count: set.items.length };
+      if (!this.applyNames(names, project, g)) return this.fallBackToRasterNames();
       // The ink and the halo are baked into the sheet, so a change of theme
       // means setting the names again. Cheap — it is one canvas and a few
       // hundred strings — and the alternative is dark words with a white halo
@@ -683,9 +681,7 @@ export class RouteViewer {
           const dark = document.documentElement.dataset.theme === 'dark';
           if (dark === this._namesDark) return;
           this._namesDark = dark;
-          r.setNames(buildNameSet(names, project, {
-            ext: g.ext, groundZ: g.groundZ, theme: dark ? 'dark' : 'light',
-          }));
+          this.applyNames(this._names?.source || names, project, g);
         };
         this._namesDark = document.documentElement.dataset.theme === 'dark';
         window.addEventListener('salpicon:theme', this._nameTheme);
@@ -701,6 +697,35 @@ export class RouteViewer {
     } catch {
       this.fallBackToRasterNames();
     }
+  }
+
+  /**
+   * Letter the ground from a set of names.
+   *
+   * Separated out because it happens more than once: when the first cells
+   * answer, again if a refused cell comes good a minute later, and again on
+   * every change of theme, since the ink and the halo are baked into the
+   * sheet. Each call replaces the whole layer, which is cheap — typesetting
+   * seventeen hundred ways measured 2.9 ms — and far simpler than working out
+   * what changed.
+   */
+  applyNames(names, project, g) {
+    const r = this.renderer;
+    if (!r || !names) return false;
+    const set = buildNameSet(names, project, {
+      ext: g.ext,
+      groundZ: g.groundZ,
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+      maxTex: r.caps.maxTex,
+    });
+    if (!set.items.length) return false;
+    // A name with no room on the sheet is never drawn and nothing says so, so
+    // say so here. It has happened once already, the day the street layer got
+    // denser and a Pereira scene wanted more words than 2048 pixels hold.
+    if (set.dropped) console.warn(`Salpicón! ${set.dropped} names would not fit the sheet`);
+    r.setNames(set);
+    this._names = { set, count: set.items.length, source: names };
+    return true;
   }
 
   /** The pictures of names, used when the words could not be had. */

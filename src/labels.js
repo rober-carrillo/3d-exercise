@@ -33,6 +33,19 @@
 const FONT_PX = 44;
 const PAD = 6;
 const ATLAS_W = 2048;
+/**
+ * How tall the sheet may grow, and why it is not a constant any more.
+ *
+ * It was 2048, which holds about 220 names — and the day the street layer got
+ * denser a Pereira scene wanted 221 and quietly lost 53 of them. Silently,
+ * because a name with no room on the sheet simply never gets drawn and
+ * nothing anywhere says so.
+ *
+ * The real limit is the GPU's, so the caller passes it: every WebGL device
+ * guarantees at least 2048, most phones manage 4096, and a desktop usually
+ * 8192 or more. The sheet is still capped well below what is available,
+ * because this is a few hundred words, not a photograph.
+ */
 const MAX_ATLAS_H = 2048;
 
 const FACE = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif';
@@ -60,7 +73,7 @@ const INK = {
  *
  * @returns {{canvas, rects: Map<string, object>, dropped: string[]}}
  */
-export function makeAtlas(strings, { theme = 'light', fontPx = FONT_PX } = {}) {
+export function makeAtlas(strings, { theme = 'light', fontPx = FONT_PX, maxH = MAX_ATLAS_H } = {}) {
   const cv = document.createElement('canvas');
   cv.width = ATLAS_W; cv.height = 64;
   const cx = cv.getContext('2d');
@@ -76,12 +89,13 @@ export function makeAtlas(strings, { theme = 'light', fontPx = FONT_PX } = {}) {
 
   // Lay out first, then size the canvas once: resizing a canvas clears it, so
   // growing it as we go would mean drawing everything twice.
+  const ceiling = Math.max(256, Math.min(maxH, 8192));
   let x = 0, y = 0, rows = 1;
   const spots = [];
   const dropped = [];
   for (const m of measured) {
     if (x + m.w > ATLAS_W) { x = 0; y += rowH; rows++; }
-    if (y + rowH > MAX_ATLAS_H) { dropped.push(m.s); continue; }
+    if (y + rowH > ceiling) { dropped.push(m.s); continue; }
     spots.push({ ...m, x, y });
     x += m.w;
   }
@@ -91,7 +105,7 @@ export function makeAtlas(strings, { theme = 'light', fontPx = FONT_PX } = {}) {
   // kilobytes of transparent sheet.
   const pot = v => { let p = 64; while (p < v) p *= 2; return p; };
   cv.width = ATLAS_W;
-  cv.height = Math.max(64, Math.min(MAX_ATLAS_H, pot(rows * rowH)));
+  cv.height = Math.max(64, Math.min(ceiling, pot(rows * rowH)));
 
   const ink = INK[theme] || INK.light;
   cx.font = font;
@@ -150,9 +164,22 @@ function at(pts, cum, n, d) {
  *
  * @param project  (lon, lat) -> [x, y] in scene metres
  */
-export function placeStreets(streets, project, { ext, maxPerName = 3, minLen = null, minSep = null } = {}) {
-  const floor = minLen ?? ext * 0.03;          // shorter than this and the name will not fit on it
-  const apart = minSep ?? ext * 0.12;          // two labels for one name have to be about different places
+export function placeStreets(streets, project, {
+  ext, maxPerName = 20, minLen = null, minSep = null, spacing = null,
+} = {}) {
+  // A street has to be long enough to carry its own name, and that is all
+  // this floor is for. It used to be three per cent of the scene — 126 m on a
+  // four-kilometre view — which quietly threw away most of the street grid of
+  // a town, where blocks are eighty metres long.
+  const floor = minLen ?? ext * 0.008;
+  // How far apart two labels for the same name may be. A real map repeats a
+  // street's name along its length rather than naming it once and hoping; the
+  // old 12% meant a road could be labelled once in half a kilometre.
+  const apart = minSep ?? ext * 0.018;
+  // And how often to offer a label along a single way, which is what turns
+  // one long avenue into a road that is named wherever you happen to be
+  // looking at it.
+  const every = spacing ?? ext * 0.028;
   const byName = new Map();
 
   for (const st of streets) {
@@ -164,15 +191,24 @@ export function placeStreets(streets, project, { ext, maxPerName = 3, minLen = n
     }
     const { n, cum, total } = walk(pts);
     if (n < 2 || total < floor) continue;
-    const m = at(pts, cum, n, total / 2);
     const list = byName.get(st.n) || [];
-    list.push({ text: st.n, rank: st.r, len: total, x: m.x, y: m.y, dir: m.dir });
+    // Anchors along the way rather than one at its middle. A way shorter than
+    // the spacing still gets exactly one, in the middle, which is the old
+    // behaviour and the right answer for a side street.
+    const count = Math.max(1, Math.round(total / every));
+    for (let k = 0; k < count; k++) {
+      const d = total * (k + 0.5) / count;
+      const m = at(pts, cum, n, d);
+      list.push({ text: st.n, rank: st.r, len: total, x: m.x, y: m.y, dir: m.dir });
+    }
     byName.set(st.n, list);
   }
 
   const out = [];
   for (const list of byName.values()) {
-    list.sort((a, b) => b.len - a.len);        // the longest piece is the best place for the name
+    // Longest first: when two anchors for one name are too close together,
+    // the one on the more substantial piece of road is the one to keep.
+    list.sort((a, b) => b.len - a.len);
     const taken = [];
     for (const c of list) {
       if (taken.length >= maxPerName) break;
@@ -218,14 +254,14 @@ export function placePlaces(places, project, { ext, minRank = 3 } = {}) {
  * @param project (lon, lat) -> [x, y] scene metres
  * @param groundZ (x, y) -> height of the drawn surface there
  */
-export function buildNameSet(names, project, { ext, groundZ, theme = 'light' } = {}) {
+export function buildNameSet(names, project, { ext, groundZ, theme = 'light', maxTex = 2048 } = {}) {
   const streets = placeStreets(names.streets || [], project, { ext });
   const places = placePlaces(names.places || [], project, { ext });
   // The atlas is built from the names that survived placement, not from
   // everything that arrived: a sheet of words nothing points at is pure waste,
   // and the sheet has a ceiling.
   const order = [...places, ...streets].sort((a, b) => b.rank - a.rank);
-  const atlas = makeAtlas([...new Set(order.map(o => o.text))], { theme });
+  const atlas = makeAtlas([...new Set(order.map(o => o.text))], { theme, maxH: Math.min(maxTex, 4096) });
 
   const items = [];
   for (const p of places) {

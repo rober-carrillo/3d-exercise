@@ -93,7 +93,11 @@ export class Renderer {
     window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', reread);
     window.addEventListener('salpicon:theme', reread);
     const gl2 = !!(window.WebGL2RenderingContext && gl instanceof WebGL2RenderingContext);
-    this.caps = { gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint') };
+    this.caps = {
+      gl2, uint: gl2 || !!gl.getExtension('OES_element_index_uint'),
+      // What the name sheet may grow to. Every WebGL device guarantees 2048.
+      maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048,
+    };
 
     // Fog is off. It was there to melt the far edge of the mesh into the sky,
     // and what it mostly did was drain the colour out of everything past the
@@ -375,7 +379,6 @@ void main(){vec4 c=vCol;
 
     const clearance = (g.track.lift || 2) * 2.2;      // above the ribbon, always
     const hover = Math.max(g.hSpan * 0.35, g.ext * 0.04);
-    const streetM = g.ext * 0.0045;
 
     const cand = [];
     for (let i = 0; i < items.length; i++) {
@@ -398,6 +401,12 @@ void main(){vec4 c=vCol;
         hPx = 15 + it.rank * 1.5;                     // a city reads larger than a barrio
         hM = hPx * wpp;
       } else {
+        // How big the name is drawn on the ground, by what kind of road it is.
+        // An avenue's name is set larger than a cul-de-sac's for the same
+        // reason it is on a paper map: it is the one you are navigating by,
+        // and it should be readable from further off and stay readable for
+        // longer. The spread is about a third between the two extremes.
+        const streetM = g.ext * (0.0032 + it.rank * 0.00045);
         const raw = streetM / wpp;
         if (raw < 6.5) continue;                      // too far to read: not drawn at all
         // Which is also how street names arrive and leave: by becoming legible
@@ -405,7 +414,9 @@ void main(){vec4 c=vCol;
         // phone and on a desktop, where the same distance is a different
         // number of pixels.
         size = smooth(6.5, 11, raw);
-        hM = Math.max(10, Math.min(34, raw)) * wpp;
+        // The ceiling rises with the road's standing too, so a main road's
+        // name keeps growing a little after a side street's has stopped.
+        hM = Math.max(10, Math.min(30 + it.rank * 1.2, raw)) * wpp;
         hPx = hM / wpp;
       }
       const wM = hM * it.aspect;
@@ -507,8 +518,12 @@ void main(){vec4 c=vCol;
     for (const c of cand) {
       let clash = false;
       for (const k of kept) {
-        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 3
-         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 3) { clash = true; break; }
+        // The gap two labels must leave each other. Three pixels was a
+        // comfortable printed-map margin and it was what actually set the
+        // density of the whole layer — candidates were plentiful and this
+        // threw most of them away.
+        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 1
+         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 1) { clash = true; break; }
       }
       if (clash) continue;
       kept.push(c);

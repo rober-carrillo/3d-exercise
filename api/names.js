@@ -52,9 +52,26 @@ const Z = 13;
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
 ];
-/** Per endpoint. Two of these still leaves room inside a 60 s function. */
-const TIMEOUT_MS = 26000;
+/**
+ * The whole budget, against the function's own ceiling of sixty seconds.
+ *
+ * Divided by a deadline rather than handed out in fixed slices, because the
+ * two ways an endpoint fails cost wildly different amounts. "All query
+ * workers are busy" comes back in half a second; a queue that never reaches
+ * us costs the entire timeout. Fixed slices spend the budget as though every
+ * failure were the expensive kind: measured on the first live cells, two
+ * slices of 26 s meant the first endpoint timed out, the second got 26 s and
+ * timed out too, and a cell that one endpoint could have served in 25 s came
+ * back as a refusal.
+ *
+ * With a deadline, an instant refusal costs nothing and hands almost the
+ * whole budget to the next one.
+ */
+const BUDGET_MS = 54000;
+/** No single attempt gets everything; something has to be left for the next. */
+const ATTEMPT_CAP_MS = 40000;
 /** Shorter than this and no label will fit along it anyway. */
 const MIN_WAY_M = 45;
 
@@ -80,10 +97,13 @@ function lengthOf(g) {
 async function askOverpass(bbox) {
   const b = [bbox.south, bbox.west, bbox.north, bbox.east].map(v => v.toFixed(5)).join(',');
   const body = 'data=' + encodeURIComponent(query(b));
+  const until = Date.now() + BUDGET_MS;
   let last = null;
   for (const url of ENDPOINTS) {
+    const left = until - Date.now();
+    if (left < 4000) break;                 // not enough left to be worth asking
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => ctl.abort(), Math.min(left, ATTEMPT_CAP_MS));
     try {
       const res = await fetch(url, {
         method: 'POST', body, signal: ctl.signal,

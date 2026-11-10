@@ -196,7 +196,7 @@ async function pool(items, n, fn) {
  *                    https://localhost)
  * @returns {Promise<{streets, places}|null>}  null if nothing could be had
  */
-async function loadNames(spec, frame, { local = null, origin = '', timeout = 70000 } = {}) {
+async function loadNames(spec, frame, { local = null, origin = '', timeout = 70000, onMore = null, retryMs = 45000 } = {}) {
   const cells = cellsFor(frame);
   const key = `${KEY}:${Z}:` + cells.map(c => c.join(',')).join(';');
   const cached = readCache(key);
@@ -213,21 +213,54 @@ async function loadNames(spec, frame, { local = null, origin = '', timeout = 700
   }
 
   const base = String(origin || '').replace(/\/+$/, '');
-  const got = await pool(cells, AT_ONCE, async ([x, y]) => {
+  const one = async ([x, y]) => {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeout);
     try {
       const r = await fetch(`${base}/api/names?z=${Z}&x=${x}&y=${y}`, { signal: ctl.signal });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return await r.json();
+      return { cell: [x, y], body: await r.json() };
     } finally { clearTimeout(timer); }
-  });
-  if (!got.length) return null;
+  };
 
-  // A way that crosses a cell boundary comes back from both of them.
+  const done = new Map();
+  const collect = async list => {
+    for (const r of await pool(list, AT_ONCE, one)) done.set(r.cell.join(','), r.body);
+    return list.filter(c => !done.has(c.join(',')));
+  };
+
+  let missing = await collect(cells);
+  if (!done.size) return null;
+
+  // One more go at whatever was refused, and not immediately: a 503 from the
+  // endpoint means the service behind it was busy a moment ago, and the one
+  // thing guaranteed not to help is asking again at once. The scene already
+  // has the names from the cells that answered, so this costs nobody
+  // anything — and a cell that comes good is then cached for everyone, which
+  // is why it is worth a second attempt at all rather than a shrug.
+  if (missing.length && typeof onMore === 'function') {
+    setTimeout(async () => {
+      const before = done.size;
+      await collect(missing);
+      if (done.size > before) onMore(merge(done, cells.length, key));
+    }, retryMs);
+  }
+
+  return merge(done, cells.length, key);
+}
+
+/**
+ * The cells that answered, as one set of names.
+ *
+ * A way that crosses a cell boundary comes back from both of them, so it is
+ * matched on its name and where it starts. Keyed on the start rather than on
+ * the whole geometry because the two copies are the same way, and comparing
+ * a few hundred points to establish that would cost more than it saves.
+ */
+function merge(done, asked, key) {
   const streets = [], places = [];
   const seenWay = new Set(), seenPlace = new Set();
-  for (const part of got) {
+  for (const part of done.values()) {
     for (const s of part.streets || []) {
       const k = `${s.n}@${s.g[0]},${s.g[1]}`;
       if (seenWay.has(k)) continue;
@@ -239,8 +272,11 @@ async function loadNames(spec, frame, { local = null, origin = '', timeout = 700
       seenPlace.add(k); places.push(p);
     }
   }
-  const data = { v: 1, streets, places, cells: got.length, asked: cells.length };
-  if (streets.length || places.length) writeCache(key, data);
+  const data = { v: 1, streets, places, cells: done.size, asked };
+  // Only keep a complete answer. A partial one cached for a month would
+  // freeze a scene at whatever the network managed on the day somebody first
+  // opened it, and the missing cells would never be asked for again.
+  if ((streets.length || places.length) && done.size === asked) writeCache(key, data);
   return data;
 }
 
