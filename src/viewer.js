@@ -86,6 +86,17 @@ const bisect = (arr, v) => {
   return lo;
 };
 
+/**
+ * When the viewer is in its phone arrangement: the controls become a sheet
+ * behind ☰, and the status bar and legend are dropped to keep the glass clear.
+ *
+ * The same test is written in src/ui.css, and the two have to agree — the CSS
+ * decides what is on screen, this decides where the log button is put, and if
+ * they disagree the button is put somewhere that is not being shown. Either
+ * dimension being short counts, because a phone on its side is wide.
+ */
+const PHONE_LAYOUT = '(max-width:820px), (max-height:560px)';
+
 const TEMPLATE = `
 <canvas class="rv-gl"></canvas>
 
@@ -131,6 +142,9 @@ const TEMPLATE = `
   <div class="rv-sharerow" hidden>
     <button type="button" class="rv-share" data-i18n="share.viewer">Copiar enlace a esta ruta</button>
   </div>
+  <!-- On a phone the log button lives here instead of in the status bar: see
+       _placeLog. Empty until there is something to offer. -->
+  <div class="rv-logrow" hidden></div>
 </div>
 
 <div class="rv-fabs">
@@ -602,8 +616,15 @@ export class RouteViewer {
     btn.classList.add('warn');
     const dot = this.$('dot');
     if (dot) dot.className = 'rv-dot warn';
+    this._placeLog();
     if (btn.dataset.wired) return;
     btn.dataset.wired = '1';
+    // A phone gets turned on its side, and that crosses the test both ways,
+    // so where the button belongs is not decided once.
+    try {
+      const mq = window.matchMedia(PHONE_LAYOUT);
+      (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(() => this._placeLog());
+    } catch { /* an old browser keeps whichever home it got */ }
     btn.addEventListener('click', async () => {
       const f = sceneFileFor(this._log);
       if (!f) return;
@@ -624,6 +645,32 @@ export class RouteViewer {
       btn.disabled = false;
       setTimeout(() => { btn.textContent = was; }, 4500);
     });
+  }
+
+  /**
+   * Give the log button the home that fits the screen it is on.
+   *
+   * On a desktop it sits beside the status dot, which is where the scene's
+   * verdict on itself already is. A phone has no status bar — the whole line
+   * is hidden under 820px, to keep the glass clear — so there the button went
+   * up and was never seen: the one person who most needed it, a tester on an
+   * Android phone looking at the spikes, had nothing to press. It goes inside
+   * the ☰ sheet instead, where the rest of the controls already are, and the
+   * ☰ button itself carries the warning so there is a reason to open it.
+   *
+   * One button, moved, rather than two: a second copy means two wirings, two
+   * labels to reset after a press, and one of them always lagging the other.
+   */
+  _placeLog() {
+    const btn = this.mount.querySelector('.rv-log');
+    const row = this.mount.querySelector('.rv-logrow');
+    if (!btn || !row) return;
+    const phone = window.matchMedia(PHONE_LAYOUT).matches;
+    const home = phone ? row : this.mount.querySelector('.rv-status');
+    if (home && btn.parentElement !== home) home.appendChild(btn);
+    row.hidden = !(phone && !btn.hidden);
+    const fab = this.mount.querySelector('.rv-fab-set');
+    if (fab) fab.classList.toggle('warn', phone && !btn.hidden);
   }
 
   /**
