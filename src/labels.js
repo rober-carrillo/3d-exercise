@@ -165,7 +165,7 @@ function at(pts, cum, n, d) {
  * @param project  (lon, lat) -> [x, y] in scene metres
  */
 export function placeStreets(streets, project, {
-  ext, maxPerName = 20, minLen = null, minSep = null, spacing = null,
+  ext, maxPerName = 8, minLen = null, minSep = null, spacing = null,
 } = {}) {
   // A street has to be long enough to carry its own name, and that is all
   // this floor is for. It used to be three per cent of the scene — 126 m on a
@@ -175,11 +175,11 @@ export function placeStreets(streets, project, {
   // How far apart two labels for the same name may be. A real map repeats a
   // street's name along its length rather than naming it once and hoping; the
   // old 12% meant a road could be labelled once in half a kilometre.
-  const apart = minSep ?? ext * 0.018;
+  const apart = minSep ?? ext * 0.045;
   // And how often to offer a label along a single way, which is what turns
   // one long avenue into a road that is named wherever you happen to be
   // looking at it.
-  const every = spacing ?? ext * 0.028;
+  const every = spacing ?? ext * 0.070;
   const byName = new Map();
 
   for (const st of streets) {

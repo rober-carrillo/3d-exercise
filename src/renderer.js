@@ -522,8 +522,8 @@ void main(){vec4 c=vCol;
         // comfortable printed-map margin and it was what actually set the
         // density of the whole layer — candidates were plentiful and this
         // threw most of them away.
-        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 1
-         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 1) { clash = true; break; }
+        if (Math.abs(c.px - k.px) < c.halfW + k.halfW + 8
+         && Math.abs(c.py - k.py) < c.halfH + k.halfH + 8) { clash = true; break; }
       }
       if (clash) continue;
       kept.push(c);
