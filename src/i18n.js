@@ -332,6 +332,12 @@ const DICT = {
       + 'Nombres de calles y barrios © <a href="https://www.openstreetmap.org/copyright">colaboradores de OpenStreetMap</a>',
     // El informe de una visualización: lo que se vio y en qué aparato. Ver
     // src/scenelog.js y diag.html.
+    // Aparece solo cuando el dibujado encontró algo mal. Ver src/scenelog.js.
+    'log.send': '⚠ Guardar el registro',
+    'log.send.hint': 'Algo salió mal al dibujar este mapa. Guarda el registro y mándalo.',
+    'log.saved': '✓ Guardado',
+    'log.sent': '✓ Enviado',
+    'log.failed': 'No se pudo guardar',
     'nav.diag': 'Informe de visualización',
     'nav.diag.hint': 'Qué vio este aparato al dibujar una ruta — útil si el terreno sale mal.',
     'toast.noaccount': 'No se ha podido contactar con tu cuenta. Mostrando lo que hay en este aparato.',
@@ -649,6 +655,11 @@ const DICT = {
     'foot.short': 'Imagery © Esri and its contributors · Elevation from '
       + '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (SRTM, 3DEP and others) · '
       + 'Street and place names © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    'log.send': '⚠ Save the log',
+    'log.send.hint': 'Something went wrong drawing this map. Save the log and send it.',
+    'log.saved': '✓ Saved',
+    'log.sent': '✓ Sent',
+    'log.failed': 'Could not save it',
     'nav.diag': 'Scene report',
     'nav.diag.hint': 'What this device saw when it drew a route — useful if the terrain came out wrong.',
     'toast.noaccount': 'Could not reach your account. Showing what is on this device.',

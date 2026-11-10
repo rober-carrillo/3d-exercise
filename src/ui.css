@@ -559,3 +559,14 @@ footer a{color:var(--ink-2)}
 .diag-link a{font:12.5px/1.4 var(--font);color:var(--ink-2);text-decoration:none;
   border-bottom:1px dotted var(--line)}
 .diag-link a:hover{color:var(--ink)}
+
+/* The way out of a scene that went wrong (src/scenelog.js). Hidden unless the
+   drawing found something wrong with itself, and coloured like the warning it
+   is — the dot beside it is already saying the same thing. */
+.rv-log{display:inline-block;margin-left:8px;padding:4px 9px;border-radius:7px;cursor:pointer;
+  font:600 10.5px/1.25 var(--font);color:var(--on-warn,#5a1b10);background:var(--warn-bg,#ffe3d6);
+  border:1px solid var(--warn-line,#f2bda8);white-space:nowrap}
+.rv-log:hover{filter:brightness(.97)}
+.rv-log:disabled{opacity:.55;cursor:default}
+:root[data-theme="dark"] .rv-log{color:#ffd9c9;background:#4a1d12;border-color:#7a3522}
+.rv-status{white-space:normal}

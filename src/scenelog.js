@@ -221,6 +221,7 @@ export function beginScene({ app, route, where } = {}) {
     steps: [],
     errors: [],
   };
+  listen();
   return rec;
 }
 
@@ -234,6 +235,53 @@ export function step(name, extra) {
 }
 
 export function noteGl(gl) { if (rec) rec.gl = glFacts(gl); }
+
+/**
+ * Listen for everything the page complains about while a scene is being built.
+ *
+ * The record already holds what this module was told; this holds what nobody
+ * thought to tell it. A tile decoder that warns, a shader that compiles with a
+ * message, a promise nobody caught — all of it lands in the console, where it
+ * is seen by whoever has the console open, which on somebody else's phone is
+ * nobody at all.
+ *
+ * console.warn and console.error are wrapped rather than replaced: they still
+ * do exactly what they did, and the wrapper comes off when the record closes.
+ * Capped, because a warning inside the draw loop is a warning sixty times a
+ * second and the point is to carry the log in a message, not to fill a disk.
+ */
+const CAUGHT_MAX = 60;
+let release = null;
+
+function listen() {
+  if (release) return;
+  const native = { warn: console.warn, error: console.error };
+  const take = (level, args) => {
+    if (!rec || rec.errors.length >= CAUGHT_MAX) return;
+    const text = args.map(a => {
+      if (a instanceof Error) return `${a.name}: ${a.message}`;
+      if (typeof a === 'object') { try { return JSON.stringify(a).slice(0, 300); } catch { return '[object]'; } }
+      return String(a);
+    }).join(' ').slice(0, 500);
+    // Our own repair notice is already in the record in full; keeping the
+    // console copy as well would say the same thing twice and crowd out
+    // whatever else went wrong.
+    if (text.startsWith('Salpicón!')) return;
+    rec.errors.push({ at_ms: Math.round(now() - rec.t0), where: `console.${level}`, message: text, stack: null });
+  };
+  console.warn = (...a) => { take('warn', a); return native.warn.apply(console, a); };
+  console.error = (...a) => { take('error', a); return native.error.apply(console, a); };
+  const onErr = e => noteError('window.onerror', e.error || new Error(e.message || 'script error'));
+  const onRej = e => noteError('unhandledrejection', e.reason || new Error('promise rejected'));
+  window.addEventListener('error', onErr);
+  window.addEventListener('unhandledrejection', onRej);
+  release = () => {
+    console.warn = native.warn; console.error = native.error;
+    window.removeEventListener('error', onErr);
+    window.removeEventListener('unhandledrejection', onRej);
+    release = null;
+  };
+}
 
 export function noteError(where, err) {
   if (!rec) return;
@@ -349,6 +397,7 @@ export function faults(r = rec) {
 
 /** The record, closed, with its verdict attached. */
 export function finishScene() {
+  release?.();
   if (!rec) return null;
   const done = { ...rec, finished: new Date().toISOString(), build_ms: Math.round(now() - rec.t0), faults: faults(rec) };
   delete done.t0;
@@ -381,6 +430,33 @@ function keep(r) {
 
 export function clearSceneLogs() {
   try { localStorage.removeItem(KEY); } catch {}
+}
+
+/**
+ * One viewing as a file, ready to be sent in a message.
+ *
+ * The verdict goes first and the route's name is in the filename, because the
+ * person receiving this has to be able to tell at a glance which route it is
+ * about and whether it is worth opening — they may well be looking at a dozen
+ * of them from different people.
+ */
+export function sceneFileFor(record) {
+  if (!record) return null;
+  const safe = String(record.route?.name || 'route')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).toLowerCase() || 'route';
+  const stamp = (record.started || '').replace(/[:.]/g, '-').slice(0, 19);
+  return {
+    name: `salpicon-${safe}-${stamp}.json`,
+    text: JSON.stringify({
+      kind: 'salpicon-scene-log',
+      faults: record.faults ?? faults(record),
+      route: record.route?.name ?? null,
+      app: record.app,
+      when: record.started,
+      log: record,
+    }, null, 1),
+  };
 }
 
 /** The whole shelf as a file, for a device that cannot reach the database. */

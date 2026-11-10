@@ -17,7 +17,7 @@ import { loadNames } from './placenames.js';
 import { buildNameSet } from './labels.js';
 import {
   beginScene, step, noteGl, noteTiles, noteDem, noteMesh, noteProbe, noteShot, noteError,
-  probeCanvas, finishScene, faults,
+  probeCanvas, finishScene, faults, sceneFileFor,
 } from './scenelog.js';
 import {
   TILES, sceneFrame, pickZoom, loadTiles, demSampler, idwSampler, buildGeometry, ramp, rampCss, clamp, setEsriToken,
@@ -146,7 +146,8 @@ const TEMPLATE = `
   <div class="rv-lgrow"><span class="rv-lg-lo">—</span><span class="rv-lg-mid"></span><span class="rv-lg-hi">—</span></div>
 </div>
 
-<div class="rv-panel rv-status"><span class="rv-dot"></span><span class="rv-st-txt">loading…</span></div>
+<div class="rv-panel rv-status"><span class="rv-dot"></span><span class="rv-st-txt">loading…</span>
+  <button class="rv-log" type="button" hidden data-i18n="log.send" data-i18n-title="log.send.hint">Guardar el registro</button></div>
 
 <div class="rv-panel rv-profile">
   <div class="rv-cap">Elevation profile</div>
@@ -586,6 +587,46 @@ export class RouteViewer {
   }
 
   /**
+   * Show the way to send this viewing's log, and wire the press.
+   *
+   * Only ever shown when the scene found something wrong with itself, because
+   * a button that is always there is a button nobody reads. The dot beside it
+   * is already the scene's own verdict on how it went; this turns that verdict
+   * into something that can be put in a message.
+   */
+  offerLog(record) {
+    const btn = this.mount.querySelector('.rv-log');
+    if (!btn) return;
+    this._log = record;
+    btn.hidden = false;
+    btn.classList.add('warn');
+    const dot = this.$('dot');
+    if (dot) dot.className = 'rv-dot warn';
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', async () => {
+      const f = sceneFileFor(this._log);
+      if (!f) return;
+      btn.disabled = true;
+      // The answer goes on the button itself. The loading panel's message line
+      // is the obvious place for it and it is wrong: that panel is removed
+      // once the scene is up, so a message sent there after the fact lands
+      // nowhere and the press looks like it did nothing.
+      const was = btn.textContent;
+      try {
+        const { saveGPX } = await import('./export.js');
+        const how = await saveGPX(f.name, f.text);
+        btn.textContent = t(how === 'shared' ? 'log.sent' : 'log.saved');
+      } catch (err) {
+        btn.textContent = t('log.failed');
+        console.warn('Salpicón! could not write the log:', err);
+      }
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = was; }, 4500);
+    });
+  }
+
+  /**
    * Put real names on the ground, when they can be had.
    *
    * This runs after the scene is already on screen and is never awaited,
@@ -687,22 +728,34 @@ export class RouteViewer {
    */
   async closeSceneLog(dem) {
     try {
-      if (dem?.ok && dem.w) {
-        // Same dimensions as the real thing, because the size of the canvas is
-        // precisely what is under suspicion.
-        noteProbe(await probeCanvas(dem.w, dem.h));
-      }
+      // Same dimensions as the real thing, because the size of the canvas is
+      // precisely what is under suspicion. When the elevation never arrived
+      // there is no real thing to match — and that is exactly when the probe
+      // is most worth having, since "the tiles did not come" and "this device
+      // cannot hold them" look identical from the outside. So it falls back to
+      // the size the scene would have used.
+      const pw = dem?.ok && dem.w ? dem.w : 1024;
+      const ph = dem?.ok && dem.h ? dem.h : 1024;
+      noteProbe(await probeCanvas(pw, ph));
       const bad = faults();
       if (bad.length) noteShot(this.$('gl'));
       const record = finishScene();
       if (!record || !bad.length) return;
       console.warn('Salpicón! scene report:', bad.join(', '), record);
-      const { ready, enabled, user, routes } = await import('./account.js');
-      await ready();
-      // No account, no report. Nothing here is interesting without knowing
-      // whose device it came from, and the table will not take it anyway.
-      if (!enabled() || !user()) return;
-      await routes().reportScene(record, { routeId: this.opts.cloudId ?? null });
+      // Something went wrong, so say so where the scene is, and offer the one
+      // thing that is any use: the log, as a file, in one press. This is the
+      // whole path — somebody is asked for their log and they have it.
+      this.offerLog(record);
+      // And send it as well, if there is an account and somewhere to send it.
+      // A report that files itself is worth having, but it is not the path
+      // this depends on: a database that has not been set up simply refuses,
+      // and the file above is unaffected.
+      try {
+        const { ready, enabled, user, routes } = await import('./account.js');
+        await ready();
+        if (!enabled() || !user()) return;
+        await routes().reportScene(record, { routeId: this.opts.cloudId ?? null });
+      } catch { /* not set up, or offline: the file is the fallback */ }
     } catch (err) {
       noteError('closeSceneLog', err);
       try { finishScene(); } catch {}

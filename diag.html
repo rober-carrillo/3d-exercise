@@ -288,7 +288,16 @@ async function paintCloud() {
     if (!rows.length) return head + '<div class="empty">No reports have been sent.</div>';
     return head + rows.map(r => card(r, null)).join('');
   } catch (err) {
-    return `<h2>Sent reports</h2><div class="empty">${esc(err.message || String(err))}</div>`;
+    // The commonest case by far, and worth saying in words: the tables in
+    // supabase/schema.sql have not been run yet, so there is nowhere for a
+    // report to go. The device still keeps every log, and the list below is
+    // the one that matters until then.
+    const m = String(err.message || err);
+    const missing = /does not exist|schema cache|404|relation/i.test(m);
+    return `<h2>Sent reports</h2><div class="empty">${missing
+      ? 'Nothing is set up to receive reports yet — run supabase/schema.sql in the SQL editor. '
+        + 'Logs are still kept on each device, which is what the list below shows.'
+      : esc(m)}</div>`;
   }
 }
 
