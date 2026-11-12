@@ -452,8 +452,27 @@ await writeFile(join(OUT, 'config.json'), JSON.stringify({
   supabaseKey: firstOf('SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY',
                        'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
 }));
+/**
+ * And read it back before anything else happens.
+ *
+ * The guard above tests the variable the config is *meant* to take. This
+ * tests the file that is actually about to be published, which is the only
+ * thing that can really leak — and it matters more since /api/names was given
+ * a service key to write the name store with. That key lives in the same
+ * settings page as the publishable one, bypasses row-level security entirely,
+ * and would be served to every visitor if it ever found its way in here.
+ */
+{
+  const shipped = await readFile(join(OUT, 'config.json'), 'utf8');
+  const leak = /sb_secret_|service_role|SERVICE_KEY/i.exec(shipped);
+  if (leak) throw new Error(`config.json would be published with a secret in it (matched "${leak[0]}"). `
+    + 'Nothing server-side belongs in a file the browser downloads.');
+}
 if (process.env.ESRI_API_KEY) console.log('  · imagery: licensed Esri endpoint (key from ESRI_API_KEY)');
 if (process.env.SUPABASE_URL) console.log('  · accounts: Supabase configured');
+if (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log('  · names   : durable store configured (server-side only)');
+}
 
 /**
  * The route the landing page shows, whose map travels with the build.

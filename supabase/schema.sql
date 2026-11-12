@@ -258,3 +258,47 @@ $$;
 
 revoke all on function scene_reports_for(text, int) from public;
 grant execute on function scene_reports_for(text, int) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Street and region names, one row per cell of the world
+--
+-- The names come from OpenStreetMap through Overpass, which is slow (25 to 55
+-- seconds for a cell, often a refusal) and whose quota counts against this
+-- application rather than against whoever is looking. So each answer is kept
+-- for good, and asked for once ever.
+--
+-- This used to lean on the CDN alone. A CDN is not storage: it holds what is
+-- being used and drops the rest, and five quiet cells over Pereira fell out
+-- within half an hour. The effect on a person is that a link shared last week
+-- opens with no names on it, and whoever followed the link does the waiting.
+--
+-- The grid is the same one the endpoint serves: z13, about five kilometres a
+-- side. A route needs two to sixteen cells, and cells are shared between
+-- routes, so a town is paid for once however many routes cross it.
+--
+-- Size: a dense city cell is around 300 kB of JSON, a rural one under 10 kB.
+-- jsonb is TOASTed and compressed by Postgres, so a few hundred cells — all of
+-- Pereira, Dosquebradas and San Francisco, say — sit in the low tens of
+-- megabytes against the 500 MB a free project has.
+-- ---------------------------------------------------------------------------
+create table if not exists name_cells (
+  z          smallint    not null,
+  x          integer     not null,
+  y          integer     not null,
+  data       jsonb       not null,
+  fetched_at timestamptz not null default now(),
+  primary key (z, x, y)
+);
+
+-- Row-level security on, and deliberately not one policy to go with it.
+--
+-- That is the whole access model: with RLS enabled and no policy, every key
+-- that reaches this database from a browser — publishable, signed-in, anybody
+-- — can neither read nor write a row. Only the service key gets through, and
+-- the service key exists in exactly one place: the environment of
+-- /api/names, server-side. The one door is that endpoint.
+--
+-- Read-only would be harmless; writable would not. A name cache anyone may
+-- write to is a cache of whatever anyone feels like printing across everybody
+-- else's map, in letters half a block high, under the OpenStreetMap credit.
+alter table name_cells enable row level security;
