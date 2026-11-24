@@ -386,6 +386,20 @@ footer a{color:var(--ink-2)}
   border:1px solid var(--line-2);background:var(--panel);color:var(--ink)}
 .ask-btns .danger{background:var(--hot);border-color:var(--hot);color:var(--on-accent)}
 .ask-btns .danger:hover{filter:brightness(1.08)}
+/* The affirmative of a question that changes something harmless, as against
+   .danger, which is the one that destroys a route. */
+.ask-btns .go{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.ask-btns .go:hover{filter:brightness(1.08)}
+.ask-btns button:disabled{opacity:.55;cursor:default}
+/* The day a route happened. Full width because a date field that is narrower
+   than its own placeholder gets its digits clipped on Safari, and 16px
+   because anything smaller makes iOS zoom the page when it is tapped. */
+.when-day{font:inherit;font-size:16px;color:var(--ink);background:var(--fill);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;
+  min-height:44px;box-sizing:border-box}
+.when-day:focus{outline:2px solid var(--accent);outline-offset:1px}
+.when-note{margin:0;font-size:12px;line-height:1.5;color:var(--ink-3)}
+:root[data-theme="dark"] .when-day{color-scheme:dark}
 
 /* a quiet text button, for the things that are not the main action */
 .linky{align-self:flex-start;margin-top:10px;font:inherit;font-size:12px;color:var(--ink-3);

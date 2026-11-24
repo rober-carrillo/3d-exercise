@@ -78,7 +78,13 @@ export function rowToRoute(row) {
     profile: row.profile,
     track: {
       name: t.name ?? row.name,
-      time: t.time ?? row.recorded_at ?? null,
+      // The column first, and the copy inside the track only if there is no
+      // column. The two are written from the same instant when a route is
+      // uploaded, and they part company the moment anybody changes the date:
+      // the column is what the library sorts by and the track's copy is what
+      // the viewer's header prints, so taking the track's first meant a route
+      // moved in the list and still called itself the old day when opened.
+      time: row.recorded_at ?? t.time ?? null,
       stats: row.stats,
       bbox: row.bbox,
       lat: t.lat, lon: t.lon, ele: t.ele, dist: t.dist,
@@ -151,6 +157,35 @@ export function createCloud(db) {
      */
     async rename(id, name) {
       const row = await must().from('routes').update({ name }, { id: `eq.${id}` });
+      if (!row) throw new Error('That route is not in your account any more');
+      return rowToRoute(row);
+    },
+
+    /**
+     * Change the day a route was recorded on.
+     *
+     * A date arrives wrong often enough to be worth fixing: a watch with a
+     * flat battery stamps the epoch, a file exported from another app loses
+     * its times on the way, and a GPX drawn by hand never had any. The route
+     * is still the route — the same points, the same distance — and it is the
+     * day that puts it in the right place in a library sorted by when things
+     * happened.
+     *
+     * Only the column is written. The track's own copy of the time is left
+     * alone and deliberately no longer consulted first (see rowToRoute),
+     * because rewriting it would mean sending the whole track back — a couple
+     * of megabytes of points to change one timestamp — and keeping two
+     * writable copies of one fact is how they come to disagree.
+     *
+     * `select` keeps the answer small for the same reason: without it
+     * PostgREST returns the row it just changed, points and all.
+     *
+     * Who may do this is not decided here. Row-level security permits an
+     * update only on a row the caller owns.
+     */
+    async redate(id, at) {
+      const row = await must().from('routes').update({ recorded_at: at },
+        { id: `eq.${id}`, select: 'id,name,recorded_at,created_at,visibility' });
       if (!row) throw new Error('That route is not in your account any more');
       return rowToRoute(row);
     },

@@ -146,21 +146,34 @@
   </div>
 </div>
 
+<div class="ask" id="when">
+  <div class="ask-card rv-panel">
+    <h2 data-i18n="date.title">¿Qué día fue?</h2>
+    <p id="when-body"></p>
+    <input type="date" id="when-day" class="when-day" data-i18n-aria="date.label">
+    <p class="when-note" id="when-note"></p>
+    <div class="ask-btns">
+      <button type="button" class="go" id="when-yes" data-i18n="date.save">Guardar</button>
+      <button type="button" id="when-no" data-i18n="date.no">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="drop"><div data-i18n="routes.drop">Suelta archivos GPX para construirlos</div></div>
 <div id="toast" class="rv-panel"></div>
 
 <script type="module">
-import { parseGPX, analyze, profileSamples, trackToGPX } from './src/gpx.js';
+import { parseGPX, analyze, profileSamples, trackToGPX, formatDate } from './src/gpx.js';
 import { saveGPX, safeName } from './src/export.js';
 import * as account from './src/account.js';
-import { addLocalRoute, listLocalRoutes, removeLocalRoute, renameLocalRoute } from './src/library.js';
+import { addLocalRoute, listLocalRoutes, removeLocalRoute, renameLocalRoute, redateLocalRoute } from './src/library.js';
 import { routeDiary, escapeHtml, routeHref } from './src/cards.js';
 import { EFFORTS, ON_FOOT, personalBests, totals, clock, pace } from './src/stats.js';
 import { shareRoute, routeLink, canLink } from './src/share.js';
 import { markSVG } from './src/mark.js';
 import { lastDiag, summarise } from './src/diag.js';
 import { initTheme, themeToggle } from './src/theme.js';
-import { initLang, langToggle, t } from './src/i18n.js';
+import { initLang, langToggle, t, lang } from './src/i18n.js';
 import { startSync, onSync, hold, release } from './src/sync.js';
 
 initTheme();
@@ -240,6 +253,9 @@ function actions(r) {
   // reached, but a long press cannot be done from a keyboard and is not
   // announced by a screen reader, so it cannot be the only way in.
   items.push(item('ren', ident, '✎', t('row.menu.rename')));
+  // Beside the rename, because it is the same kind of thing: a label on the
+  // outing that came out wrong and is nobody's business but theirs to fix.
+  items.push(item('date', ident, '📅', t('row.menu.date')));
   items.push(item('gpx', ident, '⤓', t('row.menu.gpx')));
   // Only on the route the log belongs to. A menu entry that downloads another
   // run's diagnostic, or nothing at all, is worse than no entry.
@@ -488,6 +504,11 @@ function render() {
     if (nm) startRename(nm);
   }));
 
+  grid.querySelectorAll('.dl.date').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault();
+    askDate({ slug: b.dataset.slug, id: b.dataset.id });
+  }));
+
   grid.querySelectorAll('.rm').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
     askDelete({ slug: b.dataset.slug, id: b.dataset.id, name: b.dataset.name || '' });
@@ -675,6 +696,112 @@ function closeRename() {
   // Anything that wanted to redraw while the field was open gets to now.
   if (redrawWanted) { redrawWanted = false; render(); }
 }
+
+/* ---------- changing the day one happened ----------
+ *
+ * A date arrives wrong often enough to be worth a menu entry: a watch with a
+ * flat battery stamps the epoch, an export from another app drops its times on
+ * the way, a file drawn by hand never had any and takes the day it was dropped
+ * in here instead. The points are right; only the day is wrong, and the day is
+ * what a library sorted by when things happened is built on.
+ *
+ * Everything here is in UTC, which is the convention the rest of the app
+ * already follows — see `dayOf` in src/cards.js. The same route must not
+ * appear to have happened on different days depending on who opens the page,
+ * so the day shown in the field is the UTC day, and the day that comes back
+ * out of it is read the same way. Doing it in local time would move half the
+ * routes in the world by one on the way through.
+ *
+ * The time of day is kept rather than asked for. It is right far more often
+ * than the date is — a watch that lost the day still knows it was a morning
+ * run — and a second field to fill in to correct the first is a form.
+ */
+const whenEl = document.getElementById('when');
+let whenTarget = null;
+
+/** The UTC parts of a timestamp, or null if there is nothing to read. */
+function utcParts(iso) {
+  const d = new Date(iso || '');
+  if (!iso || Number.isNaN(d.getTime())) return null;
+  const s = d.toISOString();
+  return { day: s.slice(0, 10), clock: s.slice(11, 23) };
+}
+
+function askDate({ slug, id }) {
+  const entry = all().find(r => (id && r.id === id) || (slug && r.slug === slug));
+  if (!entry) return toast(t('toast.gone'));
+  whenTarget = entry;
+  // Nothing may upload this route while the question is on screen, for the
+  // same reason a rename holds it: syncNow takes its routes up front, so an
+  // upload in flight would carry the old date into the account and undo this.
+  hold(entry.slug);
+
+  const now = utcParts(entry.date || entry.added) || utcParts(new Date().toISOString());
+  const day = document.getElementById('when-day');
+  day.value = now.day;
+  // A run happened; it did not happen next year. This catches the typo that
+  // otherwise pins a route to the top of the library for ever.
+  day.max = new Date().toISOString().slice(0, 10);
+  document.getElementById('when-body').innerHTML =
+    t('date.body', { name: escapeHtml(entry.name || '') });
+  document.getElementById('when-note').textContent = entry.cloud
+    ? t('date.note.cloud') : t('date.note.local');
+  whenEl.classList.add('on');
+  day.focus();
+}
+
+const closeWhen = () => {
+  whenEl.classList.remove('on');
+  release(whenTarget?.slug);
+  whenTarget = null;
+};
+document.getElementById('when-no').addEventListener('click', closeWhen);
+whenEl.addEventListener('click', e => { if (e.target === whenEl) closeWhen(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && whenEl.classList.contains('on')) closeWhen(); });
+document.getElementById('when-day').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('when-yes').click(); }
+});
+
+document.getElementById('when-yes').addEventListener('click', async () => {
+  if (!whenTarget) return;
+  const entry = whenTarget;
+  const picked = document.getElementById('when-day').value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(picked)) return toast(t('date.bad'));
+
+  // The day they chose, at the time of day the route already had. The `Z` is
+  // the whole point: this is a UTC day being written back as a UTC instant,
+  // so it reads back as the same day everywhere.
+  const was = utcParts(entry.date || entry.added);
+  const at = `${picked}T${was?.clock ?? '12:00:00.000'}Z`;
+  if (was && at === `${was.day}T${was.clock}Z`) return closeWhen();   // nothing to do
+
+  const yes = document.getElementById('when-yes');
+  const label = yes.textContent;
+  yes.disabled = true;
+  yes.textContent = t('date.working');
+  try {
+    if (entry.cloud) {
+      const saved = await account.routes().redate(entry.id, at);
+      cloudRoutes = cloudRoutes.map(r => (r.id === entry.id
+        ? { ...r, date: saved.date, dateSource: saved.dateSource, track: { ...r.track, time: saved.date } }
+        : r));
+    }
+    // A route uploaded a moment ago can still have a copy here; the rename and
+    // the delete both take whichever of the two is present, and so does this.
+    redateLocalRoute(entry.slug, at);
+    closeWhen();
+    render();
+    toast(t('date.done', {
+      name: entry.name,
+      date: formatDate(at, lang() === 'es' ? 'es-ES' : 'en-US'),
+    }));
+  } catch (err) {
+    toast(t('date.failed', { why: err?.message || err }));
+  } finally {
+    yes.disabled = false;
+    yes.textContent = label;
+  }
+});
 
 /* ---------- deleting one ---------- */
 const askEl = document.getElementById('ask');

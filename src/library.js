@@ -235,6 +235,47 @@ export function renameLocalRoute(slug, name) {
 }
 
 /**
+ * Give a stored route a different day.
+ *
+ * Three fields, because three different things read the date and each one
+ * reads its own: `date` is what the library sorts and groups by, `track.time`
+ * is what the viewer's header prints and what an exported GPX carries, and
+ * `dateSource` is what decides whether a row says "added" beside it. A route
+ * whose date was corrected was recorded then as far as anything here is
+ * concerned, so it stops being an "added" date and becomes a recorded one.
+ *
+ * `added` is left exactly as it was: it is when this file arrived in this
+ * browser, which is a fact about the library rather than about the outing,
+ * and no amount of correcting the day it was run changes it.
+ *
+ * Returns the updated entry, or null if the slug is not here or is not ours.
+ */
+export function redateLocalRoute(slug, at) {
+  const when = new Date(at);
+  if (!at || Number.isNaN(when.getTime())) return null;
+  const iso = when.toISOString();
+  const dated = e => ({ ...e, date: iso, dateSource: 'recorded', track: { ...e.track, time: iso } });
+
+  const all = readAll();
+  const entry = all[slug];
+  if (entry && mine(entry)) {
+    all[slug] = dated(entry);
+    writeAll(all);
+    return all[slug];
+  }
+  // The same fallback renaming has: a route too big for storage lives in this
+  // tab alone, and is still the route that is going to be uploaded.
+  const k = KEY + ':' + slug;
+  try {
+    const held = JSON.parse(sessionStorage.getItem(k) || 'null');
+    if (!held || !mine(held)) return null;
+    const next = { ...dated(held), stored: false };
+    sessionStorage.setItem(k, JSON.stringify(next));
+    return next;
+  } catch { return null; }
+}
+
+/**
  * The routes in this browser that belong to the person using it.
  *
  * Entries written before this field existed have no owner and read as
