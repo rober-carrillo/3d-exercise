@@ -27,7 +27,24 @@ import {
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /** How long the replay should last, in seconds at 1x. */
-const FLY = { min: 7.5, max: 45, short_s: 5 * 60, long_s: 60 * 60 };
+const FLY = { min: 7.5, max: 45, short_s: 5 * 60, long_s: 60 * 60, cap: 120 };
+/**
+ * How much ground the replay may cover, as widths of the route's own box per
+ * second.
+ *
+ * The length of a replay used to be a question about the outing's duration
+ * alone, which is the right question for a route that goes somewhere and the
+ * wrong one for a route that goes round. Twelve kilometres of intervals inside
+ * a block 310 m by 180 m came out at the same forty-five seconds as twelve
+ * kilometres across a mountain: the figure crossed the whole scene two and a
+ * half times a second — 955 km/h over the ground — and the camera behind her
+ * had 7,958 degrees of turning to get through, which is twenty-two laps.
+ *
+ * At 0.4 she crosses her own box in two and a half seconds, which is about a
+ * lap every four: fast, and watchable. A route that goes somewhere is nowhere
+ * near this limit and is left exactly as it was.
+ */
+const FLY_CROSSINGS_PER_S = 0.4;
 
 /**
  * How hard the replay leans on pace.
@@ -59,11 +76,36 @@ const PACE_EMPHASIS = 1.3;
 function flyDurationFor(track) {
   const s = track.stats || {};
   const recorded = s.moving_s ?? s.duration_s;
-  if (!recorded || !isFinite(recorded)) return FLY.max;
-  if (recorded <= FLY.short_s) return FLY.min;
-  if (recorded >= FLY.long_s) return FLY.max;
-  const t = (recorded - FLY.short_s) / (FLY.long_s - FLY.short_s);
-  return FLY.min + (FLY.max - FLY.min) * t;
+  let secs = FLY.max;
+  if (recorded && isFinite(recorded)) {
+    if (recorded <= FLY.short_s) secs = FLY.min;
+    else if (recorded >= FLY.long_s) secs = FLY.max;
+    else secs = FLY.min + (FLY.max - FLY.min)
+      * ((recorded - FLY.short_s) / (FLY.long_s - FLY.short_s));
+  }
+  return Math.max(secs, Math.min(FLY.cap, crossingFloor(track)));
+}
+
+/**
+ * The least time a replay may take, from how much route is folded into how
+ * little ground. See FLY_CROSSINGS_PER_S.
+ *
+ * The box is the route's own, not the scene's, because the scene is built
+ * around the route and padded: asking the route how big it is avoids a number
+ * that depends on how it is being drawn. Both sides of the box count — a
+ * route up and down one street is long and thin, and the long side is the one
+ * the eye follows.
+ */
+function crossingFloor(track) {
+  const b = track.bbox, s = track.stats || {};
+  const total = s.distance_m;
+  if (!b || !total || !isFinite(total)) return 0;
+  const midLat = (b.minLat + b.maxLat) / 2;
+  const w = (b.maxLon - b.minLon) * 111320 * Math.cos(midLat * Math.PI / 180);
+  const h = (b.maxLat - b.minLat) * 110540;
+  const span = Math.max(w, h);
+  if (!(span > 1)) return 0;                 // a route with no extent: nothing to say
+  return total / (span * FLY_CROSSINGS_PER_S);
 }
 const fmt = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 

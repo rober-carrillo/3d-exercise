@@ -30,6 +30,26 @@ function readSky() {
  * enough back that the next bend is on screen before she reaches it.
  */
 const CHASE_DIST = 0.221;
+/**
+ * How many seconds of the replay the chase camera averages the route's
+ * direction over, and the fastest it may ever swing.
+ *
+ * The camera used to point wherever the runner was pointing at that instant,
+ * which is right on a road and absurd on a lap. A twelve-kilometre session
+ * inside a 310 m by 180 m block is twenty-two laps: 7,958 degrees of turning,
+ * and in a 45-second replay that is 177 degrees a second on average and 714
+ * at the peak — two full rotations a second, measured. Nobody can watch that.
+ *
+ * So the direction is taken from a stretch of the route either side of her
+ * rather than from one sample, as a mean of unit vectors. On a road that
+ * stretch points one way and nothing changes. On a lap it cancels itself out,
+ * the mean goes short, and a short mean is the camera being told there is no
+ * direction to face — so it holds the bearing it has and lets her go round in
+ * front of it. The cap is the backstop for everything in between: a quarter
+ * turn a second is brisk and still readable.
+ */
+const CHASE_SMOOTH_S = 4.5;
+const CHASE_MAX_TURN = 90 * D2R;          // radians a second
 
 /** shortest signed angular difference, so the camera never spins the long way */
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -115,6 +135,7 @@ export class Renderer {
     this.cursor = 0;               // nearest sample index (array lookups)
     this.cursorF = 0;              // continuous position along the track
     this.faceAz = null;            // eased facing, so the figure never snaps
+    this._cursorRate = 0;          // samples a second, for the chase window
     this.hasTexture = false;
     this.hasLabels = false;
     this.hasNames = false;          // true once real words arrive; see setNames
@@ -620,8 +641,17 @@ void main(){vec4 c=vCol;
   setCursor(f) {
     if (!this.g) return;
     const n = this.g.track.n;
+    const was = this.cursorF;
     this.cursorF = clamp(+f || 0, 0, n - 1);
     this.cursor = clamp(Math.round(this.cursorF), 0, n - 1);
+    // Samples a second, smoothed, for the chase camera's window. Measured
+    // rather than worked out from the replay's length: it is the one number
+    // that already includes the speed button, the pace weighting and the fact
+    // that nothing is moving at all while the replay is paused.
+    const dt = this._dt || 0.016;
+    const rate = Math.abs(this.cursorF - was) / Math.max(1e-3, dt);
+    this._cursorRate = this._cursorRate === undefined
+      ? rate : this._cursorRate + (rate - this._cursorRate) * ease(2.0, dt);
   }
 
   /** Interpolated position on the smoothed path. */
@@ -1048,11 +1078,43 @@ void main(){vec4 c=vCol;
     if (w !== this.canvas.width || h !== this.canvas.height) { this.canvas.width = w; this.canvas.height = h; }
   }
 
+  /**
+   * Which way the route is going, around where she is now.
+   *
+   * A mean of unit vectors over a window of samples, which answers two things
+   * at once: the direction, and — in the length of that mean — how much of a
+   * direction there is at all. One is a bearing; the other is between 0 and 1,
+   * and it is 1 down a straight road, about 0.6 round a long bend, and near 0
+   * on a loop that comes back to itself inside the window.
+   *
+   * The window is in seconds of replay rather than in samples or in metres,
+   * because the thing being smoothed is how fast the picture turns. The rate
+   * is measured from the cursor itself, so it already carries the 2x button
+   * and the pace weighting without being told about either.
+   */
+  _chaseHeading() {
+    const t = this.g.track, n = t.n;
+    const half = clamp(Math.round(this._cursorRate * CHASE_SMOOTH_S / 2), 1, Math.floor(n / 2));
+    const i0 = Math.max(0, this.cursor - half), i1 = Math.min(n - 1, this.cursor + half);
+    let sx = 0, sy = 0;
+    for (let i = i0; i <= i1; i++) { sx += Math.cos(t.course[i]); sy += Math.sin(t.course[i]); }
+    const len = Math.hypot(sx, sy) / (i1 - i0 + 1);
+    // Below this there is no answer worth having, only noise with a direction.
+    return { az: len < 1e-3 ? t.course[this.cursor] : Math.atan2(sy, sx), conf: len };
+  }
+
   /** Ride behind the cursor point, facing the way it is travelling. */
   _updateChase(dt) {
     const t = this.g.track, i = this.cursor, p = this._pos();
-    const wantAz = wrap(t.course[i] + Math.PI + this.chase.azOffset);
-    this.cam.az += wrap(wantAz - this.cam.az) * ease(2.6, dt);
+    const { az, conf } = this._chaseHeading();
+    const wantAz = wrap(az + Math.PI + this.chase.azOffset);
+    // Eased as before, then scaled by how much of a direction there is, then
+    // capped. The scaling is what holds the camera still on a lap; the cap is
+    // what keeps a hairpin on a mountain road from flicking it round.
+    let turn = wrap(wantAz - this.cam.az) * ease(2.6, dt) * conf;
+    const cap = CHASE_MAX_TURN * dt;
+    if (turn > cap) turn = cap; else if (turn < -cap) turn = -cap;
+    this.cam.az += turn;
     this.cam.pol += (this.chase.pol - this.cam.pol) * ease(2.2, dt);
     this.cam.dist += (this.chase.dist - this.cam.dist) * ease(2.2, dt);
     const k = ease(4.5, dt);
@@ -1067,6 +1129,11 @@ void main(){vec4 c=vCol;
     const frame = now => {
       requestAnimationFrame(frame);
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      // Kept where anything called from inside this frame can read it. The
+      // viewer moves the cursor from onFrame, and setCursor measures how fast
+      // it is moving; _nDt is no good for that, since it is only written when
+      // there are names to lay out.
+      this._dt = dt;
       if (this.onFrame) this.onFrame(dt);
       // the walk cycle only turns while the route is actually replaying
       if (this.walking) this.walkPhase += dt * 5.0 * this.walkRate;
